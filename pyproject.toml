@@ -1,0 +1,22 @@
+[tool.pytest.ini_options]
+DJANGO_SETTINGS_MODULE = "linkhop.settings.test"
+pythonpath = ["."]
+testpaths = ["core/tests"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+extend-exclude = ["core/migrations"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "DJ"]
+
+[tool.ruff.lint.per-file-ignores]
+"core/api/__init__.py" = ["F401"]
+"core/services/__init__.py" = ["F401"]
+"linkhop/settings/__init__.py" = ["F403"]
+"linkhop/settings/dev.py" = ["F403"]
+"linkhop/settings/test.py" = ["F403"]
+
+[tool.ruff.format]
+quote-style = "double"

@@ -10,7 +10,7 @@
 * [ ] Create base settings for dev / test / prod
 * [ ] Configure ASGI entrypoint for SSE support
 * [ ] Set up formatting, linting, and test tools
-* [ ] Create initial README with local run instructions
+* [ ] Expand README with local run instructions once the app is runnable
 
 ---
 
@@ -33,6 +33,7 @@
 * [ ] Enforce explicit message type
 * [ ] Add max URL length validation
 * [ ] Add max text body size validation
+* [ ] Define message retention / expiry rules consistent with ephemeral delivery
 
 ---
 
@@ -110,6 +111,7 @@
 * [ ] Create `message.opened` event on opened signal
 * [ ] Ensure clients can only act on their own incoming messages
 * [ ] Ensure sender device is recorded when available
+* [ ] Define idempotent behavior for duplicate confirmation requests
 
 ---
 
@@ -163,6 +165,7 @@
 * [ ] Record `device.disconnected` event
 * [ ] Enforce max active SSE streams per device
 * [ ] Verify reconnects do not lose pending messages
+* [ ] Define reconnect/backoff expectations for clients
 
 ---
 
@@ -197,6 +200,7 @@
 * [ ] Confirm devices cannot read other devices’ incoming messages
 * [ ] Confirm devices cannot confirm/open messages not addressed to them
 * [ ] Confirm revoked tokens stop working immediately
+* [ ] Confirm expired or pruned messages behave predictably for clients
 
 ---
 
@@ -258,6 +262,7 @@
 * [ ] Write deployment instructions
 * [ ] Document required environment variables
 * [ ] Document reverse proxy notes for admin/auth/IP handling
+* [ ] Document retention / cleanup behavior for ephemeral messages
 * [ ] Document backup strategy for SQLite
 * [ ] Document how to revoke/re-register a device
 * [ ] Document HTTP Shortcuts integration example

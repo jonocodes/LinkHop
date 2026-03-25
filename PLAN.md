@@ -10,7 +10,7 @@ Core characteristics:
 
 * Single-user
 * Self-hosted
-* Ephemeral, best-effort delivery
+* Ephemeral, queue-backed delivery
 * Works without browser extensions
 * Supports URL and plain text messages
 * Device-to-device sending
@@ -103,6 +103,7 @@ LinkHop uses:
 * HTTP APIs for state transitions and source of truth
 
 This is a queue-based system with realtime hints, not a purely realtime-only system.
+The handoff should be reliable across temporary offline periods, while still treating messages as ephemeral rather than permanent history.
 
 ---
 
@@ -125,7 +126,7 @@ Allowed values:
 ### Ephemeral nature
 
 Messages are intended to be transient.
-The service will try to deliver them, but devices are not expected to provide long-term searchable history.
+The service should retain them long enough to support reliable handoff, but devices are not expected to provide long-term searchable history.
 
 Admin/log visibility may retain operational records longer than end-user inboxes.
 
@@ -258,7 +259,16 @@ Examples:
 
 * clicked a notification
 * clicked a message row
-* clicked an open action
+
+---
+
+## Notes on Terminology
+
+To keep the docs consistent:
+
+* "reliable handoff" means messages are queued server-side until received, rather than being dropped just because the target device was offline
+* "ephemeral" means LinkHop is not meant to be a long-term archive or sync system
+* realtime delivery is an optimization layered on top of the queue, not the source of truth
 
 ### URL open tracking
 
