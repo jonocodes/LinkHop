@@ -52,11 +52,17 @@ def send_test_message(modeladmin, request, queryset):
 
 @admin.register(Device)
 class DeviceAdmin(ModelAdmin):
-    list_display = ("name", "is_active", "last_seen_at", "created_at")
-    list_filter = ("is_active", "created_at", "last_seen_at")
+    list_display = ("name", "is_active", "last_seen_at", "revoked_at", "created_at")
+    list_filter = ("is_active", "created_at", "last_seen_at", "revoked_at")
     search_fields = ("name", "platform_label", "app_version")
-    readonly_fields = ("created_at", "updated_at", "last_seen_at", "revoked_at")
+    readonly_fields = ("created_at", "updated_at", "last_seen_at")
     actions = [send_test_message]
+
+    def get_readonly_fields(self, request, obj=None):
+        readonly = ["created_at", "updated_at", "last_seen_at"]
+        if obj:
+            readonly.append("token_hash")
+        return readonly
 
 
 @admin.register(EnrollmentToken)
@@ -84,9 +90,9 @@ class MessageAdmin(ModelAdmin):
 @admin.register(Event)
 class EventAdmin(ModelAdmin):
     list_display = ("event_type", "device", "message", "created_at")
-    list_filter = ("event_type", "created_at", "device")
-    search_fields = ("event_type",)
-    readonly_fields = ("created_at", "updated_at")
+    list_filter = ("event_type", "created_at", "device", "message")
+    search_fields = ("event_type", "device__name", "message_id")
+    readonly_fields = ("created_at", "updated_at", "event_type", "device", "message", "metadata_json")
 
 
 @admin.register(GlobalSettings)

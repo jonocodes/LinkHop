@@ -1,6 +1,9 @@
 import uuid
 from datetime import datetime
 
+from django.conf import settings
+from django.core.exceptions import ValidationError
+from django.core.validators import URLValidator
 from ninja import Schema
 
 
@@ -40,6 +43,38 @@ class CreateMessageIn(Schema):
     recipient_device_id: uuid.UUID
     type: str
     body: str
+
+    @staticmethod
+    def validate_type(value: str) -> str:
+        if value not in ("url", "text"):
+            raise ValidationError("Message type must be 'url' or 'text'.")
+        return value
+
+    @staticmethod
+    def validate_body(value: str, values: dict) -> str:
+        msg_type = values.get("type", "url")
+
+        if msg_type == "url":
+            if len(value) > settings.LINKHOP_MESSAGE_URL_MAX_LENGTH:
+                raise ValidationError(
+                    f"URL must be <= {settings.LINKHOP_MESSAGE_URL_MAX_LENGTH} characters."
+                )
+            validator = URLValidator(schemes=["http", "https"])
+            try:
+                validator(value)
+            except ValidationError as exc:
+                raise ValidationError(
+                    "Must be a valid absolute http or https URL."
+                ) from exc
+        elif msg_type == "text":
+            if not value.strip():
+                raise ValidationError("Text messages cannot be blank.")
+            if len(value) > settings.LINKHOP_MESSAGE_TEXT_MAX_LENGTH:
+                raise ValidationError(
+                    f"Text must be <= {settings.LINKHOP_MESSAGE_TEXT_MAX_LENGTH} characters."
+                )
+
+        return value
 
 
 class MessageSchema(Schema):

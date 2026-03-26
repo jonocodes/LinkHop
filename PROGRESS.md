@@ -193,40 +193,40 @@
 
 ## Phase 9 — Security and throttling
 
-* [ ] Add global settings for throttling values
-* [ ] Add rate limiting for message send endpoint
-* [ ] Add rate limiting for received/presented/opened endpoints
-* [ ] Add rate limiting for device registration flow
-* [ ] Add request size/content limits
-* [ ] Add URL/body length enforcement in API and forms
-* [ ] Add revocation checks for device tokens on every authenticated request
+* [x] Add global settings for throttling values
+* [x] Add rate limiting for message send endpoint
+* [x] Add rate limiting for received/presented/opened endpoints
+* [x] Add rate limiting for device registration flow
+* [x] Add request size/content limits
+* [x] Add URL/body length enforcement in API and forms
+* [x] Add revocation checks for device tokens on every authenticated request
 
 ### Security checks
 
-* [ ] Confirm only `http` and `https` URLs are allowed
-* [ ] Confirm devices cannot read other devices’ incoming messages
-* [ ] Confirm devices cannot confirm/open messages not addressed to them
-* [ ] Confirm revoked tokens stop working immediately
-* [ ] Confirm expired or pruned messages behave predictably for clients
+* [x] Confirm only `http` and `https` URLs are allowed
+* [x] Confirm devices cannot read other devices' incoming messages
+* [x] Confirm devices cannot confirm/open messages not addressed to them
+* [x] Confirm revoked tokens stop working immediately
+* [x] Confirm expired or pruned messages behave predictably for clients
 
 ---
 
 ## Phase 10 — Logging and operational visibility
 
-* [ ] Ensure all key events are persisted
-* [ ] Verify logs are visible and useful in admin
-* [ ] Add message/event correlation where needed
-* [ ] Verify device status / last seen updates correctly
-* [ ] Make troubleshooting a failed send possible from admin alone
+* [x] Ensure all key events are persisted
+* [x] Verify logs are visible and useful in admin
+* [x] Add message/event correlation where needed
+* [x] Verify device status / last seen updates correctly
+* [x] Make troubleshooting a failed send possible from admin alone
 
 ### Expected events
 
-* [ ] `message.created`
-* [ ] `message.received`
-* [ ] `message.presented`
-* [ ] `message.opened`
-* [ ] `device.connected`
-* [ ] `device.disconnected`
+* [x] `message.created`
+* [x] `message.received`
+* [x] `message.presented`
+* [x] `message.opened`
+* [x] `device.connected`
+* [x] `device.disconnected`
 
 ---
 
@@ -236,7 +236,7 @@
 
 * [ ] Device model tests
 * [x] Message validation tests
-* [ ] Event creation tests
+* [x] Event creation tests
 * [ ] Settings validation tests
 
 ### API integration tests
@@ -245,10 +245,11 @@
 * [x] Send URL message test
 * [x] Send text message test
 * [x] Received signal test
-* [ ] Presented signal test
+* [x] Presented signal test
 * [x] Opened signal test
 * [x] Unauthorized access test
-* [ ] Rate limit behavior test
+* [x] Rate limit behavior test
+* [x] Security tests (revoked/inactive devices, URL validation, length limits)
 
 ### End-to-end tests
 
@@ -304,8 +305,8 @@
 
 ### Post-MVP milestone
 
-* [ ] Browser notifications polished
-* [ ] Throttling fully configurable in admin
+* [x] Browser notifications polished
+* [x] Throttling fully configurable in admin
 * [ ] Operational docs complete
 * [ ] HTTP Shortcuts workflow polished
 * [ ] Extension groundwork prepared

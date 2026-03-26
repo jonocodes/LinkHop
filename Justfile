@@ -11,7 +11,7 @@ dev:
 # Kill any running server processes
 kill:
     @echo "Killing server processes..."
-    @pkill -f "uvicorn linkhop.asgi" 2>/dev/null || echo "No server processes found"
+    @pkill -f -KILL "uvicorn linkhop.asgi" 2>/dev/null || echo "No server processes found"
     @pkill -f "manage.py" 2>/dev/null || true
     @echo "Done"
 

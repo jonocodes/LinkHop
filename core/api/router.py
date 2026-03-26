@@ -2,6 +2,7 @@ from django.core.exceptions import PermissionDenied
 from django.core.exceptions import ValidationError as DjangoValidationError
 from django.db import IntegrityError
 from django.http import HttpRequest
+from django.utils import timezone
 from ninja import NinjaAPI, Router
 
 from core.api.auth import DeviceBearer
@@ -14,15 +15,21 @@ from core.api.schemas import (
     RegisterDeviceIn,
     RegisterDeviceOut,
 )
-from core.models import Device
+from core.models import Device, GlobalSettings
 from core.selectors import is_device_online, list_active_devices
-from core.services.auth import consume_enrollment_token, create_device_token
+from core.services.auth import consume_enrollment_token, create_device_token, get_device_for_token
 from core.services.messages import (
     create_message,
     list_incoming_messages,
     mark_message_opened,
     mark_message_presented,
     mark_message_received,
+)
+from core.services.rate_limiter import (
+    check_confirmation_rate_limit,
+    check_registration_rate_limit,
+    check_sends_rate_limit,
+    get_client_ip,
 )
 
 api = NinjaAPI(title="LinkHop API", urls_namespace="linkhop_api")
@@ -36,10 +43,17 @@ def _error(code: str, message: str):
 
 @router.post(
     "/devices/register",
-    response={201: RegisterDeviceOut, 400: ErrorResponseSchema},
+    response={201: RegisterDeviceOut, 400: ErrorResponseSchema, 429: ErrorResponseSchema},
 )
 def register_device(request: HttpRequest, payload: RegisterDeviceIn):
-    del request
+    ip_address = get_client_ip(request)
+    allowed, limit = check_registration_rate_limit(ip_address=ip_address)
+    if not allowed:
+        return 429, _error(
+            "rate_limit_exceeded",
+            f"Too many registration attempts. Maximum {limit} per hour.",
+        )
+
     enrollment = consume_enrollment_token(payload.enrollment_token)
     if enrollment is None:
         return _error("invalid_enrollment_token", "Enrollment token is invalid or expired.")
@@ -94,9 +108,16 @@ def devices_list(request: HttpRequest):
 @router.post(
     "/messages",
     auth=auth,
-    response={201: MessageSchema, 400: ErrorResponseSchema},
+    response={201: MessageSchema, 400: ErrorResponseSchema, 429: ErrorResponseSchema},
 )
 def messages_create(request: HttpRequest, payload: CreateMessageIn):
+    allowed, limit = check_sends_rate_limit(device_id=str(request.auth.id))
+    if not allowed:
+        return 429, _error(
+            "rate_limit_exceeded",
+            f"Too many send attempts. Maximum {limit} per minute.",
+        )
+
     try:
         recipient = Device.objects.get(
             id=payload.recipient_device_id,
@@ -127,27 +148,45 @@ def messages_incoming(request: HttpRequest):
 @router.post(
     "/messages/{message_id}/received",
     auth=auth,
-    response={200: MessageSchema, 400: ErrorResponseSchema, 403: ErrorResponseSchema},
+    response={200: MessageSchema, 400: ErrorResponseSchema, 403: ErrorResponseSchema, 429: ErrorResponseSchema},
 )
 def message_received(request: HttpRequest, message_id: str):
+    allowed, limit = check_confirmation_rate_limit(device_id=str(request.auth.id))
+    if not allowed:
+        return 429, _error(
+            "rate_limit_exceeded",
+            f"Too many confirmation attempts. Maximum {limit} per minute.",
+        )
     return _handle_transition(mark_message_received, request.auth, message_id)
 
 
 @router.post(
     "/messages/{message_id}/presented",
     auth=auth,
-    response={200: MessageSchema, 400: ErrorResponseSchema, 403: ErrorResponseSchema},
+    response={200: MessageSchema, 400: ErrorResponseSchema, 403: ErrorResponseSchema, 429: ErrorResponseSchema},
 )
 def message_presented(request: HttpRequest, message_id: str):
+    allowed, limit = check_confirmation_rate_limit(device_id=str(request.auth.id))
+    if not allowed:
+        return 429, _error(
+            "rate_limit_exceeded",
+            f"Too many confirmation attempts. Maximum {limit} per minute.",
+        )
     return _handle_transition(mark_message_presented, request.auth, message_id)
 
 
 @router.post(
     "/messages/{message_id}/opened",
     auth=auth,
-    response={200: MessageSchema, 400: ErrorResponseSchema, 403: ErrorResponseSchema},
+    response={200: MessageSchema, 400: ErrorResponseSchema, 403: ErrorResponseSchema, 429: ErrorResponseSchema},
 )
 def message_opened(request: HttpRequest, message_id: str):
+    allowed, limit = check_confirmation_rate_limit(device_id=str(request.auth.id))
+    if not allowed:
+        return 429, _error(
+            "rate_limit_exceeded",
+            f"Too many confirmation attempts. Maximum {limit} per minute.",
+        )
     return _handle_transition(mark_message_opened, request.auth, message_id)
 
 
