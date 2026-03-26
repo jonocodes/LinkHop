@@ -2,132 +2,137 @@
 
 ## Phase 0 — Project setup
 
-* [ ] Create Django project and app structure
-* [ ] Add Django Ninja
-* [ ] Add django-axes
-* [ ] Configure SQLite for local development
-* [ ] Set up environment variable handling
-* [ ] Create base settings for dev / test / prod
-* [ ] Configure ASGI entrypoint for SSE support
-* [ ] Set up formatting, linting, and test tools
-* [ ] Expand README with local run instructions once the app is runnable
+* [x] Create Django project and app structure
+* [x] Add Django Ninja
+* [x] Add django-axes
+* [x] Configure SQLite for local development
+* [x] Set up environment variable handling
+* [x] Create base settings for dev / test / prod
+* [x] Configure ASGI entrypoint for SSE support
+* [x] Set up formatting, linting, and test tools
+* [x] Expand README with local run instructions once the app is runnable
 
 ---
 
 ## Phase 1 — Core data model
 
-* [ ] Create `Device` model
-* [ ] Create `Message` model
-* [ ] Create `Event` model
-* [ ] Create global settings model
-* [ ] Add message type enum: `url`, `text`
-* [ ] Add message status fields / timestamps
-* [ ] Add device auth token model or credential model
-* [ ] Generate and apply initial migrations
-* [ ] Register models in Django admin
+* [x] Create `Device` model
+* [x] Create `Message` model
+* [x] Create `Event` model
+* [x] Create global settings model
+* [x] Add message type enum: `url`, `text`
+* [x] Add message status fields / timestamps
+* [x] Add device auth token model or credential model
+* [x] Generate and apply initial migrations
+* [x] Register models in Django admin
 
 ### Validation rules
 
-* [ ] Validate `url` messages only allow absolute `http` / `https` URLs
-* [ ] Validate `text` messages allow multiline content
-* [ ] Enforce explicit message type
-* [ ] Add max URL length validation
-* [ ] Add max text body size validation
-* [ ] Define message retention / expiry rules consistent with ephemeral delivery
+* [x] Validate `url` messages only allow absolute `http` / `https` URLs
+* [x] Validate `text` messages allow multiline content
+* [x] Enforce explicit message type
+* [x] Add max URL length validation
+* [x] Add max text body size validation
+* [x] Define message retention / expiry rules consistent with ephemeral delivery
 
 ---
 
 ## Phase 2 — Admin and settings
 
-* [ ] Enable Django admin
-* [ ] Configure django-axes for admin login throttling
+* [x] Enable Django admin
+* [x] Configure django-axes for admin login throttling
 * [ ] Verify admin login lockout behavior works
-* [ ] Expose Devices in admin
-* [ ] Expose Messages in admin
-* [ ] Expose Events in admin
-* [ ] Expose global settings in admin
-* [ ] Add useful list filters for devices/messages/events
-* [ ] Add useful search fields in admin
-* [ ] Make global throttling values editable in admin
+* [x] Expose Devices in admin
+* [x] Expose Messages in admin
+* [x] Expose Events in admin
+* [x] Expose global settings in admin
+* [x] Add useful list filters for devices/messages/events
+* [x] Add useful search fields in admin
+* [x] Make global throttling values editable in admin
+* [x] Add "Send test message" admin action on Device (sends test text message to selected device)
 
 ### Admin filters
 
-* [ ] Filter messages by type
-* [ ] Filter messages by status
-* [ ] Filter messages by recipient device
-* [ ] Filter events by event type
-* [ ] Filter events by device
-* [ ] Filter by time/date
+* [x] Filter messages by type
+* [x] Filter messages by status
+* [x] Filter messages by recipient device
+* [x] Filter events by event type
+* [x] Filter events by device
+* [x] Filter by time/date
 
 ---
 
 ## Phase 3 — Authentication and enrollment
 
 * [ ] Add bootstrap admin secret flow for blank environment setup
-* [ ] Implement admin login/session flow
-* [ ] Implement device enrollment token model or mechanism
-* [ ] Implement device registration endpoint
-* [ ] Mint per-device bearer token on registration
-* [ ] Store device token securely
+* [x] Implement admin login/session flow
+* [x] Implement device enrollment token model or mechanism
+* [x] Implement device registration endpoint
+* [x] Mint per-device bearer token on registration
+* [x] Store device token securely
 * [ ] Add device token revocation support in admin
-* [ ] Add device self-identification endpoint (`/api/device/me` or equivalent)
+* [x] Add device self-identification endpoint (`/api/device/me` or equivalent)
+* [x] `/connect` page for device users to enter their token and get a session cookie
+* [x] `/disconnect` page to clear device session cookie
+* [x] `@device_login_required` decorator for web views (separate from admin `@login_required`)
+* [x] Device auth cookie (`linkhop_device`, httponly, 1 year) — no admin session required
 
 ### Testability
 
-* [ ] Add test-mode device seeding path or helper
-* [ ] Ensure two devices can be registered entirely via automation
+* [x] Add test-mode device seeding path or helper
+* [x] Ensure two devices can be registered entirely via automation
 * [ ] Ensure blank environment bootstrap works without email
 
 ---
 
 ## Phase 4 — Core JSON API
 
-* [ ] Create Django Ninja API router structure
-* [ ] Add schema for device registration
-* [ ] Add schema for device list
-* [ ] Add schema for message creation
-* [ ] Add schema for incoming message list
-* [ ] Add schema for confirmation actions
+* [x] Create Django Ninja API router structure
+* [x] Add schema for device registration
+* [x] Add schema for device list
+* [x] Add schema for message creation
+* [x] Add schema for incoming message list
+* [x] Add schema for confirmation actions
 
 ### Device/API endpoints
 
-* [ ] `POST /api/devices/register`
-* [ ] `GET /api/devices`
-* [ ] `GET /api/device/me`
+* [x] `POST /api/devices/register`
+* [x] `GET /api/devices`
+* [x] `GET /api/device/me`
 
 ### Message/API endpoints
 
-* [ ] `POST /api/messages`
-* [ ] `GET /api/messages/incoming`
-* [ ] `POST /api/messages/{id}/received`
-* [ ] `POST /api/messages/{id}/presented`
-* [ ] `POST /api/messages/{id}/opened`
+* [x] `POST /api/messages`
+* [x] `GET /api/messages/incoming`
+* [x] `POST /api/messages/{id}/received`
+* [x] `POST /api/messages/{id}/presented`
+* [x] `POST /api/messages/{id}/opened`
 
 ### Behavior
 
-* [ ] Create `message.created` event on send
-* [ ] Create `message.received` event on received signal
-* [ ] Create `message.presented` event on presented signal
-* [ ] Create `message.opened` event on opened signal
-* [ ] Ensure clients can only act on their own incoming messages
-* [ ] Ensure sender device is recorded when available
-* [ ] Define idempotent behavior for duplicate confirmation requests
+* [x] Create `message.created` event on send
+* [x] Create `message.received` event on received signal
+* [x] Create `message.presented` event on presented signal
+* [x] Create `message.opened` event on opened signal
+* [x] Ensure clients can only act on their own incoming messages
+* [x] Ensure sender device is recorded when available
+* [x] Define idempotent behavior for duplicate confirmation requests
 
 ---
 
 ## Phase 5 — Web app send flow
 
-* [ ] Create `/send` page
-* [ ] Create `/hop` alias route
-* [ ] Support `GET /send?type=url&body=...`
-* [ ] Support `GET /send?type=text&body=...`
-* [ ] Support `POST /send`
-* [ ] Add dynamic device chooser
-* [ ] Show device online/offline / last-seen hints
-* [ ] Use single-line input for URL messages
-* [ ] Use textarea for text messages
-* [ ] Display validation errors clearly
-* [ ] Show success state after send
+* [x] Create `/send` page
+* [x] Create `/hop` alias route
+* [x] Support `GET /send?type=url&body=...`
+* [x] Support `GET /send?type=text&body=...`
+* [x] Support `POST /send`
+* [x] Add dynamic device chooser
+* [x] Show device online/offline / last-seen hints
+* [x] Use single-line input for URL messages
+* [x] Use textarea for text messages
+* [x] Display validation errors clearly
+* [x] Show success state after send
 
 ### Extensionless operation
 
@@ -138,49 +143,51 @@
 
 ## Phase 6 — Inbox and message detail views
 
-* [ ] Create inbox page for incoming messages
-* [ ] Create URL open route: `GET /messages/{id}/open`
-* [ ] Create text detail route: `GET /messages/{id}`
-* [ ] Record opened signal before redirect/render
-* [ ] Redirect URL messages to destination after open tracking
-* [ ] Render text messages cleanly with preserved newlines
-* [ ] Distinguish queued / received / presented / opened in UI where useful
+* [x] Create inbox page for incoming messages
+* [x] Create URL open route: `GET /messages/{id}/open`
+* [x] Create text detail route: `GET /messages/{id}`
+* [x] Record opened signal before redirect/render
+* [x] Redirect URL messages to destination after open tracking
+* [x] Render text messages cleanly with preserved newlines
+* [x] Distinguish queued / received / presented / opened in UI where useful
+* [x] Filter out `opened` messages from inbox
+* [x] bfcache fix: reload inbox on `pageshow` when `event.persisted`
 
 ---
 
 ## Phase 7 — SSE realtime delivery
 
-* [ ] Create SSE endpoint
-* [ ] Authenticate SSE requests with device token
-* [ ] Emit `hello` event on connect
-* [ ] Emit `message` event for newly available messages
-* [ ] Emit periodic `ping` events
-* [ ] Add automatic reconnect behavior client-side
-* [ ] Re-sync pending messages on reconnect
-* [ ] Dedupe messages by message ID client-side
+* [x] Create SSE endpoint
+* [x] Authenticate SSE requests with device token
+* [x] Emit `hello` event on connect
+* [x] Emit `message` event for newly available messages
+* [x] Emit periodic `ping` events
+* [x] Add automatic reconnect behavior client-side
+* [x] Re-sync pending messages on reconnect
+* [x] Dedupe messages by message ID client-side
 
 ### Connection behavior
 
-* [ ] Record `device.connected` event
-* [ ] Record `device.disconnected` event
-* [ ] Enforce max active SSE streams per device
-* [ ] Verify reconnects do not lose pending messages
-* [ ] Define reconnect/backoff expectations for clients
+* [x] Record `device.connected` event
+* [x] Record `device.disconnected` event
+* [x] Enforce max active SSE streams per device
+* [x] Verify reconnects do not lose pending messages
+* [x] Define reconnect/backoff expectations for clients
 
 ---
 
 ## Phase 8 — Notifications
 
-* [ ] Add browser notification support in web app
-* [ ] Request notification permission in a reasonable UX flow
-* [ ] Record `presented` when notification or visible UI presentation occurs
-* [ ] Ensure notification click routes through tracked open flow
-* [ ] Avoid duplicate notifications across multiple tabs where possible
+* [x] Add browser notification support in web app
+* [x] Request notification permission in a reasonable UX flow
+* [x] Record `presented` when notification or visible UI presentation occurs
+* [x] Ensure notification click routes through tracked open flow
+* [x] Avoid duplicate notifications across multiple tabs where possible
 
 ### Priority rules
 
-* [ ] Define extension-over-web-app priority rule in code/comments
-* [ ] Ensure web app remains usable without extension
+* [x] Define extension-over-web-app priority rule in code/comments
+* [x] Ensure web app remains usable without extension
 
 ---
 
@@ -228,19 +235,19 @@
 ### Unit tests
 
 * [ ] Device model tests
-* [ ] Message validation tests
+* [x] Message validation tests
 * [ ] Event creation tests
 * [ ] Settings validation tests
 
 ### API integration tests
 
-* [ ] Register device test
-* [ ] Send URL message test
-* [ ] Send text message test
-* [ ] Received signal test
+* [x] Register device test
+* [x] Send URL message test
+* [x] Send text message test
+* [x] Received signal test
 * [ ] Presented signal test
-* [ ] Opened signal test
-* [ ] Unauthorized access test
+* [x] Opened signal test
+* [x] Unauthorized access test
 * [ ] Rate limit behavior test
 
 ### End-to-end tests
@@ -287,12 +294,12 @@
 
 ### MVP milestone
 
-* [ ] Register devices
-* [ ] Send URL and text messages
-* [ ] Receive via inbox
-* [ ] SSE delivery works
-* [ ] Open/click tracking works
-* [ ] Admin logs are usable
+* [x] Register devices
+* [x] Send URL and text messages
+* [x] Receive via inbox
+* [x] SSE delivery works
+* [x] Open/click tracking works
+* [x] Admin logs are usable
 * [ ] Automated end-to-end test passes
 
 ### Post-MVP milestone

@@ -76,9 +76,7 @@ class Message(TimestampedModel):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     sender_device = models.ForeignKey(
         Device,
-        null=True,
-        blank=True,
-        on_delete=models.SET_NULL,
+        on_delete=models.PROTECT,
         related_name="sent_messages",
     )
     recipient_device = models.ForeignKey(
@@ -197,6 +195,10 @@ class GlobalSettings(TimestampedModel):
     )
     max_pending_messages = models.PositiveIntegerField(
         default=settings.LINKHOP_MAX_PENDING_MESSAGES
+    )
+    allow_self_send = models.BooleanField(
+        default=False,
+        help_text="Allow a device to send a message to itself.",
     )
 
     def __str__(self) -> str:

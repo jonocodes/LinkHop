@@ -1,3 +1,29 @@
+[build-system]
+requires = ["setuptools"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "linkhop"
+version = "0.1.0"
+dependencies = [
+    "Django>=5.1,<5.3",
+    "django-ninja>=1.3,<1.4",
+    "django-axes>=7,<8",
+    "django-unfold>=0,<1",
+    "uvicorn>=0.34,<0.35",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8,<9",
+    "pytest-django>=4.9,<5",
+    "ruff>=0.11,<0.12",
+]
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["core*", "linkhop*"]
+
 [tool.pytest.ini_options]
 DJANGO_SETTINGS_MODULE = "linkhop.settings.test"
 pythonpath = ["."]

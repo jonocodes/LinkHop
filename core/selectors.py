@@ -1,5 +1,3 @@
-from django.utils import timezone
-
 from core.models import Device
 
 
@@ -8,6 +6,5 @@ def list_active_devices():
 
 
 def is_device_online(device: Device) -> bool:
-    if device.last_seen_at is None:
-        return False
-    return (timezone.now() - device.last_seen_at).total_seconds() < 60
+    from core.sse import active_stream_count
+    return active_stream_count(str(device.id)) > 0

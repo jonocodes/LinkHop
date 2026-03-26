@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+
+{% block title %}Connect — LinkHop{% endblock %}
+
+{% block content %}
+<h1>Connect this device</h1>
+
+<p style="color:#444;margin-bottom:1.5rem">
+  Paste the <code>device_...</code> bearer token you received when registering this device.
+  The token is stored in a cookie on this browser.
+</p>
+
+{% if error %}
+<div class="alert alert-error">{{ error }}</div>
+{% endif %}
+
+<form method="post" action="{% url 'connect' %}">
+  {% csrf_token %}
+  <div class="field">
+    <label for="id_token">Device token</label>
+    <input type="text" id="id_token" name="token" placeholder="device_..." autocomplete="off" autofocus>
+  </div>
+  <button type="submit" class="btn">Connect</button>
+</form>
+
+<p style="margin-top:2rem;font-size:0.875rem;color:#666">
+  Don't have a token yet? Ask your server admin to create an enrollment token,
+  then register this device via <code>POST /api/devices/register</code>.
+</p>
+{% endblock %}

@@ -1,0 +1,102 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Inbox — LinkHop{% endblock %}
+
+{% block content %}
+<div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:1rem">
+  <h1 style="margin:0">Inbox</h1>
+  <span id="live-indicator" style="font-size:0.8rem;color:#aaa;display:none">&#9679; Live</span>
+</div>
+
+<div id="notify-bar" style="display:none;margin-bottom:1.25rem;padding:0.6rem 0.875rem;background:#fff;border:1px solid #ddd;border-radius:4px;font-size:0.875rem;align-items:center;gap:0.75rem">
+  <span>Enable browser notifications for new messages?</span>
+  <button id="notify-btn" class="btn" style="padding:0.25rem 0.75rem;font-size:0.875rem">Enable</button>
+  <button id="notify-dismiss" style="background:none;border:none;cursor:pointer;color:#999;font-size:1rem;padding:0;margin-left:auto">&times;</button>
+</div>
+
+{% if not messages %}
+<p style="color:#666">No pending messages.</p>
+{% else %}
+<ul style="list-style:none;padding:0;margin:0">
+  {% for msg in messages %}
+  <li style="background:#fff;border:1px solid #ddd;border-radius:4px;padding:0.75rem 1rem;margin-bottom:0.75rem">
+    <div style="display:flex;justify-content:space-between;align-items:baseline;gap:1rem;margin-bottom:0.375rem">
+      <span style="font-weight:600">
+        {% if msg.type == "url" %}
+          <a href="{% url 'message_open' msg.id %}">{{ msg.body|truncatechars:80 }}</a>
+        {% else %}
+          <a href="{% url 'message_detail' msg.id %}">{{ msg.body|truncatechars:120 }}</a>
+        {% endif %}
+      </span>
+      <span style="font-size:0.75rem;white-space:nowrap;color:#555">{{ msg.status }}</span>
+    </div>
+    <div style="font-size:0.8rem;color:#666">
+      from <strong>{{ msg.sender_device.name|default:"unknown" }}</strong> &mdash;
+      {{ msg.created_at|date:"N j, Y, P" }}
+    </div>
+  </li>
+  {% endfor %}
+</ul>
+{% endif %}
+
+<script>
+  // Reload if restored from bfcache (back/forward button) so status is fresh.
+  window.addEventListener('pageshow', function (e) {
+    if (e.persisted) window.location.reload();
+  });
+</script>
+<script src="{% static 'linkhop/sse-client.js' %}"></script>
+<script src="{% static 'linkhop/notifications.js' %}"></script>
+<script>
+  (function () {
+    var token = "{{ device_token|escapejs }}";
+    var indicator = document.getElementById('live-indicator');
+    var notifyBar = document.getElementById('notify-bar');
+    var notifyBtn = document.getElementById('notify-btn');
+    var notifyDismiss = document.getElementById('notify-dismiss');
+
+    if (LinkHopNotifications.isSupported() &&
+        Notification.permission === 'default' &&
+        !localStorage.getItem('linkhop_notify_dismissed')) {
+      notifyBar.style.display = 'flex';
+    }
+
+    notifyBtn.addEventListener('click', function () {
+      LinkHopNotifications.requestPermission(function (granted) {
+        notifyBar.style.display = 'none';
+      });
+    });
+
+    notifyDismiss.addEventListener('click', function () {
+      notifyBar.style.display = 'none';
+      localStorage.setItem('linkhop_notify_dismissed', '1');
+    });
+
+    var pageIds = [{% for msg in messages %}"{{ msg.id }}"{% if not forloop.last %},{% endif %}{% endfor %}];
+
+    var client = new LinkHopSSE({
+      url: '/api/events/stream',
+      token: token,
+
+      onConnect: function () {
+        indicator.style.display = '';
+        indicator.style.color = '#2e7d32';
+        client.seedSeen(pageIds);
+      },
+
+      onDisconnect: function () {
+        indicator.style.color = '#aaa';
+      },
+
+      onMessage: function () {
+        if (document.visibilityState !== 'visible') {
+          LinkHopNotifications.fetchAndNotify(token);
+        } else {
+          window.location.reload();
+        }
+      },
+    });
+  })();
+</script>
+{% endblock %}

@@ -89,9 +89,9 @@ Delivery is:
 
 ## Current status
 
-Early development
+Active development — core functionality is working.
 
-The repository now includes an initial Django scaffold, core data models, admin wiring, and the first JSON API slice for device registration and messaging.
+The app includes device registration and enrollment, a full JSON API, a browser-based send form and inbox, SSE real-time delivery, and browser notifications.
 
 For more detail:
 
@@ -120,7 +120,7 @@ source .venv/bin/activate
 ### Install dependencies
 
 ```bash
-pip install "Django>=5.1,<5.3" "django-ninja>=1.3,<1.4" "django-axes>=7,<8" "django-unfold>=0,<1" "pytest>=8,<9" "pytest-django>=4.9,<5" "ruff>=0.11,<0.12"
+pip install -e ".[dev]"
 ```
 
 ### Apply migrations
@@ -131,23 +131,47 @@ python manage.py migrate
 
 ### Run the development server
 
+For SSE support the app must run under ASGI:
+
+```bash
+pip install uvicorn
+uvicorn linkhop.asgi:application --reload
+```
+
+Or with the standard WSGI server (no SSE):
+
 ```bash
 python manage.py runserver
 ```
 
 The app will be available at `http://127.0.0.1:8000/`.
 
-Current useful routes:
+#### Web interface
 
-* `/admin/`
-* `/docs`
-* `/openapi.json`
-* `/api/devices/register`
-* `/api/device/me`
-* `/api/devices`
-* `/api/messages`
-* `/api/messages/incoming`
-* `/healthz`
+| Route | Description |
+|---|---|
+| `/send` | Send a message to another device |
+| `/hop` | Alias for `/send` (useful for bookmarks and HTTP Shortcuts) |
+| `/inbox` | View incoming messages |
+| `/messages/{id}` | Read a text message (records opened) |
+| `/messages/{id}/open` | Open a URL message — records opened and redirects |
+
+All web routes require admin login (`/admin/`).
+
+#### JSON API
+
+| Route | Description |
+|---|---|
+| `POST /api/devices/register` | Exchange an enrollment token for a device bearer token |
+| `GET /api/device/me` | Identify the authenticated device |
+| `GET /api/devices` | List active devices |
+| `POST /api/messages` | Send a message |
+| `GET /api/messages/incoming` | List non-expired incoming messages |
+| `POST /api/messages/{id}/received` | Signal receipt |
+| `POST /api/messages/{id}/presented` | Signal presentation |
+| `POST /api/messages/{id}/opened` | Signal the user opened the message |
+| `GET /api/events/stream` | SSE stream for real-time message notifications |
+| `/docs` | Interactive API documentation |
 
 ### Run tests
 
@@ -163,9 +187,7 @@ ruff check .
 
 ---
 
-## Getting started with pairing
-
-LinkHop does not do device sync. The current implementation supports pairing devices with enrollment tokens, then sending queued messages between them over the JSON API.
+## Getting started
 
 ### 1. Create an admin user
 
@@ -173,11 +195,11 @@ LinkHop does not do device sync. The current implementation supports pairing dev
 python manage.py createsuperuser
 ```
 
-Then sign in at `/admin/`.
+Sign in at `/admin/` to access the admin interface.
 
 ### 2. Mint an enrollment token
 
-Today, enrollment tokens are created from Django shell:
+Enrollment tokens are one-time pairing secrets. Create one from the Django shell:
 
 ```bash
 python manage.py shell
@@ -185,15 +207,13 @@ python manage.py shell
 
 ```python
 from core.services.auth import create_enrollment_token
-token, raw_token = create_enrollment_token(label="Desktop pairing")
+token, raw_token = create_enrollment_token(label="Desktop Firefox")
 print(raw_token)
 ```
 
-Save the printed `raw_token`. That is the one-time pairing secret the device will exchange for its bearer token.
+The printed `raw_token` is the secret the device exchanges for its bearer token. It expires after 24 hours and can only be used once.
 
 ### 3. Register a device
-
-Example:
 
 ```bash
 curl -X POST http://127.0.0.1:8000/api/devices/register \
@@ -206,30 +226,33 @@ curl -X POST http://127.0.0.1:8000/api/devices/register \
   }'
 ```
 
-The response includes:
+The response includes a `device_...` bearer token. Save it — it is shown only once.
 
-* a device record
-* a raw `device_...` bearer token
+Repeat for each device you want to pair (phone, second browser, etc.).
 
-Store that device token somewhere safe. It is shown only at registration time.
+### 4. Connect each device to the web interface
 
-### 4. Pair a second device
+On each device (phone, desktop browser, etc.), visit `/connect` and paste the `device_...` bearer token from step 3. The token is saved in a cookie on that browser.
 
-Repeat the same process with a second enrollment token, for example:
+Once connected:
 
-* `Desktop Firefox`
-* `Phone Browser`
+* `/send` — send a message to another device (sends from this device)
+* `/inbox` — see messages addressed to this device
+* `/hop` — shortcut alias for `/send`, useful for bookmarks or HTTP Shortcuts on Android
+* Pass `?type=url&body=https://example.com` to prefill the send form
 
-Once two devices are registered, you can use one device token to send to the other.
+The inbox connects to the SSE stream automatically using the cookie. If browser notifications are supported, a permission prompt appears on first visit. When a message arrives while the page is in the background, a browser notification is shown.
 
-### 5. List paired devices
+### 6. Send and receive via the API
+
+List devices:
 
 ```bash
 curl http://127.0.0.1:8000/api/devices \
   -H "Authorization: Bearer device_..."
 ```
 
-### 6. Send a test message
+Send a message:
 
 ```bash
 curl -X POST http://127.0.0.1:8000/api/messages \
@@ -242,26 +265,21 @@ curl -X POST http://127.0.0.1:8000/api/messages \
   }'
 ```
 
-### 7. Check incoming messages on the recipient device
+Check incoming messages:
 
 ```bash
 curl http://127.0.0.1:8000/api/messages/incoming \
   -H "Authorization: Bearer device_..."
 ```
 
-### 8. Confirm receipt or open the message
-
-```bash
-curl -X POST http://127.0.0.1:8000/api/messages/MESSAGE_UUID/received \
-  -H "Authorization: Bearer device_..."
-```
+Confirm opened:
 
 ```bash
 curl -X POST http://127.0.0.1:8000/api/messages/MESSAGE_UUID/opened \
   -H "Authorization: Bearer device_..."
 ```
 
-The interactive API docs at `/docs` are the easiest way to inspect the available request and response shapes while testing this flow.
+The interactive API docs at `/docs` show all available request and response shapes.
 
 ---
 

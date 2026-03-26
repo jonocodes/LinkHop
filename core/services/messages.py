@@ -7,6 +7,11 @@ from core.models import Device, Message, MessageStatus
 from core.services.events import create_event
 
 
+def _get_global_settings():
+    from core.models import GlobalSettings
+    return GlobalSettings.objects.filter(singleton_key="default").first()
+
+
 @transaction.atomic
 def create_message(
     *,
@@ -14,7 +19,14 @@ def create_message(
     recipient_device: Device,
     message_type: str,
     body: str,
+    _skip_self_send_check: bool = False,
 ) -> Message:
+    if not _skip_self_send_check and sender_device.id == recipient_device.id:
+        gs = _get_global_settings()
+        allow = gs.allow_self_send if gs is not None else False
+        if not allow:
+            raise ValidationError("Sending a message to yourself is not allowed.")
+
     pending_count = Message.objects.filter(
         recipient_device=recipient_device,
         status__in=[MessageStatus.QUEUED, MessageStatus.RECEIVED, MessageStatus.PRESENTED],

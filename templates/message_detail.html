@@ -1,0 +1,19 @@
+{% extends "base.html" %}
+
+{% block title %}Message — LinkHop{% endblock %}
+
+{% block content %}
+<h1>Message</h1>
+
+<div style="background:#fff;border:1px solid #ddd;border-radius:4px;padding:1rem;margin-bottom:1.25rem;white-space:pre-wrap;word-break:break-word">{{ message.body }}</div>
+
+<div style="font-size:0.85rem;color:#666;margin-bottom:1.5rem">
+  To <strong>{{ message.recipient_device.name }}</strong>
+  {% if message.sender_device %} from <strong>{{ message.sender_device.name }}</strong>{% endif %}
+  &mdash; {{ message.created_at|date:"N j, Y, P" }}
+</div>
+
+<p>
+  <a href="{% url 'inbox' %}">Back to inbox</a>
+</p>
+{% endblock %}
