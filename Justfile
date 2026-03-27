@@ -56,6 +56,18 @@ test-one TEST_PATH:
 test-e2e:
     python -m pytest core/tests/test_e2e.py -v
 
+# Run browser-based E2E tests (requires Playwright)
+test-e2e-browser:
+    python -m pytest e2e/ -v
+
+# Run browser E2E tests with visible browser (headed mode)
+test-e2e-headed:
+    python -m pytest e2e/ -v --headed
+
+# Run browser E2E tests in debug mode
+test-e2e-debug:
+    python -m pytest e2e/ -v --headed --pdb
+
 # Run only API tests
 test-api:
     python -m pytest core/tests/test_api.py -v

@@ -17,6 +17,8 @@ dependencies = [
 dev = [
     "pytest>=8,<9",
     "pytest-django>=4.9,<5",
+    "pytest-playwright>=0.7,<0.8",
+    "playwright>=1.51,<1.52",
     "ruff>=0.11,<0.12",
 ]
 
@@ -27,7 +29,7 @@ include = ["core*", "linkhop*"]
 [tool.pytest.ini_options]
 DJANGO_SETTINGS_MODULE = "linkhop.settings.test"
 pythonpath = ["."]
-testpaths = ["core/tests"]
+testpaths = ["core/tests", "e2e"]
 
 [tool.ruff]
 line-length = 100

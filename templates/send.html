@@ -50,8 +50,8 @@
     <select id="id_recipient" name="recipient_device_id">
       <option value="">— choose a device —</option>
       {% for device in devices %}
-      <option value="{{ device.id }}"{% if device.id == selected_recipient %}selected{% endif %}>
-        {{ device.name }}{% if device.is_online %} ●{% else %} ○{% endif %}
+      <option value="{{ device.id }}"{% if device.id == selected_recipient %}selected{% endif %} data-device-id="{{ device.id }}" data-name="{{ device.name }}">
+        {{ device.name }}{% if device.is_online %} ●{% else %} ○{% endif %} {% if device.is_online %}(online){% else %}(seen {{ device.last_seen_ago }}){% endif %}
       </option>
       {% endfor %}
     </select>
@@ -89,6 +89,103 @@
 
     typeSelect.addEventListener('change', syncBody);
     syncBody();
+  })();
+</script>
+
+<script>
+  // Real-time device status updates via SSE
+  (function() {
+    const deviceStatuses = new Map();
+    
+    // Initialize from server-rendered data
+    {% for device in devices %}
+    deviceStatuses.set('{{ device.id }}', {
+      isOnline: {{ device.is_online|yesno:"true,false" }},
+      lastSeen: {{ device.last_seen_at|date:"U"|default:"null" }}
+    });
+    {% endfor %}
+    
+    function updateDropdown() {
+      const select = document.getElementById('id_recipient');
+      const options = select.querySelectorAll('option[data-device-id]');
+      
+      options.forEach(option => {
+        const deviceId = option.getAttribute('data-device-id');
+        const status = deviceStatuses.get(deviceId);
+        
+        if (status) {
+          const name = option.getAttribute('data-name');
+          let text = name;
+          
+          if (status.isOnline) {
+            text += ' ● (online)';
+          } else {
+            const ago = formatTimeAgo(status.lastSeen);
+            text += ' ○ (seen ' + ago + ')';
+          }
+          
+          option.textContent = text;
+        }
+      });
+    }
+    
+    function formatTimeAgo(timestamp) {
+      if (!timestamp) return 'Never';
+      
+      const seconds = Math.floor(Date.now() / 1000) - timestamp;
+      
+      if (seconds < 60) return 'Just now';
+      if (seconds < 3600) {
+        const mins = Math.floor(seconds / 60);
+        return mins + ' minute' + (mins === 1 ? '' : 's') + ' ago';
+      }
+      if (seconds < 86400) {
+        const hours = Math.floor(seconds / 3600);
+        return hours + ' hour' + (hours === 1 ? '' : 's') + ' ago';
+      }
+      if (seconds < 604800) {
+        const days = Math.floor(seconds / 86400);
+        return days + ' day' + (days === 1 ? '' : 's') + ' ago';
+      }
+      if (seconds < 2592000) {
+        const weeks = Math.floor(seconds / 604800);
+        return weeks + ' week' + (weeks === 1 ? '' : 's') + ' ago';
+      }
+      if (seconds < 31536000) {
+        const months = Math.floor(seconds / 2592000);
+        return months + ' month' + (months === 1 ? '' : 's') + ' ago';
+      }
+      const years = Math.floor(seconds / 31536000);
+      return years + ' year' + (years === 1 ? '' : 's') + ' ago';
+    }
+    
+    // Update offline device times every minute
+    setInterval(function() {
+      let hasOffline = false;
+      deviceStatuses.forEach(status => {
+        if (!status.isOnline) hasOffline = true;
+      });
+      if (hasOffline) updateDropdown();
+    }, 60000);
+    
+    // Connect to SSE for real-time updates
+    const evtSource = new EventSource('/api/events/stream');
+    
+    evtSource.addEventListener('hello', function(e) {
+      console.log('Connected to device status stream');
+    });
+    
+    evtSource.addEventListener('ping', function(e) {
+      // Ping received - this means the current device is still connected
+      // Other devices' status updates come through separate mechanisms
+    });
+    
+    evtSource.onerror = function(e) {
+      console.error('SSE error:', e);
+    };
+    
+    // Initial render
+    updateDropdown();
   })();
 </script>
 {% endblock %}

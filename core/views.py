@@ -5,7 +5,7 @@ from django.utils import timezone
 
 from core.device_auth import COOKIE_NAME, device_login_required, get_device_from_request
 from core.models import Device, Message, MessageStatus, MessageType
-from core.selectors import is_device_online, list_active_devices
+from core.selectors import format_time_ago, is_device_online, list_active_devices
 from core.services.auth import get_device_for_token
 from core.services.messages import create_message, mark_message_opened
 
@@ -21,6 +21,7 @@ def _device_context(devices):
             "name": d.name,
             "is_online": is_device_online(d),
             "last_seen_at": d.last_seen_at,
+            "last_seen_ago": format_time_ago(d.last_seen_at),
         }
         for d in devices
     ]

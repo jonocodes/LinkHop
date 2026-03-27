@@ -62,6 +62,33 @@ Make it easy to send a URL or text message from one device to another, even if t
 
 ---
 
+## Comparison with similar services
+
+| Service | Self-hosted | Works offline¹ | No account needed | Real-time | Open source |
+|---------|-------------|----------------|-------------------|-----------|-------------|
+| **LinkHop** | ✅ Yes | ✅ Yes | ✅ Yes | ✅ Yes | ✅ Yes |
+| Pushbullet | ❌ No | ❌ No | ❌ No | ✅ Yes | ❌ No |
+| Join | ❌ No | ❌ No | ❌ No | ✅ Yes | ❌ No |
+| Snapdrop/PairDrop | ✅ Yes | ❌ No² | ✅ Yes | ✅ Yes | ✅ Yes |
+| Firefox/Chrome Send Tab | ❌ No | ❌ No | ❌ No³ | ✅ Yes | ❌ No |
+| Nextcloud | ✅ Yes | ❌ No | ❌ No | ✅ Yes | ✅ Yes |
+| Syncthing | ✅ Yes | N/A⁴ | ✅ Yes | ✅ Yes | ✅ Yes |
+| Gotify | ✅ Yes | ❌ No | ✅ Yes | ✅ Yes | ✅ Yes |
+
+**¹ Works offline:** Messages are queued server-side and delivered when the receiving device comes online. This is LinkHop's key differentiator — you can send a link from your phone at work, and it'll be waiting when you open your laptop at home.
+
+**² Snapdrop/PairDrop:** Requires both devices to be on the same local network.
+
+**³ Firefox/Chrome Send Tab:** Requires being signed into a Mozilla/Google account.
+
+**⁴ Syncthing:** Designed for file sync, not message passing. Files sync when both devices are online.
+
+### Why LinkHop?
+
+Unlike browser vendor solutions (Firefox Send Tab, Chrome Send to Device), LinkHop doesn't require an account or lock you into an ecosystem. Unlike Pushbullet or Join, it's self-hosted and free. Unlike Snapdrop, it works across networks and when devices are offline. Unlike Syncthing, it's designed for quick handoff, not storage.
+
+---
+
 ## Example use cases
 
 * Send a link from your phone to your desktop
