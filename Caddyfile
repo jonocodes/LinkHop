@@ -1,0 +1,90 @@
+# Caddyfile for LinkHop
+# Caddy handles HTTPS automatically with Let's Encrypt
+
+{
+    # Global options
+    auto_https off  # Disable automatic HTTPS for now (enable in production)
+    # For production, remove the line above and Caddy will auto-enable HTTPS
+}
+
+# HTTP site (for local development or behind reverse proxy)
+:80 {
+    # Logging
+    log {
+        output file /var/log/caddy/access.log
+    }
+
+    # Health check endpoint
+    handle /health {
+        respond "OK" 200
+    }
+
+    # Static files
+    handle /static/* {
+        root * /var/www/static
+        file_server
+        header Cache-Control "public, max-age=31536000, immutable"
+    }
+
+    # SSE endpoint - disable buffering for streaming
+    handle /api/events/stream {
+        reverse_proxy linkhop:8000 {
+            flush_interval -1
+            header_up Connection ""
+            transport http {
+                read_timeout 1h
+                write_timeout 1h
+            }
+        }
+    }
+
+    # API and app
+    handle {
+        reverse_proxy linkhop:8000 {
+            header_up Host {host}
+            header_up X-Real-IP {remote}
+            header_up X-Forwarded-For {remote}
+            header_up X-Forwarded-Proto {scheme}
+        }
+    }
+}
+
+# HTTPS site (uncomment and configure for production)
+# your-domain.com {
+#     # TLS is automatic with Let's Encrypt
+#     tls your-email@example.com
+#
+#     # Import static file handling from above
+#     handle /static/* {
+#         root * /var/www/static
+#         file_server
+#         header Cache-Control "public, max-age=31536000, immutable"
+#     }
+#
+#     handle /api/events/stream {
+#         reverse_proxy linkhop:8000 {
+#             flush_interval -1
+#             transport http {
+#                 read_timeout 1h
+#                 write_timeout 1h
+#             }
+#         }
+#     }
+#
+#     handle {
+#         reverse_proxy linkhop:8000 {
+#             header_up Host {host}
+#             header_up X-Real-IP {remote}
+#             header_up X-Forwarded-For {remote}
+#             header_up X-Forwarded-Proto {scheme}
+#         }
+#     }
+#
+#     # Security headers
+#     header {
+#         X-Frame-Options "SAMEORIGIN"
+#         X-Content-Type-Options "nosniff"
+#         X-XSS-Protection "1; mode=block"
+#         Referrer-Policy "strict-origin-when-cross-origin"
+#     }
+# }

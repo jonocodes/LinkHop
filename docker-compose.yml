@@ -1,0 +1,76 @@
+version: '3.8'
+
+services:
+  linkhop:
+    build: .
+    container_name: linkhop-app
+    restart: unless-stopped
+    environment:
+      - SECRET_KEY=${SECRET_KEY:?SECRET_KEY is required}
+      - DEBUG=${DEBUG:-False}
+      - ALLOWED_HOSTS=${ALLOWED_HOSTS:-localhost,127.0.0.1}
+      - DATABASE_URL=${DATABASE_URL:-sqlite:///data/db.sqlite3}
+      - TIME_ZONE=${TIME_ZONE:-UTC}
+      - LINKHOP_MESSAGE_RETENTION_DAYS=${LINKHOP_MESSAGE_RETENTION_DAYS:-7}
+      - LINKHOP_API_SENDS_PER_MINUTE=${LINKHOP_API_SENDS_PER_MINUTE:-30}
+      - LINKHOP_API_CONFIRMATIONS_PER_MINUTE=${LINKHOP_API_CONFIRMATIONS_PER_MINUTE:-120}
+      - LINKHOP_API_REGISTRATIONS_PER_HOUR=${LINKHOP_API_REGISTRATIONS_PER_HOUR:-10}
+    volumes:
+      - linkhop-data:/app/data
+      - linkhop-static:/app/staticfiles
+    networks:
+      - linkhop-network
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/admin/login/')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  caddy:
+    image: caddy:2-alpine
+    container_name: linkhop-caddy
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - linkhop-static:/var/www/static:ro
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    depends_on:
+      - linkhop
+    networks:
+      - linkhop-network
+
+  # Optional: PostgreSQL database (instead of SQLite)
+  # Uncomment to use PostgreSQL instead of SQLite
+  # db:
+  #   image: postgres:15-alpine
+  #   container_name: linkhop-db
+  #   restart: unless-stopped
+  #   environment:
+  #     - POSTGRES_DB=linkhop
+  #     - POSTGRES_USER=linkhop
+  #     - POSTGRES_PASSWORD=${DB_PASSWORD:?DB_PASSWORD is required}
+  #   volumes:
+  #     - postgres-data:/var/lib/postgresql/data
+  #   networks:
+  #     - linkhop-network
+
+volumes:
+  linkhop-data:
+    driver: local
+  linkhop-static:
+    driver: local
+  caddy-data:
+    driver: local
+  caddy-config:
+    driver: local
+  # postgres-data:
+  #   driver: local
+
+networks:
+  linkhop-network:
+    driver: bridge
