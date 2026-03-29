@@ -4,15 +4,36 @@ from typing import Optional
 from django.utils import timezone
 
 from core.models import Device
+from core.services.auth import _SYSTEM_DEVICE_NAME
 
 
 def list_active_devices():
-    return Device.objects.filter(is_active=True, revoked_at__isnull=True).order_by("name")
+    return Device.objects.filter(is_active=True, revoked_at__isnull=True).exclude(name=_SYSTEM_DEVICE_NAME).order_by("name")
 
 
 def is_device_online(device: Device) -> bool:
     from core.sse import active_stream_count
     return active_stream_count(str(device.id)) > 0
+
+
+ONLINE_THRESHOLD_SECONDS = 25
+
+
+def device_presence_status(device: Device) -> str:
+    """Return 'online', 'recent', or 'offline'.
+
+    'online'  — active SSE stream right now
+    'recent'  — no active stream but seen within ONLINE_THRESHOLD_SECONDS
+    'offline' — not seen within threshold (or never)
+    """
+    from core.sse import active_stream_count
+    if active_stream_count(str(device.id)) > 0:
+        return "online"
+    if device.last_seen_at is not None:
+        age = (timezone.now() - device.last_seen_at).total_seconds()
+        if age <= ONLINE_THRESHOLD_SECONDS:
+            return "recent"
+    return "offline"
 
 
 def format_time_ago(dt: Optional[datetime]) -> str:

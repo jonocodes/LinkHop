@@ -199,8 +199,8 @@ gen-secret:
     @python -c "import secrets; print(secrets.token_urlsafe(50))"
 
 # Install development dependencies
-install-dev:
-    pip install -e ".[dev]"
+setup:
+    pip install -e "."
 
 # Clean up Python cache files
 clean-py:

@@ -16,6 +16,7 @@
 <form method="post" action="{% url 'connect' %}">
   {% csrf_token %}
   <input type="hidden" name="mode" value="pin">
+  <input type="hidden" name="next" value="{{ redirect_to|default:'' }}">
   <div class="field">
     <label for="id_pin">Pairing PIN</label>
     <input type="text" id="id_pin" name="pin" inputmode="numeric" pattern="[0-9]{6}" maxlength="6" placeholder="123456" value="{{ pin|default:'' }}" autocomplete="one-time-code" autofocus>

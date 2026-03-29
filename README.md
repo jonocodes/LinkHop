@@ -179,9 +179,9 @@ The app will be available at `http://127.0.0.1:8000/`.
 |---|---|
 | `/` | Public front page with links to connect, admin, and the project repository |
 | `/connect` | Connect a browser by pairing with a 6-digit PIN |
-| `/pair` | Generate a 6-digit pairing PIN from a connected device |
+| `/pair` | Add a device by generating a 6-digit pairing PIN |
 | `/send` | Send a message to another device |
-| `/hop` | Alias for `/send` (useful for bookmarks and HTTP Shortcuts) |
+| `/hop` | Share-entry route for bookmarks and HTTP Shortcuts; preserves pending sends through connect |
 | `/inbox` | View incoming messages |
 | `/messages/{id}` | Read a text message (records opened) |
 | `/messages/{id}/open` | Open a URL message — records opened and redirects |
@@ -219,7 +219,12 @@ Actual push delivery requires VAPID keys to be configured on the server.
 | `POST /api/messages/{id}/presented` | Signal presentation |
 | `POST /api/messages/{id}/opened` | Signal the user opened the message |
 | `GET /api/events/stream` | SSE stream for real-time message notifications |
-| `/docs` | Interactive API documentation |
+
+Admin management tools include:
+
+* `/admin/settings/` for global runtime settings
+* `/admin/add-device/` for creating a short-lived pairing PIN and join link for a new device
+* `/admin/bookmarklet/` for generating drag-to-bookmarks links for sending the current page URL through LinkHop
 
 ### Run tests
 
@@ -256,7 +261,7 @@ On each device (phone, desktop browser, etc.), visit `/connect`, enter the 6-dig
 
 Once connected:
 
-* `/pair` — generate a short-lived 6-digit PIN for a new device
+* `/pair` — add a device by generating a short-lived 6-digit PIN and a direct join link
 * `/send` — send a message to another device (sends from this device)
 * `/inbox` — see messages addressed to this device
 * `/disconnect` — forget this device and remove its device record
@@ -310,8 +315,6 @@ Confirm opened:
 curl -X POST http://127.0.0.1:8000/api/messages/MESSAGE_UUID/opened \
   -H "Authorization: Bearer device_..."
 ```
-
-The interactive API docs at `/docs` show all available request and response shapes.
 
 ---
 

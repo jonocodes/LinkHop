@@ -1,3 +1,5 @@
+import json
+
 from django.contrib import messages
 from django.contrib import admin
 from django.contrib.admin.helpers import AdminForm
@@ -7,16 +9,20 @@ from django.db import IntegrityError
 from django.http import JsonResponse
 from django.http import HttpRequest, HttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
+from django.urls import reverse
 from django.templatetags.static import static
+from django.utils.http import urlencode, url_has_allowed_host_and_scheme
 from django.utils import timezone
 
 from core.device_auth import COOKIE_NAME, device_login_required, get_device_from_request
 from core.forms import GlobalSettingsForm
 from core.models import Device, GlobalSettings, Message, MessageStatus, MessageType
-from core.selectors import format_time_ago, is_device_online, list_active_devices
+from core.selectors import device_presence_status, format_time_ago, is_device_online, list_active_devices
 from core.services.auth import (
+    _SYSTEM_DEVICE_NAME,
     create_pairing_pin,
     forget_device,
+    get_system_device,
     register_device_with_pairing_pin,
 )
 from core.services.messages import create_message, mark_message_opened
@@ -110,17 +116,149 @@ def admin_settings_view(request: HttpRequest) -> HttpResponse:
     return render(request, "admin/settings_page.html", context)
 
 
+def admin_bookmarklet_view(request: HttpRequest) -> HttpResponse:
+    hop_url = request.build_absolute_uri("/hop")
+    bookmarklet_js = (
+        "javascript:(function(){"
+        f"var u={json.dumps(hop_url)};"
+        "var q='?type=url&body='+encodeURIComponent(window.location.href);"
+        "var target=u+q;"
+        "var popup=window.open(target,'linkhop','popup,width=540,height=720,resizable=yes,scrollbars=yes');"
+        "if(!popup){window.location.href=target;}"
+        "})();"
+    )
+
+    context = {
+        **admin.site.each_context(request),
+        "title": "Bookmarklet",
+        "bookmarklet_js": bookmarklet_js,
+        "hop_url": hop_url,
+    }
+    return render(request, "admin/bookmarklet_page.html", context)
+
+
+def admin_add_device_view(request: HttpRequest) -> HttpResponse:
+    from core.models import PairingPin
+
+    SESSION_KEY = "admin_pending_pin"
+
+    if request.method == "POST":
+        action = request.POST.get("action", "create")
+
+        if action == "cancel":
+            pending = request.session.pop(SESSION_KEY, None)
+            if pending:
+                PairingPin.objects.filter(id=pending["id"], used_at__isnull=True).delete()
+            return redirect("admin_connected_devices")
+
+        # action == "create"
+        pairing_pin, raw_pin = create_pairing_pin()
+        request.session[SESSION_KEY] = {
+            "id": str(pairing_pin.id),
+            "raw_pin": raw_pin,
+            "expires_at_iso": pairing_pin.expires_at.isoformat(),
+        }
+        return redirect("admin_add_device")
+
+    # GET — restore active PIN from session if still usable
+    pin = None
+    expires_at_iso = ""
+    pending = request.session.get(SESSION_KEY)
+    if pending:
+        try:
+            pp = PairingPin.objects.get(id=pending["id"])
+            if pp.is_usable:
+                pin = pending["raw_pin"]
+                expires_at_iso = pending["expires_at_iso"]
+            else:
+                del request.session[SESSION_KEY]
+        except PairingPin.DoesNotExist:
+            del request.session[SESSION_KEY]
+
+    connect_url = request.build_absolute_uri(reverse("connect"))
+    context = {
+        **admin.site.each_context(request),
+        "title": "Add device",
+        "pin": pin,
+        "expires_at_iso": expires_at_iso,
+        "connect_base_url": connect_url,
+    }
+    return render(request, "admin/add_device_page.html", context)
+
+
+def admin_send_test_message_view(request: HttpRequest, device_id: str) -> HttpResponse:
+    if request.method != "POST":
+        return redirect("admin_connected_devices")
+    try:
+        recipient = Device.objects.get(id=device_id)
+    except Device.DoesNotExist:
+        messages.error(request, "Device not found.")
+        return redirect("admin_connected_devices")
+
+    try:
+        create_message(
+            sender_device=get_system_device(),
+            recipient_device=recipient,
+            message_type=MessageType.TEXT,
+            body="test message",
+        )
+        messages.success(request, f"Test message sent to {recipient.name}.")
+    except Exception as exc:
+        messages.error(request, f"Failed to send to {recipient.name}: {exc}")
+    return redirect("admin_connected_devices")
+
+
+def admin_connected_devices_view(request: HttpRequest) -> HttpResponse:
+    all_devices = Device.objects.exclude(name=_SYSTEM_DEVICE_NAME).order_by("name")
+    status_order = {"online": 0, "recent": 1, "offline": 2}
+    device_list = []
+    for d in all_devices:
+        status = device_presence_status(d)
+        device_list.append({
+            "id": str(d.id),
+            "name": d.name,
+            "presence": status,
+            "is_active": d.is_active,
+            "revoked_at": d.revoked_at,
+            "last_seen_at": d.last_seen_at,
+            "last_seen_ago": format_time_ago(d.last_seen_at),
+            "created_at": d.created_at,
+        })
+    device_list.sort(key=lambda d: (status_order[d["presence"]], d["last_seen_at"] is None, -(d["last_seen_at"].timestamp() if d["last_seen_at"] else 0)))
+
+    context = {
+        **admin.site.each_context(request),
+        "title": "Connected devices",
+        "devices": device_list,
+    }
+    return render(request, "admin/connected_devices_page.html", context)
+
+
 def _device_context(devices):
-    return [
+    status_order = {"online": 0, "recent": 1, "offline": 2}
+    items = [
         {
             "id": str(d.id),
             "name": d.name,
-            "is_online": is_device_online(d),
+            "presence": device_presence_status(d),
             "last_seen_at": d.last_seen_at,
             "last_seen_ago": format_time_ago(d.last_seen_at),
         }
         for d in devices
     ]
+    items.sort(key=lambda d: status_order[d["presence"]])
+    return items
+
+
+def _validated_next_url(request: HttpRequest, candidate: str) -> str:
+    candidate = (candidate or "").strip()
+    if candidate and url_has_allowed_host_and_scheme(
+        url=candidate,
+        allowed_hosts={request.get_host()},
+        require_https=request.is_secure(),
+    ):
+        return candidate
+    return ""
 
 
 def connect_view(request: HttpRequest) -> HttpResponse:
@@ -130,15 +268,20 @@ def connect_view(request: HttpRequest) -> HttpResponse:
         return redirect("inbox")
 
     if request.method == "GET":
-        return render(request, "connect.html", {})
+        return render(request, "connect.html", {
+            "pin": request.GET.get("pin", "").strip(),
+            "redirect_to": _validated_next_url(request, request.GET.get("next", "")),
+        })
 
     raw_pin = request.POST.get("pin", "").strip()
     device_name = request.POST.get("device_name", "").strip()
+    redirect_to = _validated_next_url(request, request.POST.get("next", ""))
     if not raw_pin or not device_name:
         return render(request, "connect.html", {
             "pin_error": "Enter both the 6-digit PIN and a device name.",
             "pin": raw_pin,
             "device_name": device_name,
+            "redirect_to": redirect_to,
         })
 
     try:
@@ -151,6 +294,7 @@ def connect_view(request: HttpRequest) -> HttpResponse:
             "pin_error": "That device name is already in use.",
             "pin": raw_pin,
             "device_name": device_name,
+            "redirect_to": redirect_to,
         })
 
     if registration is None:
@@ -158,11 +302,12 @@ def connect_view(request: HttpRequest) -> HttpResponse:
             "pin_error": "PIN not recognised or expired. Generate a new one and try again.",
             "pin": raw_pin,
             "device_name": device_name,
+            "redirect_to": redirect_to,
         })
 
     _device, raw_token = registration
 
-    response = redirect("inbox")
+    response = redirect(redirect_to or "inbox")
     response.set_cookie(
         COOKIE_NAME,
         raw_token,
@@ -171,6 +316,52 @@ def connect_view(request: HttpRequest) -> HttpResponse:
         samesite="Lax",
     )
     return response
+
+
+def hop_view(request: HttpRequest) -> HttpResponse:
+    device, _raw_token = get_device_from_request(request)
+    if device is None:
+        connect_url = "/connect?" + urlencode({"next": request.get_full_path()})
+        return redirect(connect_url)
+
+    from core.models import GlobalSettings
+    gs = GlobalSettings.objects.filter(singleton_key="default").first()
+    allow_self_send = gs.allow_self_send if gs is not None else False
+
+    qs = list_active_devices()
+    if not allow_self_send:
+        qs = qs.exclude(id=device.id)
+    devices = _device_context(qs)
+
+    if request.method == "POST":
+        recipient_id = request.POST.get("recipient_device_id", "")
+        msg_type = request.POST.get("type", "")
+        body = request.POST.get("body", "")
+        error = None
+        try:
+            recipient = Device.objects.get(id=recipient_id, is_active=True, revoked_at__isnull=True)
+            create_message(
+                sender_device=device,
+                recipient_device=recipient,
+                message_type=msg_type,
+                body=body,
+            )
+        except (Device.DoesNotExist, ValueError):
+            error = "Device not found."
+        except ValidationError as exc:
+            error = "; ".join(exc.messages)
+        return render(request, "hop.html", {
+            "sent": error is None,
+            "error": error,
+            "device": device,
+        })
+
+    return render(request, "hop.html", {
+        "devices": devices,
+        "msg_type": request.GET.get("type", "url"),
+        "body": request.GET.get("body", ""),
+        "device": device,
+    })
 
 
 @device_login_required
@@ -187,6 +378,7 @@ def pair_view(request: HttpRequest) -> HttpResponse:
         "device": request.device,
         "pin": pin,
         "expires_at": expires_at,
+        "expires_at_iso": expires_at.isoformat() if expires_at else "",
     })
 
 

@@ -27,9 +27,8 @@ def create_pairing_pin(*, device: Device | None = None) -> tuple[PairingPin, str
         PairingPin.objects.filter(
             created_by_device=device,
             used_at__isnull=True,
-            is_active=True,
             expires_at__gt=timezone.now(),
-        ).update(is_active=False, updated_at=timezone.now())
+        ).delete()
 
     for _ in range(20):
         raw_pin = _generate_pairing_pin()
@@ -81,6 +80,19 @@ def create_device_token(
         token_hash=hash_token(raw_token),
     )
     return device, raw_token
+
+
+_SYSTEM_DEVICE_NAME = "Admin"
+_SYSTEM_TOKEN_HASH = "system:admin"  # not a valid hash_token output — auth will never match it
+
+
+def get_system_device() -> Device:
+    """Return the virtual admin/system device, creating it on first call."""
+    device, _ = Device.objects.get_or_create(
+        name=_SYSTEM_DEVICE_NAME,
+        defaults={"token_hash": _SYSTEM_TOKEN_HASH},
+    )
+    return device
 
 
 def get_device_for_token(raw_token: str) -> Device | None:

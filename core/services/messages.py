@@ -3,7 +3,7 @@ from django.core.exceptions import PermissionDenied, ValidationError
 from django.db import transaction
 from django.utils import timezone
 
-from core.models import Device, Message, MessageStatus
+from core.models import Device, Message, MessageStatus, MessageType
 from core.services.push import notify_device_push_subscriptions
 
 
@@ -47,6 +47,17 @@ def create_message(
     transaction.on_commit(
         lambda: notify_device_push_subscriptions(device=recipient_device, message=message)
     )
+
+    if message_type == MessageType.TEXT and body.strip().lower() == "ping server":
+        _sender = sender_device
+        _recipient = recipient_device
+        transaction.on_commit(lambda: create_message(
+            sender_device=_recipient,
+            recipient_device=_sender,
+            message_type=MessageType.TEXT,
+            body="pong (server)",
+        ))
+
     return message
 
 

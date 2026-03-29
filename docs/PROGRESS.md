@@ -358,6 +358,7 @@ docs/
 * [x] PWA spec complete (implementation ready)
 * [ ] Retention/cleanup policy refinement
 * [ ] Better message search/filtering outside admin
+* [ ] Fix "ping client" auto-respond — SSE client JS fetches the message and POSTs pong but response never arrives; CSRF exempt fix applied, still not working — needs further debugging
 
 ---
 

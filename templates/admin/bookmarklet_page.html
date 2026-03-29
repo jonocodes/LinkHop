@@ -1,0 +1,48 @@
+{% extends "admin/base_site.html" %}
+
+{% block content %}
+<div id="content-main">
+  <div class="module aligned">
+    <h2 style="margin-bottom:0.5rem">Bookmarklet</h2>
+    <p style="margin:0 0 1rem;color:var(--body-quiet-color, #666)">
+      Drag this button to your bookmarks bar. When used on any page, it opens LinkHop with that page URL prefilled and ready to send.
+    </p>
+    <p style="margin:0 0 1rem">
+      <a
+        href="{{ bookmarklet_js }}"
+        draggable="true"
+        style="display:inline-block;padding:0.7rem 1rem;background:#2563eb;color:#fff;border-radius:999px;font-weight:700;text-decoration:none;cursor:grab"
+      >Send with LinkHop</a>
+    </p>
+    <p style="margin:0 0 1rem;color:var(--body-quiet-color, #666)">
+      If dragging the styled button is awkward in your browser, drag this plain link instead:
+      <a href="{{ bookmarklet_js }}" draggable="true">LinkHop bookmarklet</a>
+    </p>
+    <p style="margin:0 0 1rem;color:var(--body-quiet-color, #666)">
+      The bookmarklet targets:
+      <code style="user-select:all">{{ hop_url }}</code>
+    </p>
+    <p style="margin:0;color:var(--body-quiet-color, #666)">
+      Current behavior: it opens a popup when possible and falls back to the current tab if the browser blocks popups.
+    </p>
+
+    <hr style="margin:1.25rem 0;border:none;border-top:1px solid var(--border-color,#ddd)">
+
+    <p style="margin:0 0 0.5rem;font-weight:600">Test</p>
+    <p style="margin:0 0 0.75rem;color:var(--body-quiet-color, #666)">
+      Simulates clicking the bookmarklet with <code>https://example.com</code> as the current page URL.
+    </p>
+    <button type="button" id="test-bookmarklet-btn" class="button">Test bookmarklet</button>
+  </div>
+</div>
+
+{{ hop_url|json_script:"hop-url-data" }}
+<script>
+  document.getElementById('test-bookmarklet-btn').onclick = function () {
+    var hopUrl = JSON.parse(document.getElementById('hop-url-data').textContent);
+    var target = hopUrl + '?type=url&body=' + encodeURIComponent('https://example.com');
+    var popup = window.open(target, 'linkhop', 'popup,width=540,height=720,resizable=yes,scrollbars=yes');
+    if (!popup) { window.location.href = target; }
+  };
+</script>
+{% endblock %}

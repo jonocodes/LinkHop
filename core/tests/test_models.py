@@ -57,16 +57,13 @@ class PairingPinModelTests(TestCase):
         self.assertIsNotNone(first)
         self.assertIsNone(second)
 
-    def test_creating_new_pin_deactivates_previous_active_pin(self):
+    def test_creating_new_pin_deletes_previous_unused_pin(self):
         device = Device.objects.create(name="Issuer", token_hash="issuer-hash")
         first_pin, _ = create_pairing_pin(device=device)
-        second_pin, _ = create_pairing_pin(device=device)
+        _second_pin, _ = create_pairing_pin(device=device)
 
-        first_pin.refresh_from_db()
-        second_pin.refresh_from_db()
-
-        self.assertFalse(first_pin.is_active)
-        self.assertTrue(second_pin.is_active)
+        self.assertFalse(PairingPin.objects.filter(id=first_pin.id).exists())
+        self.assertEqual(PairingPin.objects.filter(created_by_device=device).count(), 1)
 
 
 class PushSubscriptionModelTests(TestCase):

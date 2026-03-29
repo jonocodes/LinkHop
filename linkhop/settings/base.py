@@ -93,6 +93,11 @@ UNFOLD = {
     "SITE_SYMBOL": "link",
     "SHOW_HISTORY": True,
     "SHOW_VIEW_ON_SITE": False,
+    "SIDEBAR": {
+        "show_search": False,
+        "show_all_applications": False,
+        "navigation": "core.admin_navigation.build_admin_sidebar_navigation",
+    },
 }
 
 AUTHENTICATION_BACKENDS = [

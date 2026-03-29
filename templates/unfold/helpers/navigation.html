@@ -1,0 +1,23 @@
+{% load i18n unfold %}
+
+<nav id="nav-sidebar-inner" class="bg-base-50 flex flex-col min-h-screen dark:text-font-default-dark dark:bg-base-950/20 {% element_classes 'navigation_inner' %}">
+    {% include "unfold/helpers/navigation_header.html" %}
+
+    {% include "unfold/helpers/search.html" %}
+
+    {% if sidebar_navigation|length > 0 %}
+        {% include "unfold/helpers/app_list.html" with app_list=available_apps %}
+    {% else %}
+        {% include "admin/app_list.html" with app_list=available_apps show_changelinks=False %}
+    {% endif %}
+
+    <div class="mt-auto px-6 py-3 border-t border-base-200 dark:border-base-800">
+        <a href="/" target="_blank" rel="noopener noreferrer"
+           class="flex items-center gap-2 text-sm text-base-500 hover:text-primary-600 dark:text-base-400 dark:hover:text-primary-500 transition-colors">
+            <span class="material-symbols-outlined" style="font-size:1.1rem">open_in_new</span>
+            Open app
+        </a>
+    </div>
+
+    {% include "unfold/helpers/navigation_user.html" %}
+</nav>

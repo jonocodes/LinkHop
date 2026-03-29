@@ -193,6 +193,7 @@
     var client = new LinkHopSSE({
       url: '/api/events/stream',
       token: token,
+      autoRespond: true,
 
       onConnect: function () {
         indicator.style.display = '';

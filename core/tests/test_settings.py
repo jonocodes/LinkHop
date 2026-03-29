@@ -120,3 +120,43 @@ class AdminSettingsViewTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "Database migrations are pending.")
         self.assertContains(response, "manage.py migrate")
+
+    def test_admin_index_shows_management_section_with_global_settings(self):
+        response = self.client.get("/admin/")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Management")
+        self.assertContains(response, "Global settings")
+        self.assertContains(response, reverse("admin_settings"))
+
+    def test_admin_index_shows_bookmarklet_link_in_management(self):
+        response = self.client.get("/admin/")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Bookmarklet")
+        self.assertContains(response, reverse("admin_bookmarklet"))
+
+    def test_admin_connected_devices_page_has_add_device_button(self):
+        response = self.client.get(reverse("admin_connected_devices"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Add device")
+        self.assertContains(response, reverse("admin_add_device"))
+
+    def test_admin_add_device_page_creates_pin(self):
+        # POST redirects back to the page (PRG pattern); follow to get the PIN display
+        response = self.client.post(reverse("admin_add_device"), follow=True)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Pairing PIN")
+        self.assertContains(response, "Create another PIN")
+        self.assertContains(response, 'id="pairing-countdown"')
+
+    def test_admin_bookmarklet_page_renders_drag_link(self):
+        response = self.client.get(reverse("admin_bookmarklet"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Send with LinkHop")
+        self.assertContains(response, "javascript:")
+        self.assertContains(response, "/hop")
+        self.assertContains(response, 'draggable="true"')

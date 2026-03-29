@@ -27,6 +27,7 @@
     this._onMessage = options.onMessage || function () {};
     this._onConnect = options.onConnect || function () {};
     this._onDisconnect = options.onDisconnect || function () {};
+    this._autoRespond = options.autoRespond || false;
     this._delay = MIN_DELAY_MS;
     this._stopped = false;
     this._seenIds = {};
@@ -58,6 +59,9 @@
       if (mid && !self._seenIds[mid]) {
         self._seenIds[mid] = true;
         self._onMessage(mid);
+        if (self._autoRespond && self._token) {
+          self._maybeAutoRespond(mid);
+        }
       }
     });
 
@@ -88,6 +92,27 @@
   LinkHopSSE.prototype.seedSeen = function (ids) {
     var self = this;
     ids.forEach(function (id) { self._seenIds[id] = true; });
+  };
+
+  LinkHopSSE.prototype._maybeAutoRespond = function (messageId) {
+    var self = this;
+    var headers = { 'Authorization': 'Bearer ' + self._token };
+    fetch('/api/messages/' + encodeURIComponent(messageId), { headers: headers })
+      .then(function (r) { return r.ok ? r.json() : null; })
+      .then(function (msg) {
+        if (!msg || msg.type !== 'text') return;
+        if (msg.body.trim().toLowerCase() !== 'ping client') return;
+        if (!msg.sender_device_id) return;
+        fetch('/api/messages', {
+          method: 'POST',
+          headers: Object.assign({ 'Content-Type': 'application/json' }, headers),
+          body: JSON.stringify({
+            recipient_device_id: msg.sender_device_id,
+            type: 'text',
+            body: 'pong (client)',
+          }),
+        });
+      });
   };
 
   LinkHopSSE.prototype.close = function () {

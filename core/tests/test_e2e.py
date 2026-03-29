@@ -497,6 +497,40 @@ class EndToEndTestCase(TestCase):
         response = self.client.get("/inbox")
         self.assertEqual(response.status_code, 302)
 
+    def test_connect_page_prefills_pin_from_query_string(self):
+        response = self.client.get("/connect?pin=123456")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(b'value="123456"', response.content)
+
+    def test_hop_redirects_to_connect_with_pending_share_when_logged_out(self):
+        response = self.client.get("/hop?type=url&body=https://example.com/story")
+
+        self.assertEqual(response.status_code, 302)
+        self.assertIn("/connect?next=", response.url)
+        # next= preserves the full /hop URL so the user lands back after pairing
+        self.assertIn("%2Fhop%3Ftype%3Durl%26body%3D", response.url)
+
+    def test_connect_redirects_to_pending_send_after_pairing(self):
+        _, raw_pin = create_pairing_pin()
+
+        response = self.client.post(
+            "/connect",
+            data={
+                "mode": "pin",
+                "pin": raw_pin,
+                "device_name": "Bookmarklet Browser",
+                "next": "/send?type=url&body=https%3A%2F%2Fexample.com%2Fstory",
+            },
+        )
+
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response.url, "/send?type=url&body=https%3A%2F%2Fexample.com%2Fstory")
+
+        response = self.client.get(response.url)
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(b'https://example.com/story', response.content)
+
     def test_forgetting_browser_deletes_device_record(self):
         _, device_token = create_device_token(name="Forget Me")
         self._connect_device(device_token)
@@ -530,13 +564,16 @@ class EndToEndTestCase(TestCase):
 
         response = self.client.post("/pair")
         self.assertEqual(response.status_code, 200)
-        self.assertIn(b"Generate new PIN", response.content)
+        self.assertIn(b"Add device", response.content)
+        self.assertIn(b"Create another PIN", response.content)
+        self.assertIn(b'id="pairing-countdown"', response.content)
 
         import re
 
         match = re.search(rb'data-pairing-pin="([0-9]{6})"', response.content)
         self.assertIsNotNone(match)
         pin = match.group(1).decode("ascii")
+        self.assertIn(f'/connect?pin={pin}'.encode("ascii"), response.content)
 
         new_client = self.client_class()
         response = new_client.post(
@@ -869,6 +906,225 @@ class EndToEndTestCase(TestCase):
         # Search for specific device
         response = self.client.get("/admin/core/device/?q=TestDevice1")
         self.assertEqual(response.status_code, 200)
+
+    # ============================================================
+    # AUTO-RESPOND TESTS
+    # ============================================================
+
+    def test_ping_server_auto_replies_with_pong(self):
+        """Sending 'ping server' triggers an immediate server-side pong reply."""
+        sender, sender_token = create_device_token(name="Sender")
+        recipient, recipient_token = create_device_token(name="Recipient")
+
+        with self.captureOnCommitCallbacks(execute=True):
+            response = self.client.post(
+                "/api/messages",
+                data=json.dumps({
+                    "recipient_device_id": str(recipient.id),
+                    "type": "text",
+                    "body": "ping server",
+                }),
+                content_type="application/json",
+                headers={"Authorization": f"Bearer {sender_token}"},
+            )
+        self.assertEqual(response.status_code, 201)
+
+        # Original ping message to recipient
+        self.assertTrue(Message.objects.filter(
+            sender_device=sender, recipient_device=recipient, body="ping server"
+        ).exists())
+
+        # Auto-reply from recipient back to sender
+        pong = Message.objects.filter(
+            sender_device=recipient, recipient_device=sender, body="pong (server)"
+        ).first()
+        self.assertIsNotNone(pong)
+        self.assertEqual(pong.type, "text")
+
+    def test_ping_server_case_insensitive(self):
+        """'ping server' matching is case-insensitive."""
+        sender, sender_token = create_device_token(name="Sender")
+        recipient, _ = create_device_token(name="Recipient")
+
+        with self.captureOnCommitCallbacks(execute=True):
+            self.client.post(
+                "/api/messages",
+                data=json.dumps({
+                    "recipient_device_id": str(recipient.id),
+                    "type": "text",
+                    "body": "PING SERVER",
+                }),
+                content_type="application/json",
+                headers={"Authorization": f"Bearer {sender_token}"},
+            )
+
+        self.assertTrue(Message.objects.filter(
+            sender_device=recipient, recipient_device=sender, body="pong (server)"
+        ).exists())
+
+    def test_ping_server_does_not_trigger_on_url_type(self):
+        """'ping server' in a URL-type message does not trigger a reply."""
+        sender, sender_token = create_device_token(name="Sender")
+        recipient, _ = create_device_token(name="Recipient")
+
+        with self.captureOnCommitCallbacks(execute=True):
+            self.client.post(
+                "/api/messages",
+                data=json.dumps({
+                    "recipient_device_id": str(recipient.id),
+                    "type": "url",
+                    "body": "ping server",
+                }),
+                content_type="application/json",
+                headers={"Authorization": f"Bearer {sender_token}"},
+            )
+
+        self.assertFalse(Message.objects.filter(body="pong (server)").exists())
+
+    def test_ping_server_does_not_trigger_on_partial_match(self):
+        """A message body containing 'ping server' as a substring doesn't trigger."""
+        sender, sender_token = create_device_token(name="Sender")
+        recipient, _ = create_device_token(name="Recipient")
+
+        with self.captureOnCommitCallbacks(execute=True):
+            self.client.post(
+                "/api/messages",
+                data=json.dumps({
+                    "recipient_device_id": str(recipient.id),
+                    "type": "text",
+                    "body": "please ping server now",
+                }),
+                content_type="application/json",
+                headers={"Authorization": f"Bearer {sender_token}"},
+            )
+
+        self.assertFalse(Message.objects.filter(body="pong (server)").exists())
+
+    def test_ping_server_pong_appears_in_senders_inbox(self):
+        """The pong reply from 'ping server' is retrievable by the original sender."""
+        sender, sender_token = create_device_token(name="Sender")
+        recipient, _ = create_device_token(name="Recipient")
+
+        with self.captureOnCommitCallbacks(execute=True):
+            self.client.post(
+                "/api/messages",
+                data=json.dumps({
+                    "recipient_device_id": str(recipient.id),
+                    "type": "text",
+                    "body": "ping server",
+                }),
+                content_type="application/json",
+                headers={"Authorization": f"Bearer {sender_token}"},
+            )
+
+        response = self.client.get(
+            "/api/messages/incoming",
+            headers={"Authorization": f"Bearer {sender_token}"},
+        )
+        bodies = [m["body"] for m in response.json()]
+        self.assertIn("pong (server)", bodies)
+
+    def test_message_get_endpoint_returns_message(self):
+        """GET /api/messages/<id> returns the message for its recipient."""
+        sender, sender_token = create_device_token(name="Sender")
+        recipient, recipient_token = create_device_token(name="Recipient")
+
+        response = self.client.post(
+            "/api/messages",
+            data=json.dumps({
+                "recipient_device_id": str(recipient.id),
+                "type": "text",
+                "body": "ping client",
+            }),
+            content_type="application/json",
+            headers={"Authorization": f"Bearer {sender_token}"},
+        )
+        message_id = response.json()["id"]
+
+        response = self.client.get(
+            f"/api/messages/{message_id}",
+            headers={"Authorization": f"Bearer {recipient_token}"},
+        )
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertEqual(data["id"], message_id)
+        self.assertEqual(data["body"], "ping client")
+        self.assertEqual(data["type"], "text")
+        self.assertEqual(data["sender_device_id"], str(sender.id))
+
+    def test_message_get_endpoint_forbidden_for_wrong_device(self):
+        """GET /api/messages/<id> returns 403 for a device that didn't receive it."""
+        sender, sender_token = create_device_token(name="Sender")
+        recipient, _ = create_device_token(name="Recipient")
+        other, other_token = create_device_token(name="Other")
+
+        response = self.client.post(
+            "/api/messages",
+            data=json.dumps({
+                "recipient_device_id": str(recipient.id),
+                "type": "text",
+                "body": "private",
+            }),
+            content_type="application/json",
+            headers={"Authorization": f"Bearer {sender_token}"},
+        )
+        message_id = response.json()["id"]
+
+        response = self.client.get(
+            f"/api/messages/{message_id}",
+            headers={"Authorization": f"Bearer {other_token}"},
+        )
+        self.assertEqual(response.status_code, 403)
+
+    def test_ping_client_manual_simulation(self):
+        """Simulates the client-side ping/pong exchange the SSE JS would perform:
+        fetch the message, verify it's a ping client, then POST the pong reply."""
+        sender, sender_token = create_device_token(name="Sender")
+        recipient, recipient_token = create_device_token(name="Recipient")
+
+        # Sender sends "ping client" to recipient
+        response = self.client.post(
+            "/api/messages",
+            data=json.dumps({
+                "recipient_device_id": str(recipient.id),
+                "type": "text",
+                "body": "ping client",
+            }),
+            content_type="application/json",
+            headers={"Authorization": f"Bearer {sender_token}"},
+        )
+        self.assertEqual(response.status_code, 201)
+        message_id = response.json()["id"]
+
+        # Recipient's SSE client fetches the message to inspect it
+        response = self.client.get(
+            f"/api/messages/{message_id}",
+            headers={"Authorization": f"Bearer {recipient_token}"},
+        )
+        self.assertEqual(response.status_code, 200)
+        msg = response.json()
+        self.assertEqual(msg["body"].strip().lower(), "ping client")
+
+        # Recipient JS sends the pong back
+        response = self.client.post(
+            "/api/messages",
+            data=json.dumps({
+                "recipient_device_id": msg["sender_device_id"],
+                "type": "text",
+                "body": "pong (client)",
+            }),
+            content_type="application/json",
+            headers={"Authorization": f"Bearer {recipient_token}"},
+        )
+        self.assertEqual(response.status_code, 201)
+
+        # Pong appears in sender's inbox
+        response = self.client.get(
+            "/api/messages/incoming",
+            headers={"Authorization": f"Bearer {sender_token}"},
+        )
+        bodies = [m["body"] for m in response.json()]
+        self.assertIn("pong (client)", bodies)
 
     def test_admin_can_view_message_details(self):
         """Test that admin can view message details in admin interface."""

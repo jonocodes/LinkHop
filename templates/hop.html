@@ -1,0 +1,179 @@
+{% load static %}
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>LinkHop</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; }
+
+    body {
+      font-family: system-ui, -apple-system, sans-serif;
+      font-size: 1rem;
+      line-height: 1.5;
+      color: #1a1a1a;
+      background: #f5f5f5;
+      margin: 0;
+      padding: 1.25rem 1rem;
+    }
+
+    .header {
+      display: flex;
+      align-items: baseline;
+      gap: 0.5rem;
+      margin-bottom: 1rem;
+    }
+
+    .header h1 {
+      font-size: 1rem;
+      font-weight: 700;
+      margin: 0;
+      color: #0066cc;
+    }
+
+    .header .from {
+      font-size: 0.8rem;
+      color: #888;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      max-width: 280px;
+    }
+
+    .device-list {
+      list-style: none;
+      margin: 0;
+      padding: 0;
+      display: flex;
+      flex-direction: column;
+      gap: 0.4rem;
+    }
+
+    .device-btn {
+      display: flex;
+      align-items: center;
+      gap: 0.625rem;
+      width: 100%;
+      padding: 0.6rem 0.875rem;
+      background: #fff;
+      border: 1px solid #ddd;
+      border-radius: 6px;
+      font-size: 0.95rem;
+      font-family: inherit;
+      cursor: pointer;
+      text-align: left;
+      transition: background 0.1s, border-color 0.1s;
+    }
+
+    .device-btn:hover:not(:disabled) {
+      background: #f0f6ff;
+      border-color: #0066cc;
+    }
+
+    .device-btn:active:not(:disabled) {
+      background: #e0eeff;
+    }
+
+.dot {
+      width: 9px;
+      height: 9px;
+      border-radius: 50%;
+      flex-shrink: 0;
+    }
+
+    .dot-online  { background: #28a745; }
+    .dot-recent  { background: #fd7e14; }
+    .dot-offline { background: #adb5bd; }
+
+    .device-name { font-weight: 600; flex: 1; }
+
+    .device-meta {
+      font-size: 0.75rem;
+      color: #888;
+    }
+
+    .result {
+      padding: 1rem;
+      border-radius: 6px;
+      text-align: center;
+    }
+
+    .result-sent {
+      background: #d4edda;
+      color: #155724;
+      border: 1px solid #c3e6cb;
+    }
+
+    .result-error {
+      background: #f8d7da;
+      color: #721c24;
+      border: 1px solid #f5c6cb;
+    }
+
+    .result strong { display: block; font-size: 1.1rem; margin-bottom: 0.25rem; }
+
+    .close-hint {
+      margin-top: 0.75rem;
+      font-size: 0.8rem;
+      color: #888;
+      text-align: center;
+    }
+  </style>
+</head>
+<body>
+
+{% if sent %}
+  <div class="result result-sent">
+    <strong>Sent!</strong>
+    This window can be closed.
+  </div>
+  <script>
+    // Auto-close the popup after a short delay if it was opened as one
+    if (window.opener) setTimeout(function () { window.close(); }, 1200);
+  </script>
+
+{% elif error %}
+  <div class="result result-error">
+    <strong>Error</strong>
+    {{ error }}
+  </div>
+  <p class="close-hint"><a href="{{ request.get_full_path }}">Try again</a></p>
+
+{% else %}
+  <div class="header">
+    <h1>LinkHop</h1>
+    {% if body %}<span class="from" title="{{ body }}">{{ body }}</span>{% endif %}
+  </div>
+
+  {% if devices %}
+  <form method="post" id="hop-form">
+    {% csrf_token %}
+    <input type="hidden" name="type" value="{{ msg_type }}">
+    <input type="hidden" name="body" value="{{ body }}">
+    <input type="hidden" name="recipient_device_id" id="recipient-id">
+
+    <ul class="device-list">
+      {% for d in devices %}
+      <li>
+        <button
+          type="button"
+          class="device-btn"
+          data-id="{{ d.id }}"
+          onclick="document.getElementById('recipient-id').value=this.dataset.id;document.getElementById('hop-form').submit()"
+        >
+          <span class="dot dot-{{ d.presence }}"></span>
+          <span class="device-name">{{ d.name }}</span>
+          {% if d.presence == "offline" %}<span class="device-meta">{{ d.last_seen_ago }}</span>{% endif %}
+        </button>
+      </li>
+      {% endfor %}
+    </ul>
+  </form>
+  {% else %}
+  <p style="color:#888;text-align:center;margin-top:2rem">No other devices registered.</p>
+  {% endif %}
+{% endif %}
+
+</body>
+</html>

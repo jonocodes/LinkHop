@@ -43,7 +43,6 @@ class PairingPin(TimestampedModel):
         related_name="created_pairing_pins",
     )
     expires_at = models.DateTimeField()
-    is_active = models.BooleanField(default=True)
     used_at = models.DateTimeField(null=True, blank=True)
 
     class Meta:
@@ -54,7 +53,7 @@ class PairingPin(TimestampedModel):
 
     @property
     def is_usable(self) -> bool:
-        return self.is_active and self.used_at is None and self.expires_at > timezone.now()
+        return self.used_at is None and self.expires_at > timezone.now()
 
 
 class PushSubscription(TimestampedModel):

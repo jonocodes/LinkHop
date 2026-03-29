@@ -7,7 +7,7 @@ from django.contrib.auth.models import Group, User
 from django.db import DEFAULT_DB_ALIAS, connections
 from django.db.migrations.executor import MigrationExecutor
 from django.shortcuts import redirect
-from django.urls import path, reverse
+from django.urls import reverse
 from django.utils.html import format_html
 from unfold.admin import ModelAdmin
 from unfold.forms import AdminPasswordChangeForm, UserChangeForm, UserCreationForm
@@ -20,7 +20,7 @@ from core.models import (
     PairingPin,
     PushSubscription,
 )
-from core.services.auth import create_pairing_pin
+from core.services.auth import get_system_device
 from core.services.messages import create_message
 
 admin.site.unregister(User)
@@ -50,8 +50,8 @@ def _linkhop_admin_each_context(request):
             request,
             format_html(
                 'Database migrations are pending. Run <code style="user-select:all; '
-                'background:#f0f0f0; padding:4px 10px; border-radius:999px; font-weight:600">'
-                'manage.py migrate</code>.'
+                'background:#f0f0f0; padding:4px 10px; border-radius:999px; font-weight:600">{}</code>.',
+                "manage.py migrate",
             ),
         )
         request._linkhop_migration_warning_added = True
@@ -78,13 +78,8 @@ class GroupAdmin(BaseGroupAdmin, ModelAdmin):
 @admin.action(description="Send test message to selected devices")
 def send_test_message(modeladmin, request, queryset):
     sent = 0
+    sender = get_system_device()
     for recipient in queryset:
-        sender = (
-            Device.objects.filter(is_active=True, revoked_at__isnull=True)
-            .exclude(id=recipient.id)
-            .first()
-        ) or recipient  # fall back to self if it's the only device
-
         try:
             create_message(
                 sender_device=sender,
@@ -116,41 +111,13 @@ class DeviceAdmin(ModelAdmin):
 
 @admin.register(PairingPin)
 class PairingPinAdmin(ModelAdmin):
-    list_display = ("id", "created_by_device", "is_active", "used_at", "expires_at", "created_at")
-    list_filter = ("is_active", "used_at", "expires_at", "created_at")
+    list_display = ("id", "created_by_device", "used_at", "expires_at", "created_at")
+    list_filter = ("used_at", "expires_at", "created_at")
     search_fields = ("id", "created_by_device__name")
     readonly_fields = ("created_at", "updated_at", "used_at", "code_hash")
 
     def has_add_permission(self, request):
         return False
-
-    def get_urls(self):
-        custom = [
-            path(
-                "generate/",
-                self.admin_site.admin_view(self.generate_pin_view),
-                name="core_pairingpin_generate",
-            ),
-        ]
-        return custom + super().get_urls()
-
-    def generate_pin_view(self, request):
-        _pin, raw_pin = create_pairing_pin()
-        messages.success(
-            request,
-            format_html(
-                'Pairing PIN (valid 10 minutes): <code style="user-select:all; '
-                'background:#f0f0f0; padding:4px 12px; font-size:1.5rem; letter-spacing:0.2em">{}</code>'
-                ' &mdash; enter this on the new device at <strong>/connect</strong>',
-                raw_pin,
-            ),
-        )
-        return redirect(reverse("admin:core_pairingpin_changelist"))
-
-    def changelist_view(self, request, extra_context=None):
-        extra_context = extra_context or {}
-        extra_context["generate_pin_url"] = reverse("admin:core_pairingpin_generate")
-        return super().changelist_view(request, extra_context=extra_context)
 
 
 @admin.register(PushSubscription)
