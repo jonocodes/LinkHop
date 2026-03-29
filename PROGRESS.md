@@ -50,6 +50,7 @@
 * [x] Add useful search fields in admin
 * [x] Make global throttling values editable in admin
 * [x] Add "Send test message" admin action on Device (sends test text message to selected device)
+* [ ] Restyle the admin migration-pending warning so it renders as a clear banner in the Unfold admin theme
 
 ### Admin filters
 

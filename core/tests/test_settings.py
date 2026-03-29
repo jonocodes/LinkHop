@@ -1,6 +1,7 @@
 from django.contrib.auth import get_user_model
 from django.test import TestCase
 from django.urls import reverse
+from unittest.mock import patch
 
 from core.models import GlobalSettings
 
@@ -111,3 +112,11 @@ class AdminSettingsViewTests(TestCase):
 
         self.assertEqual(response.status_code, 302)
         self.assertEqual(response.headers["Location"], reverse("admin_settings"))
+
+    @patch("core.admin._admin_has_unapplied_migrations", return_value=True)
+    def test_admin_settings_page_shows_migration_warning(self, _mock_has_unapplied_migrations):
+        response = self.client.get(reverse("admin_settings"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Database migrations are pending.")
+        self.assertContains(response, "manage.py migrate")

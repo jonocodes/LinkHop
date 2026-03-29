@@ -319,17 +319,17 @@ def ensure_auth(server_url: str) -> str:
     
     console.print(Panel.fit(
         "Welcome to LinkHop CLI!\n\n"
-        "To use the CLI, you need to link it to your device.\n"
-        f"1. Go to {server_url}/connect in your browser\n"
-        "2. Copy your device token\n"
+        "To use the CLI, you need to pair it as a device.\n"
+        f"1. On a trusted LinkHop device, open {server_url}/pair\n"
+        "2. Generate a 6-digit pairing PIN\n"
         "3. Paste it below",
         title="LinkHop CLI Setup",
         border_style="blue"
     ))
     
-    token = click.prompt("Device token", hide_input=True)
+    token = click.prompt("Pairing PIN")
     
-    # Validate token
+    # Exchange the PIN for a device session
     try:
         api = LinkHopAPI(server_url, token)
         device = api.get_device_info()
@@ -647,7 +647,7 @@ echo "You have $COUNT unread messages"
 
 ## 6. Authentication Flow for CLI
 
-### 6.1 Token Storage Strategy
+### 6.1 Session Storage Strategy
 
 **Secure Storage:**
 ```python
@@ -656,15 +656,15 @@ import keyring
 from pathlib import Path
 
 def store_token(token: str) -> None:
-    """Store token securely."""
+    """Store the paired device session securely."""
     keyring.set_password("linkhop", "device_token", token)
 
 def get_token() -> Optional[str]:
-    """Retrieve token from secure storage."""
+    """Retrieve the paired device session from secure storage."""
     return keyring.get_password("linkhop", "device_token")
 
 def delete_token() -> None:
-    """Delete stored token."""
+    """Delete the stored paired device session."""
     try:
         keyring.delete_password("linkhop", "device_token")
     except keyring.errors.PasswordDeleteError:
@@ -674,7 +674,7 @@ def delete_token() -> None:
 **Environment Variable Override:**
 ```python
 def get_token() -> Optional[str]:
-    """Get token from env or keyring."""
+    """Get the stored device session from env or keyring."""
     # Environment takes precedence
     if 'LINKHOP_TOKEN' in os.environ:
         return os.environ['LINKHOP_TOKEN']
@@ -692,11 +692,13 @@ def auth():
     pass
 
 @auth.command()
-@click.option('--token', '-t', prompt=True, hide_input=True)
+@click.option('--pin', '-p', prompt=True)
+@click.option('--name', default="CLI")
 @click.option('--server', '-s', default="https://linkhop.example.com")
-def login(token, server):
-    """Authenticate with device token."""
+def login(pin, name, server):
+    """Pair this CLI instance using a 6-digit PIN."""
     try:
+        token = register_device_with_pin(server, pin, name)
         api = LinkHopAPI(server, token)
         device = api.get_device_info()
         
@@ -732,27 +734,27 @@ def status():
             console.print(f"Logged in: {device['name']}")
             console.print(f"Server: {config.server_url}")
         except Exception as e:
-            console.print(f"Token invalid: {e}", style="red")
+            console.print(f"Session invalid: {e}", style="red")
     else:
         console.print("Not logged in", style="yellow")
 ```
 
 ### 6.3 Device Linking Options
 
-**Option 1: Copy Token from Web App (Recommended)**
+**Option 1: Pair with 6-Digit PIN (Recommended)**
 ```
 1. User runs `lh login`
-2. CLI prompts for token
-3. User copies token from web app /connect page
-4. CLI validates and stores token
+2. CLI prompts for a 6-digit pairing PIN
+3. User generates that PIN from `/pair` on a trusted device
+4. CLI exchanges the PIN for a stored device session
 ```
 
 **Option 2: QR Code (Future)**
 ```
 1. User runs `lh login --qr`
 2. CLI shows QR code scanner or opens camera
-3. User scans QR from web app
-4. Token extracted and validated
+3. User scans QR from the same short-lived pairing session
+4. CLI exchanges that session for a stored device credential
 ```
 
 ---
@@ -1020,10 +1022,10 @@ def test_end_to_end_send(mock_server):
 - [ ] Binary distribution works (if applicable)
 
 **Authentication:**
-- [ ] Login with token works
-- [ ] Logout clears token
-- [ ] Invalid token shows error
-- [ ] Expired token prompts re-login
+- [ ] Login with PIN works
+- [ ] Logout clears stored session
+- [ ] Invalid PIN shows error
+- [ ] Expired PIN prompts re-pairing
 
 **Send Flow:**
 - [ ] Interactive send works
@@ -1085,7 +1087,7 @@ lh inbox
 ## Configuration
 
 Environment variables:
-- `LINKHOP_TOKEN` - Device token
+- `LINKHOP_TOKEN` - Stored device session credential
 - `LINKHOP_SERVER` - Server URL (default: https://linkhop.example.com)
 
 ## Scripting
@@ -1116,7 +1118,7 @@ pandoc docs/lh.1.md -s -t man -o docs/lh.1
 - [ ] Send command (interactive + non-interactive)
 - [ ] Inbox command
 - [ ] Device picker
-- [ ] Authentication (token-based)
+- [ ] Authentication (PIN bootstrap, stored device session)
 - [ ] PyPI distribution
 
 ### Phase 2: Enhanced (v1.1)

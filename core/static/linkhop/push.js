@@ -31,6 +31,17 @@
     return navigator.serviceWorker.ready;
   }
 
+  function postAuthMessage(token) {
+    return getRegistration().then(function (registration) {
+      var worker = registration.active || registration.waiting || registration.installing;
+      if (!worker) return;
+      worker.postMessage({
+        type: "linkhop_push_auth",
+        token: token
+      });
+    }).catch(function () {});
+  }
+
   function getSubscription() {
     return getRegistration().then(function (registration) {
       return registration.pushManager.getSubscription();
@@ -105,14 +116,10 @@
               return null;
             }
 
-          return navigator.serviceWorker.ready
+            return postAuthMessage(token).then(function () {
+              return navigator.serviceWorker.ready;
+            })
               .then(function (registration) {
-                if (navigator.serviceWorker.controller) {
-                  navigator.serviceWorker.controller.postMessage({
-                    type: "linkhop_push_auth",
-                    token: token
-                  });
-                }
                 return registration.pushManager.getSubscription()
                   .then(function (existing) {
                     if (existing) return existing;
@@ -170,13 +177,10 @@
     },
 
     syncAuthToken: function (token) {
-      if (!("serviceWorker" in navigator) || !navigator.serviceWorker.controller) {
+      if (!("serviceWorker" in navigator)) {
         return;
       }
-      navigator.serviceWorker.controller.postMessage({
-        type: "linkhop_push_auth",
-        token: token
-      });
+      postAuthMessage(token);
     }
   };
 })(window);

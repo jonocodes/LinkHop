@@ -48,6 +48,14 @@ class EndToEndTestCase(TestCase):
         self.assertEqual(User.objects.count(), 0)
         self.assertEqual(Message.objects.count(), 0)
 
+    def test_home_page_exposes_primary_links(self):
+        response = self.client.get("/")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Connect Device")
+        self.assertContains(response, "/admin/")
+        self.assertContains(response, "https://github.com/jonocodes/LinkHop")
+
     def test_manifest_route_returns_pwa_metadata(self):
         response = self.client.get("/manifest.json")
 
@@ -93,8 +101,8 @@ class EndToEndTestCase(TestCase):
         self.assertEqual(Device.objects.count(), 2)
         self.assertIsNotNone(Device.objects.get(id=device_a_id))
         self.assertIsNotNone(Device.objects.get(id=device_b_id))
-
-        return device_a_id, device_a_token, device_b_id, device_b_token
+        self.assertTrue(device_a_token.startswith("device_"))
+        self.assertTrue(device_b_token.startswith("device_"))
 
     def test_complete_message_flow(self):
         """
@@ -472,6 +480,7 @@ class EndToEndTestCase(TestCase):
         )
         self.assertEqual(response.status_code, 302)  # Redirect to inbox
         self.assertEqual(response.url, "/inbox")
+        device = Device.objects.get(name="Web Device")
 
         # Verify we're now connected (can access inbox)
         response = self.client.get("/inbox")
@@ -482,10 +491,22 @@ class EndToEndTestCase(TestCase):
         response = self.client.get("/disconnect")
         self.assertEqual(response.status_code, 302)
         self.assertEqual(response.url, "/connect")
+        self.assertFalse(Device.objects.filter(id=device.id).exists())
 
         # Verify disconnected (redirected to connect)
         response = self.client.get("/inbox")
         self.assertEqual(response.status_code, 302)
+
+    def test_forgetting_browser_deletes_device_record(self):
+        _, device_token = create_device_token(name="Forget Me")
+        self._connect_device(device_token)
+        device = Device.objects.get(name="Forget Me")
+
+        response = self.client.get("/disconnect")
+
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response.url, "/connect")
+        self.assertFalse(Device.objects.filter(id=device.id).exists())
 
     def test_connect_page_includes_manifest_link(self):
         response = self.client.get("/connect")
@@ -532,6 +553,7 @@ class EndToEndTestCase(TestCase):
         response = new_client.get("/inbox")
         self.assertEqual(response.status_code, 200)
         self.assertIn(b"Pinned Browser", response.content)
+
 
     def test_web_send_page_url_flow(self):
         """Test sending URL via web send page."""
@@ -598,6 +620,8 @@ class EndToEndTestCase(TestCase):
         response = self.client.get("/inbox")
         self.assertEqual(response.status_code, 200)
         self.assertIn(b"Test message for inbox", response.content)
+        self.assertIn(b'class="js-local-datetime"', response.content)
+        self.assertIn(b"toLocaleString", response.content)
 
     def test_web_url_open_redirects_and_tracks(self):
         """Test that opening URL via web tracks the open event."""

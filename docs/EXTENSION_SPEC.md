@@ -49,51 +49,51 @@ The extension will **NOT**:
 
 ### 2.1 Linking Strategy
 
-The extension **shares device identity** with the web app rather than creating a separate device registration.
+The extension **registers as its own device** through the same pairing flow used elsewhere, rather than asking the user to copy credentials out of the web app.
 
-**Why Shared Identity?**
-- Single device token to manage
-- Consistent device name across web + extension
-- Unified message history and tracking
-- Simpler mental model for users
+**Why Separate Device Identity?**
+- Matches the PIN-based registration flow used by the web UI and CLI
+- Avoids exposing bearer credentials to the user
+- Lets the extension be revoked or forgotten independently
+- Keeps device history explicit in admin and the API
 
 ### 2.2 Identity Linking Options
 
-**Option A: Token Import (Recommended)**
+**Option A: Pair with 6-Digit PIN (Recommended)**
 
 ```
-User copies device token from web app → Pastes into extension
+Trusted device generates PIN → User enters PIN in extension
 ```
 
 **Flow:**
-1. User opens web app `/connect` page
-2. Clicks "Copy Token" (masked, 30-second timeout)
+1. User opens `/pair` on an already connected device
+2. Generates a short-lived 6-digit pairing PIN
 3. Opens extension popup
-4. Pastes token into "Link Device" field
-5. Extension validates token with `/api/device/me`
-6. Token stored in extension secure storage
+4. Enters the PIN and chooses a device name
+5. Extension exchanges the PIN for its own device session
+6. Session credential stored in extension secure storage
 
 **Pros:**
 - Simple to implement
 - Works across all browsers
-- No additional server changes needed
+- Matches the existing LinkHop onboarding model
 
 **Cons:**
-- Manual copy-paste step
-- Token visible to user (but only temporarily)
+- Requires a second trusted device or admin-created PIN
+- Extension becomes a distinct device entry
 
 **Option B: QR Code Scanning**
 
 ```
-Web app displays QR code → Extension scans with camera
+Web app displays QR code for pairing session → Extension scans with camera
 ```
 
 **Flow:**
 1. User opens web app, clicks "Link Extension"
-2. Web app displays QR code containing token
+2. Web app displays QR code containing a one-time pairing session
 3. User opens extension, clicks "Scan QR"
 4. Extension uses camera API to scan
-5. Token extracted and validated
+5. Pairing session is exchanged for an extension device session
 
 **Pros:**
 - No typing/pasting
@@ -107,19 +107,19 @@ Web app displays QR code → Extension scans with camera
 **Option C: OAuth-style Redirect**
 
 ```
-Extension opens web app → User approves → Redirects back with token
+Extension opens web app → User approves pairing → Redirects back to finish registration
 ```
 
 **Flow:**
 1. Extension popup opens with "Link Device" button
 2. Opens `https://linkhop.example.com/extension/link`
 3. User clicks "Approve Extension" in web app
-4. Web app redirects to extension with token in URL hash
-5. Extension captures token from redirect
+4. Web app redirects to extension with a one-time pairing result
+5. Extension completes registration and stores its device session
 
 **Pros:**
 - Seamless user experience
-- No manual token handling
+- No manual credential handling
 
 **Cons:**
 - Requires server changes for redirect handling
@@ -128,16 +128,17 @@ Extension opens web app → User approves → Redirects back with token
 
 **Decision: Implement Option A first, with Option B as future enhancement.**
 
-### 2.3 Token Storage
+### 2.3 Session Storage
 
 **Storage Requirements:**
 - Location: Browser extension `chrome.storage.local` API
-- Encryption: None required (token is bearer token, not password)
+- Encryption: None required for the stored session credential
 - Backup: Sync across browser instances via `chrome.storage.sync` (optional)
-- Lifetime: Until user unlinks or token is revoked
+- Lifetime: Until user unlinks or the extension device is forgotten/revoked
 
 **Security:**
-- Token never displayed in UI after initial link
+- Pairing PIN never stored after registration
+- Session credential never displayed in UI after initial link
 - No export functionality
 - Clear on extension uninstall
 - Detect revocation and prompt re-link
@@ -164,7 +165,7 @@ Extension popup shows:
 
 **Step 3: Device Linking**
 ```
-(See Section 2.2 - Token Import flow)
+(See Section 2.2 - PIN pairing flow)
 ```
 
 **Step 4: Test Send**
@@ -174,33 +175,33 @@ After linking, extension suggests:
 - Opens current tab URL in send flow
 ```
 
-### 3.2 Token Validation
+### 3.2 Session Validation
 
 **On Extension Load:**
 ```javascript
-// Validate stored token
+// Validate stored device session
 const response = await fetch(`${SERVER}/api/device/me`, {
   headers: { 'Authorization': `Bearer ${token}` }
 });
 
 if (response.status === 401) {
-  // Token revoked or invalid
+  // Session revoked or invalid
   showReLinkPrompt();
 }
 ```
 
 **On 401 Errors:**
-- Clear token from storage
+- Clear stored session from storage
 - Show "Session Expired" message
 - Prompt user to re-link device
 
 ### 3.3 Bootstrap State Machine
 
 ```
-[INSTALL] → [UNLINKED] → [LINKING] → [LINKED] → [ACTIVE]
+[INSTALL] → [UNLINKED] → [PAIRING] → [LINKED] → [ACTIVE]
               ↓              ↓           ↓
-           Welcome      Validate      Ready
-           Screen       Token
+           Welcome      Exchange      Ready
+           Screen       PIN
 
 [LINKED] → [UNLINKED] (on 401 or user unlink)
 ```
@@ -943,7 +944,7 @@ describe('Extension E2E', () => {
 **Manual Testing Checklist:**
 
 - [ ] Install on clean browser profile
-- [ ] Link device with token
+- [ ] Link device with PIN
 - [ ] Send page URL to device
 - [ ] Send selected text to device
 - [ ] Receive notification when message arrives
@@ -951,7 +952,7 @@ describe('Extension E2E', () => {
 - [ ] Works offline (queues)
 - [ ] Reconnects after network interruption
 - [ ] No duplicate notifications with web app open
-- [ ] Graceful handling of revoked token
+- [ ] Graceful handling of revoked session
 - [ ] Context menu items work
 - [ ] Keyboard shortcuts work
 - [ ] Badge updates correctly
@@ -1144,9 +1145,9 @@ extension/
 
 ## Appendix A: API Endpoints Used
 
-- `POST /api/devices/register` - Device registration (not used directly)
+- `POST /api/pairings/pin/register` - Device registration via pairing PIN
 - `GET /api/devices` - List devices
-- `GET /api/device/me` - Validate token
+- `GET /api/device/me` - Validate stored device session
 - `POST /api/messages` - Send message
 - `POST /api/messages/{id}/received` - Mark received
 - `POST /api/messages/{id}/presented` - Mark presented

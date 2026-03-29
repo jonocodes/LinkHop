@@ -36,21 +36,17 @@ run-all:
 test:
     python -m pytest core/tests/ -v
 
-# Run all tests with coverage
-test-coverage:
-    python -m pytest core/tests/ -v --cov=core --cov-report=html --cov-report=term
+# # Run all tests with coverage
+# test-coverage:
+#     python -m pytest core/tests/ -v --cov=core --cov-report=html --cov-report=term
 
-# Run tests and fail fast (stop on first failure)
-test-ff:
-    python -m pytest core/tests/ -xvs
+# # Run specific test file
+# test-file FILE:
+#     python -m pytest {{FILE}} -v
 
-# Run specific test file
-test-file FILE:
-    python -m pytest {{FILE}} -v
-
-# Run specific test
-test-one TEST_PATH:
-    python -m pytest {{TEST_PATH}} -xvs
+# # Run specific test
+# test-one TEST_PATH:
+#     python -m pytest {{TEST_PATH}} -xvs
 
 # Run only e2e tests
 test-e2e:
@@ -68,21 +64,6 @@ test-e2e-headed:
 test-e2e-debug:
     python -m pytest e2e/ -v --headed --pdb
 
-# Run only API tests
-test-api:
-    python -m pytest core/tests/test_api.py -v
-
-# Run only model tests
-test-models:
-    python -m pytest core/tests/test_models.py -v
-
-# Run only security tests
-test-security:
-    python -m pytest core/tests/test_security.py -v
-
-# Run only settings tests
-test-settings:
-    python -m pytest core/tests/test_settings.py -v
 
 # Run tests matching a keyword
 test-keyword KEYWORD:
@@ -115,30 +96,6 @@ test-clean:
 # =============================================================================
 # Database
 # =============================================================================
-
-# Make migrations
-makemigrations:
-    python manage.py makemigrations
-
-# Apply migrations
-migrate:
-    python manage.py migrate
-
-# Create superuser
-createsuperuser:
-    python manage.py createsuperuser
-
-# Open Django shell
-shell:
-    python manage.py shell
-
-# Collect static files
-collectstatic:
-    python manage.py collectstatic --noinput
-
-# Check for common problems
-check:
-    python manage.py check
 
 # Backup database
 backup:
@@ -241,20 +198,6 @@ fix: lint-fix format
 gen-secret:
     @python -c "import secrets; print(secrets.token_urlsafe(50))"
 
-# Create .env file from example
-env-setup:
-    cp .env.example .env 2>/dev/null || echo "No .env.example found"
-    @echo "Created .env file - please edit it with your settings"
-
-# Run all checks before committing
-ci-check: test check lint format-check
-    @echo "All checks passed!"
-
-# Update dependencies
-update-deps:
-    pip install --upgrade pip
-    pip install -e .
-
 # Install development dependencies
 install-dev:
     pip install -e ".[dev]"
@@ -270,7 +213,6 @@ clean-py:
 clean-all: test-clean clean-py
     rm -rf build/ dist/ .eggs/
     rm -rf staticfiles/
-    rm -f clicks.db .embeddings_cache.json output.html server.log
     @echo "Cleanup complete"
 
 # Original clean command (for backwards compatibility)

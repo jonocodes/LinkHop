@@ -177,7 +177,8 @@ The app will be available at `http://127.0.0.1:8000/`.
 
 | Route | Description |
 |---|---|
-| `/connect` | Connect a browser with a device token or pairing PIN |
+| `/` | Public front page with links to connect, admin, and the project repository |
+| `/connect` | Connect a browser by pairing with a 6-digit PIN |
 | `/pair` | Generate a 6-digit pairing PIN from a connected device |
 | `/send` | Send a message to another device |
 | `/hop` | Alias for `/send` (useful for bookmarks and HTTP Shortcuts) |
@@ -197,6 +198,7 @@ The app also includes push subscription plumbing for installed PWAs:
 * `GET /api/push/config` returns push availability and the public VAPID key
 * `POST /api/push/subscriptions` stores a push subscription for the current device
 * `DELETE /api/push/subscriptions` removes it
+* the service worker refreshes subscriptions when the browser rotates them, using the current device session
 
 Actual push delivery requires VAPID keys to be configured on the server.
 
@@ -204,9 +206,8 @@ Actual push delivery requires VAPID keys to be configured on the server.
 
 | Route | Description |
 |---|---|
-| `POST /api/devices/register` | Exchange an enrollment token for a device bearer token |
 | `POST /api/pairings/pin` | Generate a 6-digit pairing PIN from an authenticated device |
-| `POST /api/pairings/pin/register` | Exchange a pairing PIN for a device bearer token |
+| `POST /api/pairings/pin/register` | Exchange a pairing PIN for a connected device session |
 | `GET /api/push/config` | Get push notification capability and VAPID public key |
 | `POST /api/push/subscriptions` | Save the current device's push subscription |
 | `DELETE /api/push/subscriptions` | Remove the current device's push subscription |
@@ -245,56 +246,26 @@ python manage.py createsuperuser
 Sign in at `/admin/` to access the admin interface.
 Use `/admin/settings/` to manage the singleton runtime settings page.
 
-### 2. Mint an enrollment token
+### 2. Pair the first device
 
-Enrollment tokens are one-time pairing secrets. Create one from the Django shell:
+Generate a 6-digit PIN from the admin interface or from an already connected device.
 
-```bash
-python manage.py shell
-```
+### 3. Connect each device to the web interface
 
-```python
-from core.services.auth import create_enrollment_token
-token, raw_token = create_enrollment_token(label="Desktop Firefox")
-print(raw_token)
-```
-
-The printed `raw_token` is the secret the device exchanges for its bearer token. It expires after 24 hours and can only be used once.
-
-### 3. Register the first device
-
-Use an enrollment token for the first device, or any time you want to bootstrap a device directly.
-
-```bash
-curl -X POST http://127.0.0.1:8000/api/devices/register \
-  -H "Content-Type: application/json" \
-  -d '{
-    "enrollment_token": "enroll_...",
-    "device_name": "Desktop Firefox",
-    "platform_label": "macOS",
-    "app_version": "dev"
-  }'
-```
-
-The response includes a `device_...` bearer token. Save it — it is shown only once.
-
-### 4. Connect each device to the web interface
-
-On each device (phone, desktop browser, etc.), visit `/connect` and paste the `device_...` bearer token from step 3. The token is saved in a cookie on that browser.
+On each device (phone, desktop browser, etc.), visit `/connect`, enter the 6-digit PIN, and choose a device name. The paired device is then connected in that browser.
 
 Once connected:
 
 * `/pair` — generate a short-lived 6-digit PIN for a new device
 * `/send` — send a message to another device (sends from this device)
 * `/inbox` — see messages addressed to this device
+* `/disconnect` — forget this device and remove its device record
 * `/hop` — shortcut alias for `/send`, useful for bookmarks or HTTP Shortcuts on Android
 * Pass `?type=url&body=https://example.com` to prefill the send form
 
 The inbox connects to the SSE stream automatically using the cookie. If browser notifications are supported, a permission prompt appears on first visit. When a message arrives while the page is in the background, a browser notification is shown.
 
-### 5. Pair additional devices with a 6-digit PIN
-
-Once you already have one connected device, you usually do not need to mint more enrollment tokens.
+### 4. Pair additional devices with a 6-digit PIN
 
 1. On the trusted device, open `/pair`
 2. Generate a 6-digit PIN
@@ -302,9 +273,9 @@ Once you already have one connected device, you usually do not need to mint more
 4. Enter the PIN plus a device name
 5. Submit the form to register and connect the new device
 
-The PIN is single-use and short-lived. The newly paired device still receives its own long-lived `device_...` token behind the scenes.
+The PIN is single-use and short-lived.
 
-### 6. Send and receive via the API
+### 5. Send and receive via the API
 
 List devices:
 

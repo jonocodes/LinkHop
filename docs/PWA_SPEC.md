@@ -171,7 +171,7 @@ Installation is therefore a prerequisite for push on some platforms, especially 
 
 **Timeline:**
 1. **First Visit** - No permission request
-2. **After Device Linking** - Explain benefits, ask permission
+2. **After Device Pairing** - Explain benefits, ask permission
 3. **First Send** - "Want to be notified of replies?"
 
 **Permission Request UI:**
@@ -324,7 +324,7 @@ async function subscribeToPush() {
   });
   
   // Send subscription to server
-  await fetch('/api/devices/push-subscription', {
+  await fetch('/api/push/subscriptions', {
     method: 'POST',
     headers: {
       'Authorization': `Bearer ${deviceToken}`,
@@ -336,6 +336,8 @@ async function subscribeToPush() {
   return subscription;
 }
 ```
+
+The current server implementation also exposes `GET /api/push/config` so the client can fetch the public VAPID key before subscribing.
 
 **Step 3: Server-Side Push Sending**
 
@@ -761,7 +763,7 @@ class MobileSSEManager {
     }
     
     this.eventSource = new EventSource(url, {
-      headers: { 'Authorization': `Bearer ${token}` }
+      headers: { 'Authorization': `Bearer ${sessionToken}` }
     });
     
     this.eventSource.onmessage = (e) => {
@@ -815,7 +817,7 @@ async function sendPendingSignals() {
     try {
       await fetch(`/api/messages/${signal.messageId}/${signal.signal}`, {
         method: 'POST',
-        headers: { 'Authorization': `Bearer ${token}` }
+        headers: { 'Authorization': `Bearer ${sessionToken}` }
       });
       await db.signals.delete(signal.id);
     } catch (e) {

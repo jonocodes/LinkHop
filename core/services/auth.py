@@ -5,7 +5,7 @@ from datetime import timedelta
 from django.db import transaction
 from django.utils import timezone
 
-from core.models import Device, PairingPin
+from core.models import Device, Message, PairingPin
 
 
 def hash_token(raw_token: str) -> str:
@@ -71,7 +71,10 @@ def register_device_with_pairing_pin(
     return device, raw_token
 
 
-def create_device_token(*, name: str) -> tuple[Device, str]:
+def create_device_token(
+    *,
+    name: str,
+) -> tuple[Device, str]:
     raw_token = generate_token("device")
     device = Device.objects.create(
         name=name,
@@ -86,3 +89,9 @@ def get_device_for_token(raw_token: str) -> Device | None:
         return Device.objects.get(token_hash=token_hash, is_active=True, revoked_at__isnull=True)
     except Device.DoesNotExist:
         return None
+
+
+@transaction.atomic
+def forget_device(*, device: Device) -> None:
+    Message.objects.filter(sender_device=device).delete()
+    device.delete()

@@ -40,7 +40,10 @@
     </div>
     <div style="font-size:0.8rem;color:#666">
       from <strong>{{ msg.sender_device.name|default:"unknown" }}</strong> &mdash;
-      {{ msg.created_at|date:"N j, Y, P" }}
+      <time
+        class="js-local-datetime"
+        datetime="{{ msg.created_at|date:'c' }}"
+      >{{ msg.created_at|date:"N j, Y, P" }}</time>
     </div>
   </li>
   {% endfor %}
@@ -58,6 +61,20 @@
 <script src="{% static 'linkhop/push.js' %}"></script>
 <script>
   (function () {
+    document.querySelectorAll('.js-local-datetime').forEach(function (node) {
+      var isoValue = node.getAttribute('datetime');
+      if (!isoValue) return;
+
+      var date = new Date(isoValue);
+      if (Number.isNaN(date.getTime())) return;
+
+      node.textContent = date.toLocaleString(undefined, {
+        dateStyle: 'medium',
+        timeStyle: 'short'
+      });
+      node.title = date.toLocaleString();
+    });
+
     var token = "{{ device_token|escapejs }}";
     var indicator = document.getElementById('live-indicator');
     var notifyBar = document.getElementById('notify-bar');

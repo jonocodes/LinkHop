@@ -9,6 +9,7 @@ from core.views import (
     connect_view,
     disconnect_view,
     healthcheck,
+    home_view,
     inbox_view,
     manifest_view,
     message_detail_view,
@@ -19,6 +20,7 @@ from core.views import (
 )
 
 urlpatterns = [
+    path("", home_view, name="home"),
     path("manifest.json", manifest_view, name="manifest"),
     path("service-worker.js", service_worker_view, name="service_worker"),
     path("admin/settings/", admin.site.admin_view(admin_settings_view), name="admin_settings"),

@@ -129,7 +129,7 @@
       <a href="{% url 'send' %}">Send</a>
       <a href="{% url 'pair' %}">Pair</a>
       <span style="margin-left:auto;color:#666">{{ device.name }}</span>
-      <a href="{% url 'disconnect' %}" style="color:#999">Disconnect</a>
+      <a href="{% url 'disconnect' %}" style="color:#999">Forget this device</a>
     </nav>
     {% endif %}
     {% block content %}{% endblock %}

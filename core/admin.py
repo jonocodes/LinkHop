@@ -1,7 +1,11 @@
+from functools import wraps
+
 from django.contrib import admin, messages
 from django.contrib.auth.admin import GroupAdmin as BaseGroupAdmin
 from django.contrib.auth.admin import UserAdmin as BaseUserAdmin
 from django.contrib.auth.models import Group, User
+from django.db import DEFAULT_DB_ALIAS, connections
+from django.db.migrations.executor import MigrationExecutor
 from django.shortcuts import redirect
 from django.urls import path, reverse
 from django.utils.html import format_html
@@ -21,6 +25,42 @@ from core.services.messages import create_message
 
 admin.site.unregister(User)
 admin.site.unregister(Group)
+
+
+def _admin_has_unapplied_migrations() -> bool:
+    connection = connections[DEFAULT_DB_ALIAS]
+    executor = MigrationExecutor(connection)
+    plan = executor.migration_plan(executor.loader.graph.leaf_nodes())
+    return bool(plan)
+
+
+_original_each_context = admin.site.each_context
+
+
+@wraps(_original_each_context)
+def _linkhop_admin_each_context(request):
+    context = _original_each_context(request)
+    try:
+        has_unapplied_migrations = _admin_has_unapplied_migrations()
+    except Exception:
+        has_unapplied_migrations = False
+
+    if has_unapplied_migrations and not getattr(request, "_linkhop_migration_warning_added", False):
+        messages.warning(
+            request,
+            format_html(
+                'Database migrations are pending. Run <code style="user-select:all; '
+                'background:#f0f0f0; padding:4px 10px; border-radius:999px; font-weight:600">'
+                'manage.py migrate</code>.'
+            ),
+        )
+        request._linkhop_migration_warning_added = True
+
+    context["linkhop_has_unapplied_migrations"] = has_unapplied_migrations
+    return context
+
+
+admin.site.each_context = _linkhop_admin_each_context
 
 
 @admin.register(User)
