@@ -74,6 +74,14 @@ class AdminSettingsViewTests(TestCase):
         )
         self.client.force_login(self.admin)
 
+    def _account_login(self, user=None):
+        """Log into the account dashboard via the account session (separate from admin auth)."""
+        from core.account_auth import SESSION_KEY
+        u = user or self.admin
+        session = self.client.session
+        session[SESSION_KEY] = u.pk
+        session.save()
+
     def test_admin_settings_page_auto_creates_singleton(self):
         response = self.client.get(reverse("admin_settings"))
 
@@ -129,31 +137,35 @@ class AdminSettingsViewTests(TestCase):
         self.assertContains(response, "Global settings")
         self.assertContains(response, reverse("admin_settings"))
 
-    def test_admin_index_shows_bookmarklet_link_in_management(self):
+    def test_admin_index_does_not_show_bookmarklet_in_management(self):
         response = self.client.get("/admin/")
 
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, "Bookmarklet")
-        self.assertContains(response, reverse("admin_bookmarklet"))
+        self.assertContains(response, "Management")
+        self.assertNotContains(response, reverse("account_bookmarklet"))
 
-    def test_admin_connected_devices_page_has_add_device_button(self):
-        response = self.client.get(reverse("admin_connected_devices"))
+    def test_account_connected_devices_page_has_add_device_button(self):
+        self._account_login()
+        response = self.client.get(reverse("account_connected_devices"))
 
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "Add device")
-        self.assertContains(response, reverse("admin_add_device"))
+        self.assertContains(response, reverse("account_add_device"))
+        self.assertContains(response, reverse("account_bookmarklet"))
 
-    def test_admin_add_device_page_creates_pin(self):
+    def test_account_add_device_page_creates_pin(self):
+        self._account_login()
         # POST redirects back to the page (PRG pattern); follow to get the PIN display
-        response = self.client.post(reverse("admin_add_device"), follow=True)
+        response = self.client.post(reverse("account_add_device"), follow=True)
 
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "Pairing PIN")
         self.assertContains(response, "Create another PIN")
         self.assertContains(response, 'id="pairing-countdown"')
 
-    def test_admin_bookmarklet_page_renders_drag_link(self):
-        response = self.client.get(reverse("admin_bookmarklet"))
+    def test_account_bookmarklet_page_renders_drag_link(self):
+        self._account_login()
+        response = self.client.get(reverse("account_bookmarklet"))
 
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "Send with LinkHop")

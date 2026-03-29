@@ -447,13 +447,14 @@ class EndToEndTestCase(TestCase):
         self.assertEqual(Message.objects.count(), 1)
 
     def test_duplicate_device_name_rejected(self):
-        """Test that duplicate device names are rejected."""
+        """Test that duplicate device names are rejected within the same owner."""
+        from django.contrib.auth import get_user_model
         from django.db import IntegrityError
-
-        create_device_token(name="Same Name")
-
+        User = get_user_model()
+        user = User.objects.create_user(username="dup_owner", password="pass")
+        create_device_token(name="Same Name", owner=user)
         with self.assertRaises(IntegrityError):
-            create_device_token(name="Same Name")
+            create_device_token(name="Same Name", owner=user)
 
     # ============================================================
     # WEB INTERFACE END-TO-END TESTS
@@ -1155,3 +1156,112 @@ class EndToEndTestCase(TestCase):
         response = self.client.get(f"/admin/core/message/{message.id}/change/")
         self.assertEqual(response.status_code, 200)
         self.assertIn(b"Test message for admin", response.content)
+
+    # ============================================================
+    # MULTI-USER ISOLATION TESTS
+    # ============================================================
+
+    def _make_user(self, username):
+        return User.objects.create_user(username=username, password="pass")
+
+    def _account_login(self, user):
+        """Log into the account dashboard via the separate account session key."""
+        from core.account_auth import SESSION_KEY
+        session = self.client.session
+        session[SESSION_KEY] = user.pk
+        session.save()
+
+    def test_api_devices_only_returns_same_owner_devices(self):
+        """Device list API returns only devices belonging to the same owner."""
+        user_a = self._make_user("user_a")
+        user_b = self._make_user("user_b")
+        device_a, token_a = create_device_token(name="A Phone", owner=user_a)
+        create_device_token(name="B Phone", owner=user_b)
+
+        response = self.client.get(
+            "/api/devices",
+            headers={"Authorization": f"Bearer {token_a}"},
+        )
+        self.assertEqual(response.status_code, 200)
+        names = [d["name"] for d in response.json()]
+        self.assertIn("A Phone", names)
+        self.assertNotIn("B Phone", names)
+
+    def test_api_cannot_send_to_different_owner_device(self):
+        """A device cannot send a message to a device owned by a different user."""
+        user_a = self._make_user("send_a")
+        user_b = self._make_user("send_b")
+        _, token_a = create_device_token(name="Sender A", owner=user_a)
+        device_b, _ = create_device_token(name="Recipient B", owner=user_b)
+
+        response = self.client.post(
+            "/api/messages",
+            data=json.dumps({
+                "recipient_device_id": str(device_b.id),
+                "type": "text",
+                "body": "cross-user send attempt",
+            }),
+            content_type="application/json",
+            headers={"Authorization": f"Bearer {token_a}"},
+        )
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.json()["error"]["code"], "recipient_not_found")
+
+    def test_pairing_pin_from_device_assigns_correct_owner(self):
+        """Device registered via PIN inherits owner from the PIN-creating device."""
+        user = self._make_user("pin_owner")
+        _, issuer_token = create_device_token(name="Issuer", owner=user)
+
+        pin_response = self.client.post(
+            "/api/pairings/pin",
+            content_type="application/json",
+            headers={"Authorization": f"Bearer {issuer_token}"},
+        )
+        pin = pin_response.json()["pin"]
+
+        register_response = self.client.post(
+            "/api/pairings/pin/register",
+            data=json.dumps({"pin": pin, "device_name": "New Device"}),
+            content_type="application/json",
+        )
+        self.assertEqual(register_response.status_code, 201)
+
+        new_device = Device.objects.get(name="New Device")
+        self.assertEqual(new_device.owner, user)
+
+    def test_account_dashboard_only_shows_own_devices(self):
+        """Account dashboard connected devices page only lists the logged-in user's devices."""
+        user_a = self._make_user("dash_a")
+        user_b = self._make_user("dash_b")
+        create_device_token(name="Alice Phone", owner=user_a)
+        create_device_token(name="Bob Phone", owner=user_b)
+
+        self._account_login(user_a)
+        response = self.client.get("/account/connected-devices/")
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Alice Phone")
+        self.assertNotContains(response, "Bob Phone")
+
+    def test_account_add_device_pin_assigns_correct_owner(self):
+        """PIN generated from account dashboard is owned by the logged-in user."""
+        user = self._make_user("dash_pin_owner")
+        self._account_login(user)
+
+        response = self.client.post("/account/add-device/", {"action": "create"}, follow=True)
+        self.assertEqual(response.status_code, 200)
+
+        from core.models import PairingPin
+        pin_obj = PairingPin.objects.filter(owner=user, used_at__isnull=True).first()
+        self.assertIsNotNone(pin_obj)
+
+    def test_account_remove_device_only_removes_own_device(self):
+        """A user cannot remove another user's device via the account dashboard."""
+        user_a = self._make_user("rem_a")
+        user_b = self._make_user("rem_b")
+        _, _ = create_device_token(name="A Device", owner=user_a)
+        device_b, _ = create_device_token(name="B Device", owner=user_b)
+
+        self._account_login(user_a)
+        response = self.client.post(f"/account/connected-devices/{device_b.id}/remove")
+        # Should not remove device_b; it still exists
+        self.assertTrue(Device.objects.filter(id=device_b.id).exists())

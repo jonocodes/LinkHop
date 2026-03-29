@@ -18,7 +18,14 @@ class TimestampedModel(models.Model):
 
 class Device(TimestampedModel):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    name = models.CharField(max_length=200, unique=True)
+    owner = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        null=True,
+        blank=True,
+        on_delete=models.CASCADE,
+        related_name="devices",
+    )
+    name = models.CharField(max_length=200)
     token_hash = models.CharField(max_length=128, unique=True)
     is_active = models.BooleanField(default=True)
     revoked_at = models.DateTimeField(null=True, blank=True)
@@ -26,6 +33,12 @@ class Device(TimestampedModel):
 
     class Meta:
         ordering = ["name"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["owner", "name"],
+                name="unique_device_name_per_owner",
+            ),
+        ]
 
     def __str__(self) -> str:
         return self.name
@@ -35,6 +48,13 @@ class Device(TimestampedModel):
 class PairingPin(TimestampedModel):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     code_hash = models.CharField(max_length=128, unique=True)
+    owner = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        null=True,
+        blank=True,
+        on_delete=models.CASCADE,
+        related_name="pairing_pins",
+    )
     created_by_device = models.ForeignKey(
         Device,
         null=True,

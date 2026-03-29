@@ -7,33 +7,43 @@ def _can_manage_settings(request: HttpRequest) -> bool:
     return user.has_perm("core.view_globalsettings") or user.has_perm("core.change_globalsettings")
 
 
-def _can_access_management_tools(request: HttpRequest) -> bool:
-    user = request.user
-    return bool(user.is_active and user.is_staff)
-
-
 def build_admin_sidebar_navigation(request: HttpRequest) -> list[dict]:
+    if request.path.startswith("/account/"):
+        return [
+            {
+                "title": "Devices",
+                "items": [
+                    {
+                        "title": "Connected devices",
+                        "icon": "device_hub",
+                        "link": reverse("account_connected_devices"),
+                        "permission": lambda req: True,
+                    },
+                    {
+                        "title": "Add device",
+                        "icon": "add_circle",
+                        "link": reverse("account_add_device"),
+                        "permission": lambda req: True,
+                    },
+                    {
+                        "title": "Bookmarklet",
+                        "icon": "bookmarks",
+                        "link": reverse("account_bookmarklet"),
+                        "permission": lambda req: True,
+                    },
+                ],
+            },
+        ]
+
     return [
         {
             "title": "Management",
             "items": [
                 {
-                    "title": "Connected devices",
-                    "icon": "device_hub",
-                    "link": reverse("admin_connected_devices"),
-                    "permission": _can_access_management_tools,
-                },
-                {
                     "title": "Global settings",
                     "icon": "settings",
                     "link": reverse("admin_settings"),
                     "permission": _can_manage_settings,
-                },
-                {
-                    "title": "Bookmarklet",
-                    "icon": "bookmarks",
-                    "link": reverse("admin_bookmarklet"),
-                    "permission": _can_access_management_tools,
                 },
             ],
         },

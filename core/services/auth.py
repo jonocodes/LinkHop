@@ -22,10 +22,19 @@ def _generate_pairing_pin() -> str:
 
 
 @transaction.atomic
-def create_pairing_pin(*, device: Device | None = None) -> tuple[PairingPin, str]:
+def create_pairing_pin(*, device: Device | None = None, owner=None) -> tuple[PairingPin, str]:
+    resolved_owner = owner or (device.owner if device is not None else None)
+
     if device is not None:
         PairingPin.objects.filter(
             created_by_device=device,
+            used_at__isnull=True,
+            expires_at__gt=timezone.now(),
+        ).delete()
+    elif resolved_owner is not None:
+        PairingPin.objects.filter(
+            owner=resolved_owner,
+            created_by_device__isnull=True,
             used_at__isnull=True,
             expires_at__gt=timezone.now(),
         ).delete()
@@ -39,6 +48,7 @@ def create_pairing_pin(*, device: Device | None = None) -> tuple[PairingPin, str
         pairing_pin = PairingPin.objects.create(
             code_hash=hash_token(raw_pin),
             created_by_device=device,
+            owner=resolved_owner,
             expires_at=timezone.now() + timedelta(minutes=10),
         )
         return pairing_pin, raw_pin
@@ -63,7 +73,7 @@ def register_device_with_pairing_pin(
     if not pin.is_usable:
         return None
 
-    device, raw_token = create_device_token(name=name)
+    device, raw_token = create_device_token(name=name, owner=pin.owner)
 
     pin.used_at = timezone.now()
     pin.save(update_fields=["used_at", "updated_at"])
@@ -73,11 +83,13 @@ def register_device_with_pairing_pin(
 def create_device_token(
     *,
     name: str,
+    owner=None,
 ) -> tuple[Device, str]:
     raw_token = generate_token("device")
     device = Device.objects.create(
         name=name,
         token_hash=hash_token(raw_token),
+        owner=owner,
     )
     return device, raw_token
 

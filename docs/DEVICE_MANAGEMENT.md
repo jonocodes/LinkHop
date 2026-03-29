@@ -18,13 +18,13 @@ Guide for managing devices, including registration, revocation, and re-registrat
 
 ### How It Works
 
-LinkHop uses a two-step authentication process:
+LinkHop uses a two-step pairing flow:
 
-1. **Enrollment Token** - Single-use token created by admin
+1. **Pairing PIN** - Single-use 6-digit PIN created by admin or an existing device
 2. **Device Token** - Permanent bearer token received after registration
 
 ```
-┌─────────────┐     Enrollment Token     ┌─────────────┐
+┌─────────────┐     6-digit PIN          ┌─────────────┐
 │   Admin     │ ───────────────────────→ │ New Device  │
 │  (Creates)  │                          │ (Registers) │
 └─────────────┘                          └──────┬──────┘
@@ -42,59 +42,62 @@ LinkHop uses a two-step authentication process:
 
 | Token Type | Format | Lifetime | Usage |
 |------------|--------|----------|-------|
-| Enrollment | `enroll_...` | Single-use (or until expired) | Initial registration |
-| Device | `device_...` | Permanent (until revoked) | API authentication |
+| Pairing PIN | 6-digit number | 10 minutes, single-use | Initial registration |
+| Device Token | `device_...` | Permanent (until revoked) | API authentication |
 
 ---
 
 ## Registering New Devices
 
-### Step 1: Create Enrollment Token (Admin)
+### Step 1: Create Pairing PIN
 
 **Via Admin Panel:**
 
 1. Login to `https://your-linkhop.com/admin/`
-2. Navigate to "Enrollment Tokens"
-3. Click "Add Enrollment Token"
-4. Fill in:
-   - **Label:** Descriptive name (e.g., "John's iPhone", "Work Laptop")
-   - **Expires at:** (Optional) Token expiration date
-5. Save
-6. **Copy the token** - it's displayed only once!
+2. Navigate to "Connected devices" in the Management section
+3. Click "Add device"
+4. Click "Generate PIN"
+5. Share the 6-digit PIN with the new device (expires in 10 minutes)
 
-**Via Django Shell:**
+**Via Existing Device (web UI):**
+
+1. Login to the app on an existing device
+2. Go to the Pair page (`/pair`)
+3. Click "Generate PIN"
+4. Share the PIN (expires in 10 minutes)
+
+**Via API (from an authenticated device):**
 
 ```bash
-cd /opt/linkhop
-source .venv/bin/activate
-python manage.py shell
+curl -X POST https://your-linkhop.com/api/pairings/pin \
+  -H "Authorization: Bearer EXISTING_DEVICE_TOKEN"
 ```
 
-```python
-from core.services.auth import create_enrollment_token
-
-# Create token
-token_obj, token_string = create_enrollment_token(
-    label="John's iPhone",
-    expires_in_hours=24  # Optional: expires in 24 hours
-)
-
-print(f"Enrollment Token: {token_string}")
-# enroll_abc123xyz...
+**Response:**
+```json
+{
+  "pin": "123456",
+  "expires_at": "2026-03-29T12:10:00Z"
+}
 ```
 
 ### Step 2: Register Device
 
+**Via Web Interface (recommended):**
+
+1. Open `https://your-linkhop.com/connect`
+2. Enter the 6-digit PIN and a device name
+3. Click "Connect"
+4. Token is stored in browser cookie
+
 **Via API:**
 
 ```bash
-curl -X POST https://your-linkhop.com/api/devices/register \
+curl -X POST https://your-linkhop.com/api/pairings/pin/register \
   -H "Content-Type: application/json" \
   -d '{
-    "enrollment_token": "enroll_abc123xyz...",
-    "device_name": "John iPhone",
-    "platform_label": "iOS",
-    "app_version": "1.0"
+    "pin": "123456",
+    "device_name": "John iPhone"
   }'
 ```
 
@@ -113,26 +116,19 @@ curl -X POST https://your-linkhop.com/api/devices/register \
 
 **⚠️ CRITICAL:** Save the `token` value immediately! It cannot be retrieved later.
 
-**Via Web Interface:**
-
-1. Open `https://your-linkhop.com/connect`
-2. Enter the device token received from API registration
-3. Click "Connect"
-4. Token is stored in browser cookie
-
 ---
 
 ## Viewing Registered Devices
 
 ### Via Admin Panel
 
-1. Go to `/admin/core/device/`
+1. Go to Management → Connected devices
 2. View all registered devices:
    - Device name
-   - Platform
+   - Online/offline/recently-seen status
    - Last seen timestamp
-   - Online/offline status
-   - Revoked status
+   - Active/revoked status
+   - Send test message button
 
 ### Via API
 
@@ -159,7 +155,9 @@ curl -H "Authorization: Bearer YOUR_DEVICE_TOKEN" \
 | `revoked_at: null` | Token is valid |
 | `revoked_at: timestamp` | Token revoked, cannot authenticate |
 | `last_seen_at: timestamp` | Last API activity |
-| `is_online: true` | Currently connected via SSE |
+| Online (green) | Currently connected via SSE |
+| Recently seen (orange) | No active SSE stream but seen within 25 seconds |
+| Offline (grey) | Not seen within threshold |
 
 ---
 
@@ -176,15 +174,14 @@ Revoke a device when:
 ### Method 1: Admin Panel (Recommended)
 
 1. Login to `/admin/`
-2. Go to "Devices"
-3. Click the device name
-4. Click "Revoke" button in top right
-5. Confirm revocation
+2. Go to Management → Connected devices
+3. Click "View" next to the device
+4. Set `revoked_at` to the current timestamp and save
 
 **Effects:**
 - Device token immediately stops working
 - Device cannot send or receive messages
-- Device appears as "Revoked" in admin
+- Device appears as inactive in admin
 
 ### Method 2: Django Shell
 
@@ -206,18 +203,6 @@ device.save()
 print(f"Device {device.name} revoked at {device.revoked_at}")
 ```
 
-### Method 3: Bulk Revoke
-
-```python
-# Revoke all devices for a user/platform
-from core.models import Device
-from django.utils import timezone
-
-Device.objects.filter(
-    platform_label="iOS"
-).update(revoked_at=timezone.now())
-```
-
 ### What Happens After Revocation
 
 **Immediate Effects:**
@@ -226,19 +211,13 @@ Device.objects.filter(
 curl -H "Authorization: Bearer REVOKED_TOKEN" \
   https://your-linkhop.com/api/device/me
 
-# Response:
-{"detail": "Unauthorized"}
+# Response: 401 Unauthorized
 ```
 
 **Device Experience:**
 - Web app: Redirected to `/connect` page
 - API clients: Receive 401 errors
 - SSE connections: Disconnected
-
-**Data Preservation:**
-- Message history is retained
-- Device record kept for audit trail
-- Events remain in logs
 
 ---
 
@@ -251,11 +230,10 @@ If the device token is lost but the device wasn't revoked:
 **Unfortunately, tokens cannot be retrieved.** You must:
 
 1. Revoke the old device (if you can identify it)
-2. Create new enrollment token
+2. Generate a new pairing PIN from admin
 3. Register as new device
 
 ```bash
-# Admin: Revoke old device
 python manage.py shell
 ```
 
@@ -269,39 +247,14 @@ device.revoked_at = timezone.now()
 device.save()
 ```
 
-```bash
-# Create new enrollment token
-python manage.py shell
-```
-
-```python
-from core.services.auth import create_enrollment_token
-_, token = create_enrollment_token(label="John iPhone (Re-registered)")
-print(token)
-```
-
-```bash
-# User: Register with new token
-curl -X POST https://your-linkhop.com/api/devices/register \
-  -H "Content-Type: application/json" \
-  -d '{
-    "enrollment_token": "NEW_TOKEN",
-    "device_name": "John iPhone 2",
-    "platform_label": "iOS"
-  }'
-```
+Then generate a new PIN from admin and re-register.
 
 ### Scenario 2: Device Replaced
 
 When replacing a device (e.g., new phone):
 
-**Option A: Transfer (if you have old device)**
-1. Note the device token from old device
-2. Setup new device with same token
-3. Revoke old device when ready
-
-**Option B: Fresh Registration (recommended)**
-1. Create new enrollment token
+**Option A: Fresh Registration (recommended)**
+1. Generate a new pairing PIN from admin
 2. Register new device with new name (e.g., "John iPhone 14")
 3. Update any shortcuts/automation to use new token
 4. Revoke old device after verification
@@ -311,28 +264,10 @@ When replacing a device (e.g., new phone):
 If token is suspected compromised:
 
 1. **Immediately revoke** the device via admin panel
-2. **Create new enrollment token** 
+2. **Generate a new pairing PIN**
 3. **Register new device** with new token
 4. **Update all clients** with new token
 5. **Review message logs** for unauthorized access
-
-```bash
-# Emergency revocation
-python manage.py shell
-```
-
-```python
-from core.models import Device
-from django.utils import timezone
-
-# Immediate revocation
-device = Device.objects.get(name="Compromised Device")
-device.revoked_at = timezone.now()
-device.is_active = False  # Also disable
-device.save()
-
-print(f"🚨 Device {device.name} EMERGENCY REVOKED")
-```
 
 ---
 
@@ -340,7 +275,7 @@ print(f"🚨 Device {device.name} EMERGENCY REVOKED")
 
 ### For Admins
 
-**1. Use Descriptive Labels**
+**1. Use Descriptive Names**
 ```
 Good:  "John iPhone - Personal"
 Good:  "Work Laptop - Engineering"
@@ -348,15 +283,9 @@ Bad:   "Device 1"
 Bad:   "Phone"
 ```
 
-**2. Set Expiration on Enrollment Tokens**
+**2. Pairing PINs Expire Quickly**
 
-```python
-# Tokens expire in 24 hours
-create_enrollment_token(
-    label="Temporary Device",
-    expires_in_hours=24
-)
-```
+PINs expire after 10 minutes and are single-use. Only share them immediately before registering a device.
 
 **3. Regular Audit**
 
@@ -371,7 +300,7 @@ from django.utils import timezone
 from datetime import timedelta
 
 # Find inactive devices (no activity in 30 days)
-inactice = Device.objects.filter(
+inactive = Device.objects.filter(
     last_seen_at__lt=timezone.now() - timedelta(days=30),
     revoked_at__isnull=True
 )
@@ -381,9 +310,8 @@ for d in inactive:
 ```
 
 **4. Principle of Least Privilege**
-- Only create enrollment tokens when needed
-- Revoke immediately after registration if token shared insecurely
-- Don't reuse enrollment tokens
+- Only generate pairing PINs when needed
+- PINs are single-use; generating a new one invalidates the previous one for the same device
 
 ### For Users
 
@@ -407,18 +335,9 @@ Don't share tokens between devices. Each should have its own registration.
 **3. Rotate Tokens Periodically**
 
 Every 6-12 months:
-1. Register new device token
+1. Register new device token (generate PIN + re-register)
 2. Update all integrations
 3. Revoke old token
-
-**4. Monitor for Unauthorized Use**
-
-Check inbox for messages you didn't send:
-```bash
-# List recent messages sent from your device
-curl -H "Authorization: Bearer YOUR_TOKEN" \
-  https://your-linkhop.com/api/messages/incoming | jq '.[] | select(.sender_device_id == "YOUR_ID")'
-```
 
 ---
 
@@ -436,58 +355,43 @@ curl -H "Authorization: Bearer YOUR_TOKEN" \
 # Check if token works
 curl -H "Authorization: Bearer YOUR_TOKEN" \
   https://your-linkhop.com/api/device/me
-
-# Check device status in admin
-python manage.py shell
-```
-
-```python
-from core.models import Device
-
-# Find device by token hash (admin only)
-device = Device.objects.get(token_hash="hash_of_your_token")
-print(f"Active: {device.is_active}")
-print(f"Revoked: {device.revoked_at}")
-print(f"Last seen: {device.last_seen_at}")
 ```
 
 **Solutions:**
-- If revoked: Re-register device
+- If revoked: Re-register device using a new pairing PIN
 - If inactive: Admin must reactivate
 - If wrong token: Find correct token or re-register
 
-### "Device name already exists" Error
+### "device_name_conflict" Error
 
 **Cause:** Device names must be unique
 
 **Solutions:**
 ```bash
 # Option 1: Use different name
-curl -X POST /api/devices/register \
-  -d '{"device_name": "John iPhone 2", ...}'
+# Register with "John iPhone 2" instead
 
 # Option 2: Admin deletes old device
 python manage.py shell
 Device.objects.get(name="John iPhone").delete()
 ```
 
-### "Invalid enrollment token" Error
+### "invalid_pairing_pin" Error
 
 **Causes:**
-1. Token already used
-2. Token expired
-3. Token typo
+1. PIN already used
+2. PIN expired (10 minute window)
+3. PIN typo
 
 **Solutions:**
-- Create new enrollment token
-- Check expiration date in admin
-- Verify token string is correct
+- Generate a fresh PIN from admin or an existing device
+- Register promptly before it expires
 
 ### Lost Device Token
 
 **No recovery option.** You must:
 1. Revoke old device (if identifiable)
-2. Create new enrollment token
+2. Generate a new pairing PIN
 3. Register as new device
 4. Update all integrations
 
@@ -517,20 +421,18 @@ Device.objects.get(name="John iPhone").delete()
 
 ```bash
 # List all devices
-python manage.py shell -c "from core.models import Device; print('\n'.join([f'{d.name}: Active={d.is_active}, Revoked={d.revoked_at}') for d in Device.objects.all()]))"
+python manage.py shell -c "from core.models import Device; [print(f'{d.name}: Active={d.is_active}, Revoked={d.revoked_at}') for d in Device.objects.all()]"
 
 # Revoke device by name
 python manage.py shell -c "from core.models import Device; from django.utils import timezone; Device.objects.filter(name='DEVICE_NAME').update(revoked_at=timezone.now())"
-
-# Create enrollment token
-python manage.py shell -c "from core.services.auth import create_enrollment_token; print(create_enrollment_token(label='New Device')[1])"
 ```
 
 ### API Quick Reference
 
 | Action | Endpoint | Auth |
 |--------|----------|------|
-| Register | `POST /api/devices/register` | None (needs enroll token) |
+| Create pairing PIN | `POST /api/pairings/pin` | Bearer |
+| Register | `POST /api/pairings/pin/register` | None (needs PIN) |
 | List devices | `GET /api/devices` | Bearer |
 | My device | `GET /api/device/me` | Bearer |
 | Revoke | Admin only | N/A |

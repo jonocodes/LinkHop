@@ -14,6 +14,8 @@ from django.templatetags.static import static
 from django.utils.http import urlencode, url_has_allowed_host_and_scheme
 from django.utils import timezone
 
+from core.account_auth import account_login_required, account_session_login, account_session_logout, get_account_user
+from core.account_site import account_site
 from core.device_auth import COOKIE_NAME, device_login_required, get_device_from_request
 from core.forms import GlobalSettingsForm
 from core.models import Device, GlobalSettings, Message, MessageStatus, MessageType
@@ -328,7 +330,7 @@ def hop_view(request: HttpRequest) -> HttpResponse:
     gs = GlobalSettings.objects.filter(singleton_key="default").first()
     allow_self_send = gs.allow_self_send if gs is not None else False
 
-    qs = list_active_devices()
+    qs = list_active_devices(user=device.owner)
     if not allow_self_send:
         qs = qs.exclude(id=device.id)
     devices = _device_context(qs)
@@ -398,7 +400,7 @@ def send_view(request: HttpRequest) -> HttpResponse:
     gs = GlobalSettings.objects.filter(singleton_key="default").first()
     allow_self_send = gs.allow_self_send if gs is not None else False
 
-    qs = list_active_devices()
+    qs = list_active_devices(user=request.device.owner)
     if not allow_self_send:
         qs = qs.exclude(id=request.device.id)
     devices = _device_context(qs)
@@ -501,3 +503,176 @@ def message_detail_view(request: HttpRequest, message_id: str) -> HttpResponse:
         "device": request.device,
         "device_token": request.device_token,
     })
+
+
+# ---------------------------------------------------------------------------
+# Account dashboard views  (/account/...)
+# ---------------------------------------------------------------------------
+
+def account_login_view(request: HttpRequest) -> HttpResponse:
+    if get_account_user(request) is not None:
+        return redirect("account_connected_devices")
+
+    error = None
+    if request.method == "POST":
+        from django.contrib.auth import authenticate as django_authenticate
+        username = request.POST.get("username", "").strip()
+        password = request.POST.get("password", "")
+        user = django_authenticate(request, username=username, password=password)
+        if user is not None and user.is_active:
+            account_session_login(request, user)
+            next_url = _validated_next_url(request, request.POST.get("next", ""))
+            return redirect(next_url or "account_connected_devices")
+        error = "Invalid username or password."
+
+    return render(request, "account/login.html", {
+        "error": error,
+        "next": request.GET.get("next", ""),
+    })
+
+
+def account_logout_view(request: HttpRequest) -> HttpResponse:
+    account_session_logout(request)
+    return redirect("account_login")
+
+
+@account_login_required
+def account_connected_devices_view(request: HttpRequest) -> HttpResponse:
+    all_devices = Device.objects.filter(
+        owner=request.account_user,
+    ).exclude(name=_SYSTEM_DEVICE_NAME).order_by("name")
+
+    status_order = {"online": 0, "recent": 1, "offline": 2}
+    device_list = []
+    for d in all_devices:
+        status = device_presence_status(d)
+        device_list.append({
+            "id": str(d.id),
+            "name": d.name,
+            "presence": status,
+            "is_active": d.is_active,
+            "revoked_at": d.revoked_at,
+            "last_seen_at": d.last_seen_at,
+            "last_seen_ago": format_time_ago(d.last_seen_at),
+            "created_at": d.created_at,
+        })
+    device_list.sort(key=lambda d: (
+        status_order[d["presence"]],
+        d["last_seen_at"] is None,
+        -(d["last_seen_at"].timestamp() if d["last_seen_at"] else 0),
+    ))
+
+    context = {
+        **account_site.each_context(request),
+        "title": "Connected devices",
+        "devices": device_list,
+    }
+    return render(request, "account/connected_devices_page.html", context)
+
+
+@account_login_required
+def account_send_test_message_view(request: HttpRequest, device_id: str) -> HttpResponse:
+    if request.method != "POST":
+        return redirect("account_connected_devices")
+    try:
+        recipient = Device.objects.get(id=device_id, owner=request.account_user)
+    except Device.DoesNotExist:
+        messages.error(request, "Device not found.")
+        return redirect("account_connected_devices")
+
+    try:
+        create_message(
+            sender_device=get_system_device(),
+            recipient_device=recipient,
+            message_type=MessageType.TEXT,
+            body="test message",
+        )
+        messages.success(request, f"Test message sent to {recipient.name}.")
+    except Exception as exc:
+        messages.error(request, f"Failed to send to {recipient.name}: {exc}")
+    return redirect("account_connected_devices")
+
+
+@account_login_required
+def account_remove_device_view(request: HttpRequest, device_id: str) -> HttpResponse:
+    if request.method != "POST":
+        return redirect("account_connected_devices")
+    try:
+        device = Device.objects.get(id=device_id, owner=request.account_user)
+    except Device.DoesNotExist:
+        messages.error(request, "Device not found.")
+        return redirect("account_connected_devices")
+
+    forget_device(device=device)
+    messages.success(request, "Device removed.")
+    return redirect("account_connected_devices")
+
+
+@account_login_required
+def account_add_device_view(request: HttpRequest) -> HttpResponse:
+    from core.models import PairingPin
+
+    SESSION_KEY = "account_pending_pin"
+
+    if request.method == "POST":
+        action = request.POST.get("action", "create")
+
+        if action == "cancel":
+            pending = request.session.pop(SESSION_KEY, None)
+            if pending:
+                PairingPin.objects.filter(id=pending["id"], used_at__isnull=True).delete()
+            return redirect("account_connected_devices")
+
+        pairing_pin, raw_pin = create_pairing_pin(owner=request.account_user)
+        request.session[SESSION_KEY] = {
+            "id": str(pairing_pin.id),
+            "raw_pin": raw_pin,
+            "expires_at_iso": pairing_pin.expires_at.isoformat(),
+        }
+        return redirect("account_add_device")
+
+    pin = None
+    expires_at_iso = ""
+    pending = request.session.get(SESSION_KEY)
+    if pending:
+        try:
+            pp = PairingPin.objects.get(id=pending["id"])
+            if pp.is_usable:
+                pin = pending["raw_pin"]
+                expires_at_iso = pending["expires_at_iso"]
+            else:
+                del request.session[SESSION_KEY]
+        except PairingPin.DoesNotExist:
+            del request.session[SESSION_KEY]
+
+    connect_url = request.build_absolute_uri(reverse("connect"))
+    context = {
+        **account_site.each_context(request),
+        "title": "Add device",
+        "pin": pin,
+        "expires_at_iso": expires_at_iso,
+        "connect_base_url": connect_url,
+    }
+    return render(request, "account/add_device_page.html", context)
+
+
+@account_login_required
+def account_bookmarklet_view(request: HttpRequest) -> HttpResponse:
+    hop_url = request.build_absolute_uri("/hop")
+    bookmarklet_js = (
+        "javascript:(function(){"
+        f"var u={json.dumps(hop_url)};"
+        "var q='?type=url&body='+encodeURIComponent(window.location.href);"
+        "var target=u+q;"
+        "var popup=window.open(target,'linkhop','popup,width=540,height=720,resizable=yes,scrollbars=yes');"
+        "if(!popup){window.location.href=target;}"
+        "})();"
+    )
+
+    context = {
+        **account_site.each_context(request),
+        "title": "Bookmarklet",
+        "bookmarklet_js": bookmarklet_js,
+        "hop_url": hop_url,
+    }
+    return render(request, "account/bookmarklet_page.html", context)

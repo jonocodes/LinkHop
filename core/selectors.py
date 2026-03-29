@@ -7,8 +7,11 @@ from core.models import Device
 from core.services.auth import _SYSTEM_DEVICE_NAME
 
 
-def list_active_devices():
-    return Device.objects.filter(is_active=True, revoked_at__isnull=True).exclude(name=_SYSTEM_DEVICE_NAME).order_by("name")
+def list_active_devices(user=None):
+    qs = Device.objects.filter(is_active=True, revoked_at__isnull=True).exclude(name=_SYSTEM_DEVICE_NAME)
+    if user is not None:
+        qs = qs.filter(owner=user)
+    return qs.order_by("name")
 
 
 def is_device_online(device: Device) -> bool:

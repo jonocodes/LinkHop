@@ -145,7 +145,7 @@ def devices_list(request: HttpRequest) -> JsonResponse:
 
     from core.selectors import is_device_online, list_active_devices
 
-    devices = list_active_devices()
+    devices = list_active_devices(user=request.auth.owner)
     return JsonResponse(
         [
             {
@@ -232,6 +232,7 @@ def messages_create(request: HttpRequest):
             id=recipient_uuid,
             is_active=True,
             revoked_at__isnull=True,
+            owner=request.auth.owner,
         )
     except Device.DoesNotExist:
         return json_error("recipient_not_found", "Recipient device was not found.")

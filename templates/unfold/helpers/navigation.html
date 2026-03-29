@@ -11,7 +11,17 @@
         {% include "admin/app_list.html" with app_list=available_apps show_changelinks=False %}
     {% endif %}
 
-    <div class="mt-auto px-6 py-3 border-t border-base-200 dark:border-base-800">
+    <div class="mt-auto px-6 py-3 border-t border-base-200 dark:border-base-800 flex flex-col gap-2">
+        {% if account_user %}
+        <div class="flex items-center justify-between gap-2 text-sm text-base-500 dark:text-base-400">
+            <span class="material-symbols-outlined" style="font-size:1.1rem">person</span>
+            <span class="flex-1 truncate">{{ account_user.username }}</span>
+            <a href="{% url 'account_logout' %}"
+               class="text-xs hover:text-primary-600 dark:hover:text-primary-500 transition-colors">
+                Sign out
+            </a>
+        </div>
+        {% endif %}
         <a href="/" target="_blank" rel="noopener noreferrer"
            class="flex items-center gap-2 text-sm text-base-500 hover:text-primary-600 dark:text-base-400 dark:hover:text-primary-500 transition-colors">
             <span class="material-symbols-outlined" style="font-size:1.1rem">open_in_new</span>
@@ -19,5 +29,7 @@
         </a>
     </div>
 
+    {% if not account_user %}
     {% include "unfold/helpers/navigation_user.html" %}
+    {% endif %}
 </nav>

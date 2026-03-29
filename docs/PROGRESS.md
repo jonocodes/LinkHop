@@ -50,6 +50,11 @@
 * [x] Add useful search fields in admin
 * [x] Make global throttling values editable in admin
 * [x] Add "Send test message" admin action on Device (sends test text message to selected device)
+* [x] Admin virtual device ("Admin") as sender for system-generated messages
+* [x] Connected devices page with three-state presence (online/recently seen/offline)
+* [x] "Add device" flow in admin with pairing PIN generation (PRG pattern, session-stored PIN)
+* [x] Per-device "Send test" button on connected devices page
+* [x] Admin sidebar "Open app" link (opens in new tab)
 * [ ] Restyle the admin migration-pending warning so it renders as a clear banner in the Unfold admin theme
 
 ### Admin filters
@@ -101,10 +106,16 @@
 * [x] `GET /api/devices`
 * [x] `GET /api/device/me`
 
+### Device pairing endpoints
+
+* [x] `POST /api/pairings/pin`
+* [x] `POST /api/pairings/pin/register`
+
 ### Message/API endpoints
 
 * [x] `POST /api/messages`
 * [x] `GET /api/messages/incoming`
+* [x] `GET /api/messages/{id}`
 * [x] `POST /api/messages/{id}/received`
 * [x] `POST /api/messages/{id}/presented`
 * [x] `POST /api/messages/{id}/opened`
@@ -129,7 +140,7 @@
 * [x] Support `GET /send?type=text&body=...`
 * [x] Support `POST /send`
 * [x] Add dynamic device chooser
-* [x] Show device online/offline / last-seen hints
+* [x] Show device online/offline / last-seen hints (three-state: online/recently seen/offline)
 * [x] Use single-line input for URL messages
 * [x] Use textarea for text messages
 * [x] Display validation errors clearly
@@ -358,6 +369,7 @@ docs/
 * [x] PWA spec complete (implementation ready)
 * [ ] Retention/cleanup policy refinement
 * [ ] Better message search/filtering outside admin
+* [x] Ping server: text message "ping server" triggers auto-reply "pong (server)" from Admin device
 * [ ] Fix "ping client" auto-respond — SSE client JS fetches the message and POSTs pong but response never arrives; CSRF exempt fix applied, still not working — needs further debugging
 
 ---
@@ -432,47 +444,60 @@ docs/
 
 ## Test Suite Summary
 
-**Total Tests: 60** (all passing ✅)
+**Total Tests: 122** (all passing ✅)
 
 | Test File | Test Count | Coverage Area |
 |-----------|------------|---------------|
-| `test_api.py` | 4 | API integration flows |
-| `test_e2e.py` | 31 | End-to-end user journeys |
-| `test_models.py` | 11 | Model validation & behavior |
-| `test_security.py` | 8 | Security & rate limiting |
-| `test_settings.py` | 6 | Global settings validation |
+| `test_api.py` | 8 | API integration flows |
+| `test_e2e.py` | 46 | End-to-end user journeys |
+| `test_models.py` | 16 | Model validation & behavior |
+| `test_selectors.py` | 13 | Selector / presence logic |
+| `test_security.py` | 6 | Security & rate limiting |
+| `test_settings.py` | 15 | Global settings validation |
+| `test_sse.py` | 18 | SSE stream behavior |
 
-### E2E Test Coverage (31 tests)
+### E2E Test Coverage
 
-**API Flow Tests (18 tests)**
-- Device registration and authentication
+**API Flow Tests**
+- Device registration and authentication (pairing PIN flow)
 - Message sending and receiving
 - Status transitions (received → presented → opened)
 - Self-send prevention and configuration
 - Device revocation and security
 - Admin operations
 
-**Web Interface Tests (6 tests)**
+**Web Interface Tests**
 - Connect/disconnect cookie flow
 - Send page with form submission
 - Prefilled URL parameters
 - Inbox message display
 - URL open with tracking
 - Text message detail view
+- Hop view (bookmarklet entry point)
 
-**Concurrent Operations (2 tests)**
+**Ping / Auto-respond Tests**
+- Ping server: auto-replies with "pong (server)" on commit
+- Ping server: case-insensitive match
+- Ping server: only triggers on text type (not URL)
+- Ping server: exact match only (no partial match)
+- Ping server pong appears in sender's inbox
+- Message GET endpoint returns message for recipient
+- Message GET endpoint returns 403 for wrong device
+- Ping client: manual simulation of client-side auto-respond
+
+**Concurrent Operations**
 - Multiple devices sending simultaneously
 - Message delivery order preservation
 
-**Error Handling (2 tests)**
+**Error Handling**
 - Cross-device message access prevention
 - Invalid message type rejection
 
-**Event Logging (2 tests)**
+**Event Logging**
 - Complete flow event capture
 - Device connection events
 
-**Admin Operations (3 tests)**
+**Admin Operations**
 - Test message action
 - Device filtering and search
 - Message detail viewing

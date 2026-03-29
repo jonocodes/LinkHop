@@ -18,10 +18,23 @@ class DeviceModelTests(TestCase):
         self.assertIsNone(device.revoked_at)
         self.assertIsNone(device.last_seen_at)
 
-    def test_device_name_uniqueness(self):
-        Device.objects.create(name="Unique Device", token_hash="hash-1")
-        with self.assertRaises(Exception):  # IntegrityError
-            Device.objects.create(name="Unique Device", token_hash="hash-2")
+    def test_device_name_uniqueness_per_owner(self):
+        from django.contrib.auth import get_user_model
+        from django.db import IntegrityError
+        User = get_user_model()
+        user = User.objects.create_user(username="owner1", password="pass")
+        Device.objects.create(name="My Device", token_hash="hash-1", owner=user)
+        with self.assertRaises(IntegrityError):
+            Device.objects.create(name="My Device", token_hash="hash-2", owner=user)
+
+    def test_device_name_unique_across_owners(self):
+        from django.contrib.auth import get_user_model
+        User = get_user_model()
+        user_a = User.objects.create_user(username="owner_a", password="pass")
+        user_b = User.objects.create_user(username="owner_b", password="pass")
+        Device.objects.create(name="laptop", token_hash="hash-a", owner=user_a)
+        # Same name, different owner — should be allowed
+        Device.objects.create(name="laptop", token_hash="hash-b", owner=user_b)
 
     def test_device_revocation(self):
         device = Device.objects.create(name="Revokable", token_hash="hash-rev")

@@ -180,8 +180,12 @@ class ApiFlowTests(TestCase):
         self.assertEqual(second_response.json()["error"]["code"], "invalid_pairing_pin")
 
     def test_pairing_pin_survives_device_name_conflict(self):
-        _, issuer_token = self.register_device("Issuer Conflict")
-        self.register_device("Existing Device")
+        from django.contrib.auth import get_user_model
+        User = get_user_model()
+        owner = User.objects.create_user(username="conflict_owner", password="pass")
+
+        issuer, issuer_token = create_device_token(name="Issuer Conflict", owner=owner)
+        create_device_token(name="Existing Device", owner=owner)
 
         pin_response = self.client.post(
             "/api/pairings/pin",
