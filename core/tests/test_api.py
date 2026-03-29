@@ -4,29 +4,30 @@ from unittest.mock import patch
 from django.test import TestCase
 from django.test import override_settings
 
-from core.models import Event, MessageStatus, PushSubscription
-from core.services.auth import create_enrollment_token
+from core.models import MessageStatus, PushSubscription
+from core.services.auth import create_device_token
 
 
 class ApiFlowTests(TestCase):
     def register_device(self, name: str):
-        _, enrollment_token = create_enrollment_token(label=f"{name} token")
+        device, token = create_device_token(name=name)
+        return device, token
+
+    def test_register_device_via_pairing_pin(self):
+        from core.services.auth import create_pairing_pin
+
+        _, raw_pin = create_pairing_pin()
+
         response = self.client.post(
-            "/api/devices/register",
+            "/api/pairings/pin/register",
             data=json.dumps(
                 {
-                    "enrollment_token": enrollment_token,
-                    "device_name": name,
-                    "platform_label": "test",
-                    "app_version": "1.0",
+                    "pin": raw_pin,
+                    "device_name": "Desktop Firefox",
                 }
             ),
             content_type="application/json",
         )
-        return response
-
-    def test_register_device_returns_bearer_token(self):
-        response = self.register_device("Desktop Firefox")
 
         self.assertEqual(response.status_code, 201)
         payload = response.json()
@@ -34,18 +35,14 @@ class ApiFlowTests(TestCase):
         self.assertTrue(payload["token"].startswith("device_"))
 
     def test_message_flow_creates_events_and_allows_confirmation(self):
-        sender_response = self.register_device("Sender")
-        recipient_response = self.register_device("Recipient")
-
-        sender_token = sender_response.json()["token"]
-        recipient = recipient_response.json()["device"]
-        recipient_token = recipient_response.json()["token"]
+        sender, sender_token = self.register_device("Sender")
+        recipient, recipient_token = self.register_device("Recipient")
 
         create_response = self.client.post(
             "/api/messages",
             data=json.dumps(
                 {
-                    "recipient_device_id": recipient["id"],
+                    "recipient_device_id": str(recipient.id),
                     "type": "url",
                     "body": "https://example.com",
                 }
@@ -83,24 +80,16 @@ class ApiFlowTests(TestCase):
         self.assertEqual(opened_response.status_code, 200)
         self.assertEqual(opened_response.json()["status"], MessageStatus.OPENED)
 
-        self.assertEqual(Event.objects.filter(event_type="message.created").count(), 1)
-        self.assertEqual(Event.objects.filter(event_type="message.received").count(), 1)
-        self.assertEqual(Event.objects.filter(event_type="message.opened").count(), 1)
-
     def test_device_cannot_open_other_devices_message(self):
-        sender_response = self.register_device("Sender Device")
-        recipient_response = self.register_device("Recipient Device")
-        intruder_response = self.register_device("Intruder Device")
-
-        sender_token = sender_response.json()["token"]
-        recipient_id = recipient_response.json()["device"]["id"]
-        intruder_token = intruder_response.json()["token"]
+        sender, sender_token = self.register_device("Sender Device")
+        recipient, _ = self.register_device("Recipient Device")
+        _, intruder_token = self.register_device("Intruder Device")
 
         create_response = self.client.post(
             "/api/messages",
             data=json.dumps(
                 {
-                    "recipient_device_id": recipient_id,
+                    "recipient_device_id": str(recipient.id),
                     "type": "text",
                     "body": "hello",
                 }
@@ -129,8 +118,7 @@ class ApiFlowTests(TestCase):
         self.assertEqual(response.status_code, 401)
 
     def test_pairing_pin_registers_device(self):
-        issuer_response = self.register_device("Issuer Device")
-        issuer_token = issuer_response.json()["token"]
+        _, issuer_token = self.register_device("Issuer Device")
 
         pin_response = self.client.post(
             "/api/pairings/pin",
@@ -147,8 +135,6 @@ class ApiFlowTests(TestCase):
                 {
                     "pin": pin,
                     "device_name": "Pinned Device",
-                    "platform_label": "android",
-                    "app_version": "1.0",
                 }
             ),
             content_type="application/json",
@@ -159,8 +145,7 @@ class ApiFlowTests(TestCase):
         self.assertTrue(register_response.json()["token"].startswith("device_"))
 
     def test_pairing_pin_is_single_use_over_api(self):
-        issuer_response = self.register_device("Issuer Again")
-        issuer_token = issuer_response.json()["token"]
+        _, issuer_token = self.register_device("Issuer Again")
 
         pin_response = self.client.post(
             "/api/pairings/pin",
@@ -195,8 +180,7 @@ class ApiFlowTests(TestCase):
         self.assertEqual(second_response.json()["error"]["code"], "invalid_pairing_pin")
 
     def test_pairing_pin_survives_device_name_conflict(self):
-        issuer_response = self.register_device("Issuer Conflict")
-        issuer_token = issuer_response.json()["token"]
+        _, issuer_token = self.register_device("Issuer Conflict")
         self.register_device("Existing Device")
 
         pin_response = self.client.post(
@@ -236,8 +220,7 @@ class ApiFlowTests(TestCase):
         LINKHOP_WEBPUSH_VAPID_PRIVATE_KEY="private-key",
     )
     def test_push_config_and_subscription_flow(self):
-        response = self.register_device("Push Device")
-        token = response.json()["token"]
+        _, token = self.register_device("Push Device")
 
         with patch("core.services.push.webpush", object()):
             config_response = self.client.get(

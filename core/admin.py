@@ -1,22 +1,22 @@
-from django.contrib import admin
+from django.contrib import admin, messages
 from django.contrib.auth.admin import GroupAdmin as BaseGroupAdmin
 from django.contrib.auth.admin import UserAdmin as BaseUserAdmin
 from django.contrib.auth.models import Group, User
 from django.shortcuts import redirect
-from django.urls import reverse
+from django.urls import path, reverse
+from django.utils.html import format_html
 from unfold.admin import ModelAdmin
 from unfold.forms import AdminPasswordChangeForm, UserChangeForm, UserCreationForm
 
 from core.models import (
     Device,
-    EnrollmentToken,
-    Event,
     GlobalSettings,
     Message,
     MessageType,
     PairingPin,
     PushSubscription,
 )
+from core.services.auth import create_pairing_pin
 from core.services.messages import create_message
 
 admin.site.unregister(User)
@@ -65,23 +65,13 @@ def send_test_message(modeladmin, request, queryset):
 class DeviceAdmin(ModelAdmin):
     list_display = ("name", "is_active", "last_seen_at", "revoked_at", "created_at")
     list_filter = ("is_active", "created_at", "last_seen_at", "revoked_at")
-    search_fields = ("name", "platform_label", "app_version")
-    readonly_fields = ("created_at", "updated_at", "last_seen_at")
+    search_fields = ("name",)
+    readonly_fields = ("created_at", "updated_at", "last_seen_at", "token_hash")
     actions = [send_test_message]
 
-    def get_readonly_fields(self, request, obj=None):
-        readonly = ["created_at", "updated_at", "last_seen_at"]
-        if obj:
-            readonly.append("token_hash")
-        return readonly
+    def has_add_permission(self, request):
+        return False
 
-
-@admin.register(EnrollmentToken)
-class EnrollmentTokenAdmin(ModelAdmin):
-    list_display = ("label", "is_active", "used_at", "expires_at", "created_at")
-    list_filter = ("is_active", "used_at", "expires_at", "created_at")
-    search_fields = ("label",)
-    readonly_fields = ("created_at", "updated_at", "used_at")
 
 
 @admin.register(PairingPin)
@@ -90,6 +80,37 @@ class PairingPinAdmin(ModelAdmin):
     list_filter = ("is_active", "used_at", "expires_at", "created_at")
     search_fields = ("id", "created_by_device__name")
     readonly_fields = ("created_at", "updated_at", "used_at", "code_hash")
+
+    def has_add_permission(self, request):
+        return False
+
+    def get_urls(self):
+        custom = [
+            path(
+                "generate/",
+                self.admin_site.admin_view(self.generate_pin_view),
+                name="core_pairingpin_generate",
+            ),
+        ]
+        return custom + super().get_urls()
+
+    def generate_pin_view(self, request):
+        _pin, raw_pin = create_pairing_pin()
+        messages.success(
+            request,
+            format_html(
+                'Pairing PIN (valid 10 minutes): <code style="user-select:all; '
+                'background:#f0f0f0; padding:4px 12px; font-size:1.5rem; letter-spacing:0.2em">{}</code>'
+                ' &mdash; enter this on the new device at <strong>/connect</strong>',
+                raw_pin,
+            ),
+        )
+        return redirect(reverse("admin:core_pairingpin_changelist"))
+
+    def changelist_view(self, request, extra_context=None):
+        extra_context = extra_context or {}
+        extra_context["generate_pin_url"] = reverse("admin:core_pairingpin_generate")
+        return super().changelist_view(request, extra_context=extra_context)
 
 
 @admin.register(PushSubscription)
@@ -113,13 +134,6 @@ class MessageAdmin(ModelAdmin):
         "opened_at",
     )
 
-
-@admin.register(Event)
-class EventAdmin(ModelAdmin):
-    list_display = ("event_type", "device", "message", "created_at")
-    list_filter = ("event_type", "created_at", "device", "message")
-    search_fields = ("event_type", "device__name", "message_id")
-    readonly_fields = ("created_at", "updated_at", "event_type", "device", "message", "metadata_json")
 
 
 @admin.register(GlobalSettings)

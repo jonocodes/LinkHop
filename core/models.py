@@ -23,8 +23,6 @@ class Device(TimestampedModel):
     is_active = models.BooleanField(default=True)
     revoked_at = models.DateTimeField(null=True, blank=True)
     last_seen_at = models.DateTimeField(null=True, blank=True)
-    platform_label = models.CharField(max_length=100, blank=True)
-    app_version = models.CharField(max_length=50, blank=True)
 
     class Meta:
         ordering = ["name"]
@@ -32,31 +30,6 @@ class Device(TimestampedModel):
     def __str__(self) -> str:
         return self.name
 
-
-class EnrollmentToken(TimestampedModel):
-    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    label = models.CharField(max_length=200)
-    token_hash = models.CharField(max_length=128, unique=True)
-    expires_at = models.DateTimeField()
-    is_active = models.BooleanField(default=True)
-    used_at = models.DateTimeField(null=True, blank=True)
-    created_by = models.ForeignKey(
-        settings.AUTH_USER_MODEL,
-        null=True,
-        blank=True,
-        on_delete=models.SET_NULL,
-        related_name="created_enrollment_tokens",
-    )
-
-    class Meta:
-        ordering = ["-created_at"]
-
-    def __str__(self) -> str:
-        return self.label
-
-    @property
-    def is_usable(self) -> bool:
-        return self.is_active and self.used_at is None and self.expires_at > timezone.now()
 
 
 class PairingPin(TimestampedModel):
@@ -117,7 +90,6 @@ class MessageStatus(models.TextChoices):
     RECEIVED = "received", "Received"
     PRESENTED = "presented", "Presented"
     OPENED = "opened", "Opened"
-    EXPIRED = "expired", "Expired"
 
 
 class Message(TimestampedModel):
@@ -190,44 +162,11 @@ class Message(TimestampedModel):
     def default_expiry(cls):
         return timezone.now() + timedelta(days=settings.LINKHOP_MESSAGE_RETENTION_DAYS)
 
-    @property
-    def is_expired(self) -> bool:
-        return self.expires_at <= timezone.now()
-
-
-class Event(TimestampedModel):
-    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    event_type = models.CharField(max_length=100)
-    device = models.ForeignKey(
-        Device,
-        null=True,
-        blank=True,
-        on_delete=models.SET_NULL,
-        related_name="events",
-    )
-    message = models.ForeignKey(
-        Message,
-        null=True,
-        blank=True,
-        on_delete=models.SET_NULL,
-        related_name="events",
-    )
-    metadata_json = models.JSONField(default=dict, blank=True)
-
-    class Meta:
-        ordering = ["-created_at"]
-
-    def __str__(self) -> str:
-        return self.event_type
-
 
 class GlobalSettings(TimestampedModel):
     singleton_key = models.CharField(max_length=32, default="default", unique=True)
     message_retention_days = models.PositiveIntegerField(
         default=settings.LINKHOP_MESSAGE_RETENTION_DAYS
-    )
-    enrollment_token_ttl_hours = models.PositiveIntegerField(
-        default=settings.LINKHOP_ENROLLMENT_TOKEN_TTL_HOURS
     )
     api_sends_per_minute = models.PositiveIntegerField(
         default=settings.LINKHOP_API_SENDS_PER_MINUTE

@@ -10,7 +10,7 @@ default:
 
 # Start development server with auto-reload
 dev:
-    uvicorn linkhop.asgi:application --reload --reload-dir linkhop --reload-dir core --host 0.0.0.0 --port 8002
+    uvicorn linkhop.asgi:application --reload --reload-dir linkhop --reload-dir core --host 0.0.0.0 # --port 8002
 
 # Kill any running server processes
 kill:

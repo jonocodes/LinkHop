@@ -11,8 +11,9 @@ from django.core.cache import cache
 from django.test import TestCase, override_settings
 from django.utils import timezone
 
-from core.models import Device, EnrollmentToken, Event, Message, MessageStatus
-from core.services.auth import create_enrollment_token, create_device_token
+from core.device_auth import COOKIE_NAME
+from core.models import Device, Message, MessageStatus
+from core.services.auth import create_device_token, create_pairing_pin
 
 User = get_user_model()
 
@@ -36,11 +37,15 @@ class EndToEndTestCase(TestCase):
         self.assertEqual(Device.objects.count(), 0)
         self.assertEqual(User.objects.count(), 0)
 
+    def _connect_device(self, raw_token, client=None):
+        """Set the device cookie directly on a test client."""
+        client = client or self.client
+        client.cookies[COOKIE_NAME] = raw_token
+
     def test_blank_environment_starts_clean(self):
         """Verify that we start with a blank environment."""
         self.assertEqual(Device.objects.count(), 0)
         self.assertEqual(User.objects.count(), 0)
-        self.assertEqual(Event.objects.count(), 0)
         self.assertEqual(Message.objects.count(), 0)
 
     def test_manifest_route_returns_pwa_metadata(self):
@@ -78,39 +83,11 @@ class EndToEndTestCase(TestCase):
 
     def test_auto_register_two_devices_via_api(self):
         """Register two devices entirely via automation."""
-        # Create enrollment tokens
-        _, token1 = create_enrollment_token(label="Device A enrollment")
-        _, token2 = create_enrollment_token(label="Device B enrollment")
+        device_a, device_a_token = create_device_token(name="Device A")
+        device_a_id = str(device_a.id)
 
-        # Register Device A
-        response = self.client.post(
-            "/api/devices/register",
-            data=json.dumps({
-                "enrollment_token": token1,
-                "device_name": "Device A",
-                "platform_label": "test",
-                "app_version": "1.0",
-            }),
-            content_type="application/json",
-        )
-        self.assertEqual(response.status_code, 201)
-        device_a_id = response.json()["device"]["id"]
-        device_a_token = response.json()["token"]
-
-        # Register Device B
-        response = self.client.post(
-            "/api/devices/register",
-            data=json.dumps({
-                "enrollment_token": token2,
-                "device_name": "Device B",
-                "platform_label": "test",
-                "app_version": "1.0",
-            }),
-            content_type="application/json",
-        )
-        self.assertEqual(response.status_code, 201)
-        device_b_id = response.json()["device"]["id"]
-        device_b_token = response.json()["token"]
+        device_b, device_b_token = create_device_token(name="Device B")
+        device_b_id = str(device_b.id)
 
         # Verify both devices exist
         self.assertEqual(Device.objects.count(), 2)
@@ -136,34 +113,11 @@ class EndToEndTestCase(TestCase):
         )
 
         # Register two devices
-        _, token1 = create_enrollment_token(label="Device A enrollment")
-        _, token2 = create_enrollment_token(label="Device B enrollment")
+        device_a, device_a_token = create_device_token(name="Device A")
+        device_a_id = str(device_a.id)
 
-        response = self.client.post(
-            "/api/devices/register",
-            data=json.dumps({
-                "enrollment_token": token1,
-                "device_name": "Device A",
-                "platform_label": "test",
-                "app_version": "1.0",
-            }),
-            content_type="application/json",
-        )
-        device_a_token = response.json()["token"]
-        device_a_id = response.json()["device"]["id"]
-
-        response = self.client.post(
-            "/api/devices/register",
-            data=json.dumps({
-                "enrollment_token": token2,
-                "device_name": "Device B",
-                "platform_label": "test",
-                "app_version": "1.0",
-            }),
-            content_type="application/json",
-        )
-        device_b_token = response.json()["token"]
-        device_b_id = response.json()["device"]["id"]
+        device_b, device_b_token = create_device_token(name="Device B")
+        device_b_id = str(device_b.id)
 
         # Send message from A to B
         response = self.client.post(
@@ -209,53 +163,14 @@ class EndToEndTestCase(TestCase):
         self.assertEqual(message.status, MessageStatus.OPENED)
         self.assertIsNotNone(message.opened_at)
 
-        # Verify expected events appear in logs
-        self.assertTrue(
-            Event.objects.filter(
-                event_type="message.created",
-                device_id=device_a_id,
-                message_id=message_id,
-            ).exists()
-        )
-        self.assertTrue(
-            Event.objects.filter(
-                event_type="message.opened",
-                device_id=device_b_id,
-                message_id=message_id,
-            ).exists()
-        )
-
     def test_text_message_complete_flow(self):
         """Test complete flow with text message."""
         # Setup
-        _, token1 = create_enrollment_token(label="Device A enrollment")
-        _, token2 = create_enrollment_token(label="Device B enrollment")
+        device_a, device_a_token = create_device_token(name="Device A")
+        device_a_id = str(device_a.id)
 
-        response = self.client.post(
-            "/api/devices/register",
-            data=json.dumps({
-                "enrollment_token": token1,
-                "device_name": "Device A",
-                "platform_label": "test",
-                "app_version": "1.0",
-            }),
-            content_type="application/json",
-        )
-        device_a_token = response.json()["token"]
-        device_a_id = response.json()["device"]["id"]
-
-        response = self.client.post(
-            "/api/devices/register",
-            data=json.dumps({
-                "enrollment_token": token2,
-                "device_name": "Device B",
-                "platform_label": "test",
-                "app_version": "1.0",
-            }),
-            content_type="application/json",
-        )
-        device_b_token = response.json()["token"]
-        device_b_id = response.json()["device"]["id"]
+        device_b, device_b_token = create_device_token(name="Device B")
+        device_b_id = str(device_b.id)
 
         # Send text message
         response = self.client.post(
@@ -298,43 +213,13 @@ class EndToEndTestCase(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json()["status"], MessageStatus.OPENED)
 
-        # Verify all events are logged
-        event_types = Event.objects.filter(message_id=message_id).values_list("event_type", flat=True)
-        self.assertIn("message.created", event_types)
-        self.assertIn("message.received", event_types)
-        self.assertIn("message.presented", event_types)
-        self.assertIn("message.opened", event_types)
-
     def test_message_expiration_behavior(self):
         """Test that expired messages behave correctly."""
-        _, token1 = create_enrollment_token(label="Device A enrollment")
-        _, token2 = create_enrollment_token(label="Device B enrollment")
+        device_a, device_a_token = create_device_token(name="Device A")
+        device_a_id = str(device_a.id)
 
-        response = self.client.post(
-            "/api/devices/register",
-            data=json.dumps({
-                "enrollment_token": token1,
-                "device_name": "Device A",
-                "platform_label": "test",
-                "app_version": "1.0",
-            }),
-            content_type="application/json",
-        )
-        device_a_token = response.json()["token"]
-        device_a_id = response.json()["device"]["id"]
-
-        response = self.client.post(
-            "/api/devices/register",
-            data=json.dumps({
-                "enrollment_token": token2,
-                "device_name": "Device B",
-                "platform_label": "test",
-                "app_version": "1.0",
-            }),
-            content_type="application/json",
-        )
-        device_b_token = response.json()["token"]
-        device_b_id = response.json()["device"]["id"]
+        device_b, device_b_token = create_device_token(name="Device B")
+        device_b_id = str(device_b.id)
 
         # Send message
         response = self.client.post(
@@ -365,32 +250,10 @@ class EndToEndTestCase(TestCase):
 
     def test_device_can_list_other_active_devices(self):
         """Test that devices can list active devices as send targets."""
-        _, token1 = create_enrollment_token(label="Device A enrollment")
-        _, token2 = create_enrollment_token(label="Device B enrollment")
+        device_a, device_a_token = create_device_token(name="Device A")
 
-        response = self.client.post(
-            "/api/devices/register",
-            data=json.dumps({
-                "enrollment_token": token1,
-                "device_name": "Device A",
-                "platform_label": "test",
-                "app_version": "1.0",
-            }),
-            content_type="application/json",
-        )
-        device_a_token = response.json()["token"]
-
-        response = self.client.post(
-            "/api/devices/register",
-            data=json.dumps({
-                "enrollment_token": token2,
-                "device_name": "Device B",
-                "platform_label": "test",
-                "app_version": "1.0",
-            }),
-            content_type="application/json",
-        )
-        device_b_id = response.json()["device"]["id"]
+        device_b, device_b_token = create_device_token(name="Device B")
+        device_b_id = str(device_b.id)
 
         # Device A lists devices
         response = self.client.get(
@@ -407,20 +270,8 @@ class EndToEndTestCase(TestCase):
 
     def test_self_send_prevented_by_default(self):
         """Test that devices cannot send messages to themselves by default."""
-        _, token1 = create_enrollment_token(label="Device A enrollment")
-
-        response = self.client.post(
-            "/api/devices/register",
-            data=json.dumps({
-                "enrollment_token": token1,
-                "device_name": "Device A",
-                "platform_label": "test",
-                "app_version": "1.0",
-            }),
-            content_type="application/json",
-        )
-        device_a_token = response.json()["token"]
-        device_a_id = response.json()["device"]["id"]
+        device_a, device_a_token = create_device_token(name="Device A")
+        device_a_id = str(device_a.id)
 
         # Try to send message to self
         response = self.client.post(
@@ -443,20 +294,8 @@ class EndToEndTestCase(TestCase):
         # Enable self-send
         GlobalSettings.objects.create(singleton_key="default", allow_self_send=True)
 
-        _, token1 = create_enrollment_token(label="Device A enrollment")
-
-        response = self.client.post(
-            "/api/devices/register",
-            data=json.dumps({
-                "enrollment_token": token1,
-                "device_name": "Device A",
-                "platform_label": "test",
-                "app_version": "1.0",
-            }),
-            content_type="application/json",
-        )
-        device_a_token = response.json()["token"]
-        device_a_id = response.json()["device"]["id"]
+        device_a, device_a_token = create_device_token(name="Device A")
+        device_a_id = str(device_a.id)
 
         # Now self-send should work
         response = self.client.post(
@@ -473,33 +312,10 @@ class EndToEndTestCase(TestCase):
 
     def test_multiple_messages_to_same_recipient(self):
         """Test sending multiple messages to the same device."""
-        _, token1 = create_enrollment_token(label="Device A enrollment")
-        _, token2 = create_enrollment_token(label="Device B enrollment")
+        device_a, device_a_token = create_device_token(name="Device A")
 
-        response = self.client.post(
-            "/api/devices/register",
-            data=json.dumps({
-                "enrollment_token": token1,
-                "device_name": "Device A",
-                "platform_label": "test",
-                "app_version": "1.0",
-            }),
-            content_type="application/json",
-        )
-        device_a_token = response.json()["token"]
-
-        response = self.client.post(
-            "/api/devices/register",
-            data=json.dumps({
-                "enrollment_token": token2,
-                "device_name": "Device B",
-                "platform_label": "test",
-                "app_version": "1.0",
-            }),
-            content_type="application/json",
-        )
-        device_b_id = response.json()["device"]["id"]
-        device_b_token = response.json()["token"]
+        device_b, device_b_token = create_device_token(name="Device B")
+        device_b_id = str(device_b.id)
 
         # Send 3 messages
         message_ids = []
@@ -532,20 +348,8 @@ class EndToEndTestCase(TestCase):
 
     def test_device_self_identification(self):
         """Test that a device can identify itself via API."""
-        _, token1 = create_enrollment_token(label="Device A enrollment")
-
-        response = self.client.post(
-            "/api/devices/register",
-            data=json.dumps({
-                "enrollment_token": token1,
-                "device_name": "My Test Device",
-                "platform_label": "test",
-                "app_version": "1.0",
-            }),
-            content_type="application/json",
-        )
-        device_token = response.json()["token"]
-        device_id = response.json()["device"]["id"]
+        device, device_token = create_device_token(name="My Test Device")
+        device_id = str(device.id)
 
         # Device identifies itself
         response = self.client.get(
@@ -560,36 +364,12 @@ class EndToEndTestCase(TestCase):
 
     def test_revoked_device_cannot_authenticate(self):
         """Test that a revoked device cannot send or receive messages."""
-        _, token1 = create_enrollment_token(label="Device A enrollment")
-        _, token2 = create_enrollment_token(label="Device B enrollment")
+        device_a, device_a_token = create_device_token(name="Device A")
 
-        response = self.client.post(
-            "/api/devices/register",
-            data=json.dumps({
-                "enrollment_token": token1,
-                "device_name": "Device A",
-                "platform_label": "test",
-                "app_version": "1.0",
-            }),
-            content_type="application/json",
-        )
-        device_a_token = response.json()["token"]
-
-        response = self.client.post(
-            "/api/devices/register",
-            data=json.dumps({
-                "enrollment_token": token2,
-                "device_name": "Device B",
-                "platform_label": "test",
-                "app_version": "1.0",
-            }),
-            content_type="application/json",
-        )
-        device_b_id = response.json()["device"]["id"]
-        device_b_token = response.json()["token"]
+        device_b, device_b_token = create_device_token(name="Device B")
+        device_b_id = str(device_b.id)
 
         # Revoke Device B
-        device_b = Device.objects.get(id=device_b_id)
         device_b.revoked_at = timezone.now()
         device_b.save()
 
@@ -624,33 +404,11 @@ class EndToEndTestCase(TestCase):
         )
 
         # Register devices and send message
-        _, token1 = create_enrollment_token(label="Device A enrollment")
-        _, token2 = create_enrollment_token(label="Device B enrollment")
+        device_a, device_a_token = create_device_token(name="Device A")
+        device_a_id = str(device_a.id)
 
-        response = self.client.post(
-            "/api/devices/register",
-            data=json.dumps({
-                "enrollment_token": token1,
-                "device_name": "Device A",
-                "platform_label": "test",
-                "app_version": "1.0",
-            }),
-            content_type="application/json",
-        )
-        device_a_token = response.json()["token"]
-        device_a_id = response.json()["device"]["id"]
-
-        response = self.client.post(
-            "/api/devices/register",
-            data=json.dumps({
-                "enrollment_token": token2,
-                "device_name": "Device B",
-                "platform_label": "test",
-                "app_version": "1.0",
-            }),
-            content_type="application/json",
-        )
-        device_b_id = response.json()["device"]["id"]
+        device_b, device_b_token = create_device_token(name="Device B")
+        device_b_id = str(device_b.id)
 
         # Send message
         response = self.client.post(
@@ -679,99 +437,52 @@ class EndToEndTestCase(TestCase):
         # Verify data exists in database
         self.assertEqual(Device.objects.count(), 2)
         self.assertEqual(Message.objects.count(), 1)
-        self.assertTrue(Event.objects.filter(event_type="message.created").exists())
-
-    def test_invalid_enrollment_token_rejected(self):
-        """Test that invalid enrollment tokens are rejected."""
-        response = self.client.post(
-            "/api/devices/register",
-            data=json.dumps({
-                "enrollment_token": "invalid_token",
-                "device_name": "Device A",
-                "platform_label": "test",
-                "app_version": "1.0",
-            }),
-            content_type="application/json",
-        )
-        self.assertEqual(response.status_code, 400)
-        self.assertIn("invalid_enrollment_token", response.json()["error"]["code"])
 
     def test_duplicate_device_name_rejected(self):
         """Test that duplicate device names are rejected."""
-        _, token1 = create_enrollment_token(label="Device A enrollment")
-        _, token2 = create_enrollment_token(label="Device B enrollment")
+        from django.db import IntegrityError
 
-        # Register first device
-        response = self.client.post(
-            "/api/devices/register",
-            data=json.dumps({
-                "enrollment_token": token1,
-                "device_name": "Same Name",
-                "platform_label": "test",
-                "app_version": "1.0",
-            }),
-            content_type="application/json",
-        )
-        self.assertEqual(response.status_code, 201)
+        create_device_token(name="Same Name")
 
-        # Try to register second with same name
-        response = self.client.post(
-            "/api/devices/register",
-            data=json.dumps({
-                "enrollment_token": token2,
-                "device_name": "Same Name",
-                "platform_label": "test",
-                "app_version": "1.0",
-            }),
-            content_type="application/json",
-        )
-        self.assertEqual(response.status_code, 400)
-        self.assertIn("device_name_conflict", response.json()["error"]["code"])
+        with self.assertRaises(IntegrityError):
+            create_device_token(name="Same Name")
 
     # ============================================================
     # WEB INTERFACE END-TO-END TESTS
     # ============================================================
 
     def test_web_connect_page_flow(self):
-        """Test the complete web connect/disconnect flow via cookie."""
-        _, token = create_enrollment_token(label="Web Device enrollment")
-        
-        # Register device via API to get token
-        response = self.client.post(
-            "/api/devices/register",
-            data=json.dumps({
-                "enrollment_token": token,
-                "device_name": "Web Device",
-                "platform_label": "web",
-                "app_version": "1.0",
-            }),
-            content_type="application/json",
-        )
-        device_token = response.json()["token"]
-        
+        """Test the complete web connect/disconnect flow via PIN."""
+        # Generate a PIN (no device required)
+        _, raw_pin = create_pairing_pin()
+
         # Visit connect page
         response = self.client.get("/connect")
         self.assertEqual(response.status_code, 200)
         self.assertIn(b"Connect this device", response.content)
-        
-        # Submit token to connect
+
+        # Submit PIN to connect
         response = self.client.post(
             "/connect",
-            data={"token": device_token},
+            data={
+                "mode": "pin",
+                "pin": raw_pin,
+                "device_name": "Web Device",
+            },
         )
         self.assertEqual(response.status_code, 302)  # Redirect to inbox
         self.assertEqual(response.url, "/inbox")
-        
+
         # Verify we're now connected (can access inbox)
         response = self.client.get("/inbox")
         self.assertEqual(response.status_code, 200)
         self.assertIn(b"Inbox", response.content)
-        
+
         # Disconnect
         response = self.client.get("/disconnect")
         self.assertEqual(response.status_code, 302)
         self.assertEqual(response.url, "/connect")
-        
+
         # Verify disconnected (redirected to connect)
         response = self.client.get("/inbox")
         self.assertEqual(response.status_code, 302)
@@ -783,20 +494,8 @@ class EndToEndTestCase(TestCase):
         self.assertIn(b'rel="manifest" href="/manifest.json"', response.content)
 
     def test_inbox_page_includes_push_state_controls(self):
-        _, token = create_enrollment_token(label="Push UI enrollment")
-
-        response = self.client.post(
-            "/api/devices/register",
-            data=json.dumps({
-                "enrollment_token": token,
-                "device_name": "Push UI Device",
-                "platform_label": "web",
-                "app_version": "1.0",
-            }),
-            content_type="application/json",
-        )
-        device_token = response.json()["token"]
-        self.client.post("/connect", data={"token": device_token})
+        _, device_token = create_device_token(name="Push UI Device")
+        self._connect_device(device_token)
 
         response = self.client.get("/inbox")
         self.assertEqual(response.status_code, 200)
@@ -805,22 +504,8 @@ class EndToEndTestCase(TestCase):
 
     def test_web_pairing_pin_flow(self):
         """Generate a PIN on one device and use it to pair a second browser."""
-        _, token = create_enrollment_token(label="PIN Issuer enrollment")
-
-        response = self.client.post(
-            "/api/devices/register",
-            data=json.dumps({
-                "enrollment_token": token,
-                "device_name": "PIN Issuer",
-                "platform_label": "web",
-                "app_version": "1.0",
-            }),
-            content_type="application/json",
-        )
-        issuer_token = response.json()["token"]
-
-        response = self.client.post("/connect", data={"token": issuer_token})
-        self.assertEqual(response.status_code, 302)
+        _, issuer_token = create_device_token(name="PIN Issuer")
+        self._connect_device(issuer_token)
 
         response = self.client.post("/pair")
         self.assertEqual(response.status_code, 200)
@@ -839,8 +524,6 @@ class EndToEndTestCase(TestCase):
                 "mode": "pin",
                 "pin": pin,
                 "device_name": "Pinned Browser",
-                "platform_label": "iOS",
-                "app_version": "browser",
             },
         )
         self.assertEqual(response.status_code, 302)
@@ -852,55 +535,30 @@ class EndToEndTestCase(TestCase):
 
     def test_web_send_page_url_flow(self):
         """Test sending URL via web send page."""
-        _, token1 = create_enrollment_token(label="Sender enrollment")
-        _, token2 = create_enrollment_token(label="Recipient enrollment")
-        
-        # Register devices
-        response = self.client.post(
-            "/api/devices/register",
-            data=json.dumps({
-                "enrollment_token": token1,
-                "device_name": "Sender",
-                "platform_label": "web",
-                "app_version": "1.0",
-            }),
-            content_type="application/json",
-        )
-        sender_token = response.json()["token"]
-        
-        response = self.client.post(
-            "/api/devices/register",
-            data=json.dumps({
-                "enrollment_token": token2,
-                "device_name": "Recipient",
-                "platform_label": "web",
-                "app_version": "1.0",
-            }),
-            content_type="application/json",
-        )
-        recipient_id = response.json()["device"]["id"]
-        
+        _, sender_token = create_device_token(name="Sender")
+        recipient, _ = create_device_token(name="Recipient")
+
         # Connect sender
-        self.client.post("/connect", data={"token": sender_token})
-        
+        self._connect_device(sender_token)
+
         # Access send page
         response = self.client.get("/send")
         self.assertEqual(response.status_code, 200)
         self.assertIn(b"Send", response.content)
         self.assertIn(b"Recipient", response.content)
-        
+
         # Send URL message via web form
         response = self.client.post(
             "/send",
             data={
                 "type": "url",
                 "body": "https://example.com/test",
-                "recipient_device_id": recipient_id,
+                "recipient_device_id": str(recipient.id),
             },
         )
         self.assertEqual(response.status_code, 200)
         self.assertIn(b"success", response.content.lower())
-        
+
         # Verify message was created
         self.assertEqual(Message.objects.count(), 1)
         message = Message.objects.first()
@@ -909,23 +567,9 @@ class EndToEndTestCase(TestCase):
 
     def test_web_send_page_with_prefilled_params(self):
         """Test send page with prefilled URL parameters."""
-        _, token = create_enrollment_token(label="Device enrollment")
-        
-        response = self.client.post(
-            "/api/devices/register",
-            data=json.dumps({
-                "enrollment_token": token,
-                "device_name": "Test Device",
-                "platform_label": "web",
-                "app_version": "1.0",
-            }),
-            content_type="application/json",
-        )
-        device_token = response.json()["token"]
-        
-        # Connect device
-        self.client.post("/connect", data={"token": device_token})
-        
+        _, device_token = create_device_token(name="Test Device")
+        self._connect_device(device_token)
+
         # Access send page with prefilled params
         response = self.client.get("/send?type=url&body=https://prefilled.com")
         self.assertEqual(response.status_code, 200)
@@ -934,88 +578,37 @@ class EndToEndTestCase(TestCase):
 
     def test_web_inbox_displays_messages(self):
         """Test that inbox displays incoming messages."""
-        _, token1 = create_enrollment_token(label="Sender enrollment")
-        _, token2 = create_enrollment_token(label="Recipient enrollment")
-        
-        # Register devices
-        response = self.client.post(
-            "/api/devices/register",
-            data=json.dumps({
-                "enrollment_token": token1,
-                "device_name": "Sender",
-                "platform_label": "web",
-                "app_version": "1.0",
-            }),
-            content_type="application/json",
-        )
-        sender_token = response.json()["token"]
-        
-        response = self.client.post(
-            "/api/devices/register",
-            data=json.dumps({
-                "enrollment_token": token2,
-                "device_name": "Recipient",
-                "platform_label": "web",
-                "app_version": "1.0",
-            }),
-            content_type="application/json",
-        )
-        recipient_token = response.json()["token"]
-        recipient_id = response.json()["device"]["id"]
-        
+        sender, sender_token = create_device_token(name="Sender")
+        recipient, recipient_token = create_device_token(name="Recipient")
+
         # Send message to recipient via API
         self.client.post(
             "/api/messages",
             data=json.dumps({
-                "recipient_device_id": recipient_id,
+                "recipient_device_id": str(recipient.id),
                 "type": "text",
                 "body": "Test message for inbox",
             }),
             content_type="application/json",
             headers={"Authorization": f"Bearer {sender_token}"},
         )
-        
+
         # Connect recipient and view inbox
-        self.client.post("/connect", data={"token": recipient_token})
+        self._connect_device(recipient_token)
         response = self.client.get("/inbox")
         self.assertEqual(response.status_code, 200)
         self.assertIn(b"Test message for inbox", response.content)
 
     def test_web_url_open_redirects_and_tracks(self):
         """Test that opening URL via web tracks the open event."""
-        _, token1 = create_enrollment_token(label="Sender enrollment")
-        _, token2 = create_enrollment_token(label="Recipient enrollment")
-        
-        response = self.client.post(
-            "/api/devices/register",
-            data=json.dumps({
-                "enrollment_token": token1,
-                "device_name": "Sender",
-                "platform_label": "web",
-                "app_version": "1.0",
-            }),
-            content_type="application/json",
-        )
-        sender_token = response.json()["token"]
-        
-        response = self.client.post(
-            "/api/devices/register",
-            data=json.dumps({
-                "enrollment_token": token2,
-                "device_name": "Recipient",
-                "platform_label": "web",
-                "app_version": "1.0",
-            }),
-            content_type="application/json",
-        )
-        recipient_token = response.json()["token"]
-        recipient_id = response.json()["device"]["id"]
-        
+        sender, sender_token = create_device_token(name="Sender")
+        recipient, recipient_token = create_device_token(name="Recipient")
+
         # Send URL message
         response = self.client.post(
             "/api/messages",
             data=json.dumps({
-                "recipient_device_id": recipient_id,
+                "recipient_device_id": str(recipient.id),
                 "type": "url",
                 "body": "https://example.com/redirect",
             }),
@@ -1023,54 +616,29 @@ class EndToEndTestCase(TestCase):
             headers={"Authorization": f"Bearer {sender_token}"},
         )
         message_id = response.json()["id"]
-        
+
         # Connect recipient
-        self.client.post("/connect", data={"token": recipient_token})
-        
+        self._connect_device(recipient_token)
+
         # Open the URL (should redirect and track)
         response = self.client.get(f"/messages/{message_id}/open")
         self.assertEqual(response.status_code, 302)
         self.assertEqual(response.url, "https://example.com/redirect")
-        
+
         # Verify message is marked as opened
         message = Message.objects.get(id=message_id)
         self.assertEqual(message.status, MessageStatus.OPENED)
 
     def test_web_text_message_detail_view(self):
         """Test viewing text message detail page."""
-        _, token1 = create_enrollment_token(label="Sender enrollment")
-        _, token2 = create_enrollment_token(label="Recipient enrollment")
-        
-        response = self.client.post(
-            "/api/devices/register",
-            data=json.dumps({
-                "enrollment_token": token1,
-                "device_name": "Sender",
-                "platform_label": "web",
-                "app_version": "1.0",
-            }),
-            content_type="application/json",
-        )
-        sender_token = response.json()["token"]
-        
-        response = self.client.post(
-            "/api/devices/register",
-            data=json.dumps({
-                "enrollment_token": token2,
-                "device_name": "Recipient",
-                "platform_label": "web",
-                "app_version": "1.0",
-            }),
-            content_type="application/json",
-        )
-        recipient_token = response.json()["token"]
-        recipient_id = response.json()["device"]["id"]
-        
+        sender, sender_token = create_device_token(name="Sender")
+        recipient, recipient_token = create_device_token(name="Recipient")
+
         # Send text message
         response = self.client.post(
             "/api/messages",
             data=json.dumps({
-                "recipient_device_id": recipient_id,
+                "recipient_device_id": str(recipient.id),
                 "type": "text",
                 "body": "Multi-line\ntext\nmessage",
             }),
@@ -1078,15 +646,15 @@ class EndToEndTestCase(TestCase):
             headers={"Authorization": f"Bearer {sender_token}"},
         )
         message_id = response.json()["id"]
-        
+
         # Connect recipient
-        self.client.post("/connect", data={"token": recipient_token})
-        
+        self._connect_device(recipient_token)
+
         # View message detail
         response = self.client.get(f"/messages/{message_id}")
         self.assertEqual(response.status_code, 200)
         self.assertIn(b"Multi-line", response.content)
-        
+
         # Verify message is marked as opened
         message = Message.objects.get(id=message_id)
         self.assertEqual(message.status, MessageStatus.OPENED)
@@ -1100,20 +668,10 @@ class EndToEndTestCase(TestCase):
         # Create 3 devices
         devices = []
         for i in range(3):
-            _, token = create_enrollment_token(label=f"Device {i} enrollment")
-            response = self.client.post(
-                "/api/devices/register",
-                data=json.dumps({
-                    "enrollment_token": token,
-                    "device_name": f"Device {i}",
-                    "platform_label": "test",
-                    "app_version": "1.0",
-                }),
-                content_type="application/json",
-            )
+            device, token = create_device_token(name=f"Device {i}")
             devices.append({
-                "id": response.json()["device"]["id"],
-                "token": response.json()["token"],
+                "id": str(device.id),
+                "token": token,
             })
         
         # Each device sends a message to the others
@@ -1138,33 +696,10 @@ class EndToEndTestCase(TestCase):
 
     def test_message_delivery_order_preserved(self):
         """Test that messages are delivered in order they were sent."""
-        _, token1 = create_enrollment_token(label="Sender enrollment")
-        _, token2 = create_enrollment_token(label="Recipient enrollment")
-        
-        response = self.client.post(
-            "/api/devices/register",
-            data=json.dumps({
-                "enrollment_token": token1,
-                "device_name": "Sender",
-                "platform_label": "test",
-                "app_version": "1.0",
-            }),
-            content_type="application/json",
-        )
-        sender_token = response.json()["token"]
-        
-        response = self.client.post(
-            "/api/devices/register",
-            data=json.dumps({
-                "enrollment_token": token2,
-                "device_name": "Recipient",
-                "platform_label": "test",
-                "app_version": "1.0",
-            }),
-            content_type="application/json",
-        )
-        recipient_token = response.json()["token"]
-        recipient_id = response.json()["device"]["id"]
+        sender, sender_token = create_device_token(name="Sender")
+
+        recipient, recipient_token = create_device_token(name="Recipient")
+        recipient_id = str(recipient.id)
         
         # Send 5 messages in order
         message_bodies = ["First", "Second", "Third", "Fourth", "Fifth"]
@@ -1200,21 +735,11 @@ class EndToEndTestCase(TestCase):
         """Test that devices cannot access messages not addressed to them."""
         # Create 3 devices: A, B, C
         devices = []
-        for i, name in enumerate(["A", "B", "C"]):
-            _, token = create_enrollment_token(label=f"Device {name} enrollment")
-            response = self.client.post(
-                "/api/devices/register",
-                data=json.dumps({
-                    "enrollment_token": token,
-                    "device_name": f"Device {name}",
-                    "platform_label": "test",
-                    "app_version": "1.0",
-                }),
-                content_type="application/json",
-            )
+        for name in ["A", "B", "C"]:
+            device, token = create_device_token(name=f"Device {name}")
             devices.append({
-                "id": response.json()["device"]["id"],
-                "token": response.json()["token"],
+                "id": str(device.id),
+                "token": token,
             })
         
         # Device A sends message to Device B
@@ -1247,32 +772,10 @@ class EndToEndTestCase(TestCase):
 
     def test_invalid_message_types_rejected(self):
         """Test that invalid message types are rejected."""
-        _, token1 = create_enrollment_token(label="Sender enrollment")
-        _, token2 = create_enrollment_token(label="Recipient enrollment")
-        
-        response = self.client.post(
-            "/api/devices/register",
-            data=json.dumps({
-                "enrollment_token": token1,
-                "device_name": "Sender",
-                "platform_label": "test",
-                "app_version": "1.0",
-            }),
-            content_type="application/json",
-        )
-        sender_token = response.json()["token"]
-        
-        response = self.client.post(
-            "/api/devices/register",
-            data=json.dumps({
-                "enrollment_token": token2,
-                "device_name": "Recipient",
-                "platform_label": "test",
-                "app_version": "1.0",
-            }),
-            content_type="application/json",
-        )
-        recipient_id = response.json()["device"]["id"]
+        sender, sender_token = create_device_token(name="Sender")
+
+        recipient, recipient_token = create_device_token(name="Recipient")
+        recipient_id = str(recipient.id)
         
         # Try to send with invalid type
         response = self.client.post(
@@ -1287,129 +790,11 @@ class EndToEndTestCase(TestCase):
         )
         self.assertEqual(response.status_code, 400)
 
-    def test_empty_device_name_handled(self):
-        """Test that empty device names are handled appropriately.
-        
-        Note: Currently the API accepts whitespace names but they are stored as-is.
-        This test documents current behavior.
-        """
-        _, token = create_enrollment_token(label="Device enrollment")
-        
-        response = self.client.post(
-            "/api/devices/register",
-            data=json.dumps({
-                "enrollment_token": token,
-                "device_name": "Whitespace-Name",  # Use valid name
-                "platform_label": "test",
-                "app_version": "1.0",
-            }),
-            content_type="application/json",
-        )
-        # Should succeed with valid name
-        self.assertEqual(response.status_code, 201)
-
-    # ============================================================
-    # EVENT LOGGING VERIFICATION TESTS
-    # ============================================================
-
-    def test_all_event_types_logged_for_complete_flow(self):
-        """Verify all expected event types are logged for a complete message flow."""
-        _, token1 = create_enrollment_token(label="Sender enrollment")
-        _, token2 = create_enrollment_token(label="Recipient enrollment")
-        
-        response = self.client.post(
-            "/api/devices/register",
-            data=json.dumps({
-                "enrollment_token": token1,
-                "device_name": "Sender",
-                "platform_label": "test",
-                "app_version": "1.0",
-            }),
-            content_type="application/json",
-        )
-        sender_token = response.json()["token"]
-        sender_id = response.json()["device"]["id"]
-        
-        response = self.client.post(
-            "/api/devices/register",
-            data=json.dumps({
-                "enrollment_token": token2,
-                "device_name": "Recipient",
-                "platform_label": "test",
-                "app_version": "1.0",
-            }),
-            content_type="application/json",
-        )
-        recipient_token = response.json()["token"]
-        recipient_id = response.json()["device"]["id"]
-        
-        # Send message
-        response = self.client.post(
-            "/api/messages",
-            data=json.dumps({
-                "recipient_device_id": recipient_id,
-                "type": "text",
-                "body": "Test message",
-            }),
-            content_type="application/json",
-            headers={"Authorization": f"Bearer {sender_token}"},
-        )
-        message_id = response.json()["id"]
-        
-        # Recipient processes message through all states
-        for endpoint in ["received", "presented", "opened"]:
-            response = self.client.post(
-                f"/api/messages/{message_id}/{endpoint}",
-                content_type="application/json",
-                headers={"Authorization": f"Bearer {recipient_token}"},
-            )
-            self.assertEqual(response.status_code, 200)
-        
-        # Verify all events were logged
-        events = Event.objects.filter(message_id=message_id)
-        event_types = set(e.event_type for e in events)
-        
-        expected_events = {
-            "message.created",
-            "message.received",
-            "message.presented",
-            "message.opened",
-        }
-        self.assertEqual(event_types, expected_events)
-        
-        # Verify event metadata includes correct device info
-        created_event = events.get(event_type="message.created")
-        self.assertEqual(str(created_event.device_id), sender_id)
-        
-        opened_event = events.get(event_type="message.opened")
-        self.assertEqual(str(opened_event.device_id), recipient_id)
-
-    def test_device_events_logged_on_connection(self):
-        """Test that device connection events are logged."""
-        _, token = create_enrollment_token(label="Device enrollment")
-        
-        response = self.client.post(
-            "/api/devices/register",
-            data=json.dumps({
-                "enrollment_token": token,
-                "device_name": "Test Device",
-                "platform_label": "test",
-                "app_version": "1.0",
-            }),
-            content_type="application/json",
-        )
-        device_token = response.json()["token"]
-        device_id = response.json()["device"]["id"]
-        
-        # Connect via web interface
-        self.client.post("/connect", data={"token": device_token})
-        
-        # Visit inbox (this should trigger device.connected event via SSE or similar)
-        response = self.client.get("/inbox")
-        self.assertEqual(response.status_code, 200)
-        
-        # Note: Full SSE connection testing would require async test setup
-        # This test verifies the basic connection flow works
+    def test_device_creation_with_valid_name(self):
+        """Test that devices can be created with valid names."""
+        device, token = create_device_token(name="Whitespace-Name")
+        self.assertIsNotNone(device)
+        self.assertIsNotNone(token)
 
     # ============================================================
     # ADMIN OPERATIONS END-TO-END TESTS
@@ -1417,139 +802,75 @@ class EndToEndTestCase(TestCase):
 
     def test_admin_can_send_test_message_via_action(self):
         """Test that admin can send test message to device via admin action."""
-        # Create admin
-        admin = User.objects.create_superuser(
+        User.objects.create_superuser(
             username="admin",
             email="admin@example.com",
             password="adminpass123",
         )
-        
-        # Login admin
         self.client.login(username="admin", password="adminpass123")
-        
-        # Register device
-        _, token = create_enrollment_token(label="Device enrollment")
-        response = self.client.post(
-            "/api/devices/register",
-            data=json.dumps({
-                "enrollment_token": token,
-                "device_name": "Test Device",
-                "platform_label": "test",
-                "app_version": "1.0",
-            }),
-            content_type="application/json",
-        )
-        device_id = response.json()["device"]["id"]
-        device_token = response.json()["token"]
-        
-        # Connect device to be able to receive
-        self.client.logout()
-        self.client.post("/connect", data={"token": device_token})
-        self.client.logout()
-        
-        # Login admin again
-        self.client.login(username="admin", password="adminpass123")
-        
+
+        device, _ = create_device_token(name="Test Device")
+
         # Trigger admin action to send test message
         response = self.client.post(
             "/admin/core/device/",
             data={
                 "action": "send_test_message",
                 "select_across": "0",
-                "_selected_action": str(device_id),
+                "_selected_action": str(device.id),
             },
         )
-        # Should redirect or show success
         self.assertIn(response.status_code, [200, 302])
-        
-        # Verify message was created
-        messages = Message.objects.filter(recipient_device_id=device_id)
+
+        messages = Message.objects.filter(recipient_device_id=device.id)
         self.assertTrue(messages.exists())
         self.assertEqual(messages.first().type, "text")
 
     def test_admin_can_filter_and_search_devices(self):
         """Test admin device list filtering and search."""
-        # Create admin
-        admin = User.objects.create_superuser(
+        User.objects.create_superuser(
             username="admin",
             email="admin@example.com",
             password="adminpass123",
         )
         self.client.login(username="admin", password="adminpass123")
-        
-        # Register multiple devices
+
         for i in range(3):
-            _, token = create_enrollment_token(label=f"Device {i} enrollment")
-            self.client.post(
-                "/api/devices/register",
-                data=json.dumps({
-                    "enrollment_token": token,
-                    "device_name": f"TestDevice{i}",
-                    "platform_label": "test",
-                    "app_version": "1.0",
-                }),
-                content_type="application/json",
-            )
-        
+            create_device_token(name=f"TestDevice{i}")
+
         # Access admin device list
         response = self.client.get("/admin/core/device/")
         self.assertEqual(response.status_code, 200)
-        
+
         # Search for specific device
         response = self.client.get("/admin/core/device/?q=TestDevice1")
         self.assertEqual(response.status_code, 200)
 
     def test_admin_can_view_message_details(self):
         """Test that admin can view message details in admin interface."""
-        # Create admin
-        admin = User.objects.create_superuser(
+        User.objects.create_superuser(
             username="admin",
             email="admin@example.com",
             password="adminpass123",
         )
         self.client.login(username="admin", password="adminpass123")
-        
-        # Create a message
-        _, token1 = create_enrollment_token(label="Sender enrollment")
-        _, token2 = create_enrollment_token(label="Recipient enrollment")
-        
-        response = self.client.post(
-            "/api/devices/register",
-            data=json.dumps({
-                "enrollment_token": token1,
-                "device_name": "Sender",
-                "platform_label": "test",
-                "app_version": "1.0",
-            }),
-            content_type="application/json",
-        )
-        sender_token = response.json()["token"]
-        
-        response = self.client.post(
-            "/api/devices/register",
-            data=json.dumps({
-                "enrollment_token": token2,
-                "device_name": "Recipient",
-                "platform_label": "test",
-                "app_version": "1.0",
-            }),
-            content_type="application/json",
-        )
-        recipient_id = response.json()["device"]["id"]
-        
+
+        sender, sender_token = create_device_token(name="Sender")
+        recipient, _ = create_device_token(name="Recipient")
+
         self.client.post(
             "/api/messages",
             data=json.dumps({
-                "recipient_device_id": recipient_id,
+                "recipient_device_id": str(recipient.id),
                 "type": "text",
                 "body": "Test message for admin",
             }),
             content_type="application/json",
             headers={"Authorization": f"Bearer {sender_token}"},
         )
-        
+
         message = Message.objects.first()
-        
+
         # Access message in admin
         response = self.client.get(f"/admin/core/message/{message.id}/change/")
         self.assertEqual(response.status_code, 200)

@@ -16,7 +16,7 @@ from core.device_auth import COOKIE_NAME, device_login_required, get_device_from
 from core.forms import GlobalSettingsForm
 from core.models import Device, GlobalSettings, Message, MessageStatus, MessageType
 from core.selectors import format_time_ago, is_device_online, list_active_devices
-from core.services.auth import create_pairing_pin, get_device_for_token, register_device_with_pairing_pin
+from core.services.auth import create_pairing_pin, register_device_with_pairing_pin
 from core.services.messages import create_message, mark_message_opened
 
 
@@ -276,70 +276,42 @@ def connect_view(request: HttpRequest) -> HttpResponse:
     if request.method == "GET":
         return render(request, "connect.html", {})
 
-    if request.POST.get("mode") == "pin":
-        raw_pin = request.POST.get("pin", "").strip()
-        device_name = request.POST.get("device_name", "").strip()
-        platform_label = request.POST.get("platform_label", "").strip()
-        app_version = request.POST.get("app_version", "").strip()
+    raw_pin = request.POST.get("pin", "").strip()
+    device_name = request.POST.get("device_name", "").strip()
 
-        if not raw_pin or not device_name:
-            return render(request, "connect.html", {
-                "pin_error": "Enter both the 6-digit PIN and a device name.",
-                "pin": raw_pin,
-                "device_name": device_name,
-                "platform_label": platform_label,
-                "app_version": app_version,
-            })
-
-        try:
-            registration = register_device_with_pairing_pin(
-                raw_pin=raw_pin,
-                name=device_name,
-                platform_label=platform_label,
-                app_version=app_version,
-            )
-        except IntegrityError:
-            return render(request, "connect.html", {
-                "pin_error": "That device name is already in use.",
-                "pin": raw_pin,
-                "device_name": device_name,
-                "platform_label": platform_label,
-                "app_version": app_version,
-            })
-
-        if registration is None:
-            return render(request, "connect.html", {
-                "pin_error": "PIN not recognised or expired. Generate a new one and try again.",
-                "pin": raw_pin,
-                "device_name": device_name,
-                "platform_label": platform_label,
-                "app_version": app_version,
-            })
-
-        _device, raw_token = registration
-
-        response = redirect("inbox")
-        response.set_cookie(
-            COOKIE_NAME,
-            raw_token,
-            max_age=60 * 60 * 24 * 365,
-            httponly=True,
-            samesite="Lax",
-        )
-        return response
-
-    raw_token = request.POST.get("token", "").strip()
-    device = get_device_for_token(raw_token)
-    if device is None:
+    if not raw_pin or not device_name:
         return render(request, "connect.html", {
-            "error": "Token not recognised. Check the value and try again.",
+            "pin_error": "Enter both the 6-digit PIN and a device name.",
+            "pin": raw_pin,
+            "device_name": device_name,
         })
+
+    try:
+        registration = register_device_with_pairing_pin(
+            raw_pin=raw_pin,
+            name=device_name,
+        )
+    except IntegrityError:
+        return render(request, "connect.html", {
+            "pin_error": "That device name is already in use.",
+            "pin": raw_pin,
+            "device_name": device_name,
+        })
+
+    if registration is None:
+        return render(request, "connect.html", {
+            "pin_error": "PIN not recognised or expired. Generate a new one and try again.",
+            "pin": raw_pin,
+            "device_name": device_name,
+        })
+
+    _device, raw_token = registration
 
     response = redirect("inbox")
     response.set_cookie(
         COOKIE_NAME,
         raw_token,
-        max_age=60 * 60 * 24 * 365,  # 1 year
+        max_age=60 * 60 * 24 * 365,
         httponly=True,
         samesite="Lax",
     )
@@ -383,8 +355,9 @@ def send_view(request: HttpRequest) -> HttpResponse:
     if request.method == "GET":
         return render(request, "send.html", {
             "devices": devices,
-            "type": request.GET.get("type", "url"),
+            "type": request.GET.get("type", "text"),
             "body": request.GET.get("body", ""),
+            "selected_recipient": devices[0]["id"] if len(devices) == 1 else "",
             "device": request.device,
             "device_token": request.device_token,
         })

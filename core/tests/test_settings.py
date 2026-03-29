@@ -85,7 +85,6 @@ class AdminSettingsViewTests(TestCase):
             reverse("admin_settings"),
             data={
                 "message_retention_days": 14,
-                "enrollment_token_ttl_hours": 48,
                 "api_sends_per_minute": 40,
                 "api_confirmations_per_minute": 150,
                 "api_registrations_per_hour": 12,
@@ -100,7 +99,6 @@ class AdminSettingsViewTests(TestCase):
 
         settings = GlobalSettings.objects.get(singleton_key="default")
         self.assertEqual(settings.message_retention_days, 14)
-        self.assertEqual(settings.enrollment_token_ttl_hours, 48)
         self.assertEqual(settings.api_sends_per_minute, 40)
         self.assertEqual(settings.api_confirmations_per_minute, 150)
         self.assertEqual(settings.api_registrations_per_hour, 12)

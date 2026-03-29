@@ -18,7 +18,6 @@ from django.utils import timezone
 
 from core.models import Device, Message, MessageStatus
 from core.services.auth import get_device_for_token
-from core.services.events import create_event
 
 # ---------------------------------------------------------------------------
 # In-process stream counter (used by is_device_online)
@@ -80,10 +79,6 @@ def _update_last_seen(device: Device) -> None:
     device.save(update_fields=["last_seen_at", "updated_at"])
 
 
-@sync_to_async
-def _record_event(event_type: str, device: Device) -> None:
-    create_event(event_type=event_type, device=device)
-
 
 @sync_to_async
 def _get_pending_ids(device: Device) -> list[str]:
@@ -114,7 +109,6 @@ async def _stream(device: Device):
         return
 
     await _update_last_seen(device)
-    await _record_event("device.connected", device)
 
     try:
         yield _sse("hello", {"device_id": device_id})
@@ -139,10 +133,6 @@ async def _stream(device: Device):
 
     finally:
         decrement_stream_count(device_id)
-        try:
-            await _record_event("device.disconnected", device)
-        except Exception:
-            pass
 
 
 # ---------------------------------------------------------------------------

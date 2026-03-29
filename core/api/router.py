@@ -16,17 +16,13 @@ from core.api.schemas import (
     PushConfigSchema,
     PushSubscriptionDeleteIn,
     PushSubscriptionIn,
-    RegisterDeviceIn,
     RegisterDeviceOut,
     RegisterWithPinIn,
 )
-from core.models import Device, GlobalSettings
+from core.models import Device
 from core.selectors import is_device_online, list_active_devices
 from core.services.auth import (
-    consume_enrollment_token,
-    create_device_token,
     create_pairing_pin,
-    get_device_for_token,
     register_device_with_pairing_pin,
 )
 from core.services.messages import (
@@ -57,42 +53,6 @@ def _error(code: str, message: str):
     return 400, {"error": {"code": code, "message": message}}
 
 
-@router.post(
-    "/devices/register",
-    response={201: RegisterDeviceOut, 400: ErrorResponseSchema, 429: ErrorResponseSchema},
-)
-def register_device(request: HttpRequest, payload: RegisterDeviceIn):
-    ip_address = get_client_ip(request)
-    allowed, limit = check_registration_rate_limit(ip_address=ip_address)
-    if not allowed:
-        return 429, _error(
-            "rate_limit_exceeded",
-            f"Too many registration attempts. Maximum {limit} per hour.",
-        )
-
-    enrollment = consume_enrollment_token(payload.enrollment_token)
-    if enrollment is None:
-        return _error("invalid_enrollment_token", "Enrollment token is invalid or expired.")
-
-    try:
-        device, raw_token = create_device_token(
-            name=payload.device_name,
-            platform_label=payload.platform_label,
-            app_version=payload.app_version,
-        )
-    except IntegrityError:
-        return _error("device_name_conflict", "A device with that name already exists.")
-
-    return 201, {
-        "device": {
-            "id": device.id,
-            "name": device.name,
-            "is_active": device.is_active,
-            "last_seen_at": device.last_seen_at,
-        },
-        "token": raw_token,
-    }
-
 
 @router.post("/pairings/pin", auth=auth, response=PairingPinOut)
 def pairing_pin_create(request: HttpRequest):
@@ -120,8 +80,6 @@ def register_device_with_pin(request: HttpRequest, payload: RegisterWithPinIn):
         registration = register_device_with_pairing_pin(
             raw_pin=payload.pin,
             name=payload.device_name,
-            platform_label=payload.platform_label,
-            app_version=payload.app_version,
         )
     except IntegrityError:
         return _error("device_name_conflict", "A device with that name already exists.")

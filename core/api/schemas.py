@@ -16,12 +16,6 @@ class ErrorResponseSchema(Schema):
     error: ErrorSchema
 
 
-class RegisterDeviceIn(Schema):
-    enrollment_token: str
-    device_name: str
-    platform_label: str = ""
-    app_version: str = ""
-
 
 class DeviceSchema(Schema):
     id: uuid.UUID
@@ -43,8 +37,6 @@ class PairingPinOut(Schema):
 class RegisterWithPinIn(Schema):
     pin: str
     device_name: str
-    platform_label: str = ""
-    app_version: str = ""
 
 
 class DeviceListItemSchema(DeviceSchema):

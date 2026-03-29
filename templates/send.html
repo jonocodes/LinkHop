@@ -19,8 +19,8 @@
   <div class="field">
     <label for="id_type">Type</label>
     <select id="id_type" name="type">
-      <option value="url" {% if type == "url" %}selected{% endif %}>URL</option>
       <option value="text" {% if type == "text" %}selected{% endif %}>Text</option>
+      <option value="url" {% if type == "url" %}selected{% endif %}>URL</option>
     </select>
     {% if errors.type %}<p class="field-error">{{ errors.type }}</p>{% endif %}
   </div>

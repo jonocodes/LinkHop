@@ -6,7 +6,7 @@ from django.test import TestCase, override_settings
 from django.utils import timezone
 
 from core.models import Device, GlobalSettings, Message, MessageType, PairingPin, PushSubscription
-from core.services.auth import consume_pairing_pin, create_pairing_pin
+from core.services.auth import create_pairing_pin, register_device_with_pairing_pin
 from core.services.push import notify_device_push_subscriptions, upsert_push_subscription
 
 
@@ -51,8 +51,8 @@ class PairingPinModelTests(TestCase):
         device = Device.objects.create(name="Issuer", token_hash="issuer-hash")
         _, raw_pin = create_pairing_pin(device=device)
 
-        first = consume_pairing_pin(raw_pin)
-        second = consume_pairing_pin(raw_pin)
+        first = register_device_with_pairing_pin(raw_pin=raw_pin, name="First Device")
+        second = register_device_with_pairing_pin(raw_pin=raw_pin, name="Second Device")
 
         self.assertIsNotNone(first)
         self.assertIsNone(second)
@@ -201,10 +201,7 @@ class MessageModelTests(TestCase):
         message.save()
         self.assertEqual(str(message), f"text:{message.id}")
 
-    def test_message_is_expired(self):
+    def test_message_expiry(self):
         message = self._message()
         message.save()
-        self.assertFalse(message.is_expired)
-        message.expires_at = timezone.now() - timezone.timedelta(days=1)
-        message.save()
-        self.assertTrue(message.is_expired)
+        self.assertGreater(message.expires_at, timezone.now())

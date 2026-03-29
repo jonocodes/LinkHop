@@ -19,7 +19,6 @@ class GlobalSettingsForm(forms.ModelForm):
             "Device Registration",
             {
                 "fields": (
-                    "enrollment_token_ttl_hours",
                     "api_registrations_per_hour",
                 )
             },
@@ -40,7 +39,6 @@ class GlobalSettingsForm(forms.ModelForm):
         model = GlobalSettings
         fields = [
             "message_retention_days",
-            "enrollment_token_ttl_hours",
             "api_sends_per_minute",
             "api_confirmations_per_minute",
             "api_registrations_per_hour",

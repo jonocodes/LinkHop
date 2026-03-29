@@ -5,8 +5,8 @@ import pytest
 from django.test import TestCase, override_settings
 from django.urls import reverse
 
-from core.models import Device, Message, MessageType, Event
-from core.services.auth import create_enrollment_token
+from core.models import Device, Message, MessageType
+from core.services.auth import create_device_token
 from core.sse import (
     increment_stream_count,
     decrement_stream_count,
@@ -82,19 +82,8 @@ class SSEEndpointTests(TestCase):
     """Tests for the SSE endpoint (/api/events/stream)."""
 
     def register_device(self, name: str):
-        """Helper to register a device and return response."""
-        _, enrollment_token = create_enrollment_token(label=f"{name} token")
-        response = self.client.post(
-            "/api/devices/register",
-            data=json.dumps({
-                "enrollment_token": enrollment_token,
-                "device_name": name,
-                "platform_label": "test",
-                "app_version": "1.0",
-            }),
-            content_type="application/json",
-        )
-        return response
+        """Helper to register a device and return (device, token)."""
+        return create_device_token(name=name)
 
     def test_unauthorized_access_returns_401(self):
         """Test that accessing SSE without auth returns 401."""
@@ -112,11 +101,7 @@ class SSEEndpointTests(TestCase):
 
     def test_successful_connection_with_bearer_token(self):
         """Test successful SSE connection using Bearer token."""
-        device_response = self.register_device("SSE Device")
-        self.assertEqual(device_response.status_code, 201)
-        
-        token = device_response.json()["token"]
-        device_id = device_response.json()["device"]["id"]
+        device, token = self.register_device("SSE Device")
         
         # Use a streaming client to test SSE
         response = self.client.get(
@@ -131,8 +116,7 @@ class SSEEndpointTests(TestCase):
 
     def test_successful_connection_with_query_param(self):
         """Test successful SSE connection using query parameter token."""
-        device_response = self.register_device("SSE Device Query")
-        token = device_response.json()["token"]
+        device, token = self.register_device("SSE Device Query")
         
         response = self.client.get(f"/api/events/stream?token={token}")
         
@@ -142,9 +126,7 @@ class SSEEndpointTests(TestCase):
     @pytest.mark.skip(reason="Async streaming content not iterable in sync test mode")
     def test_stream_contains_hello_event(self):
         """Test that the stream starts with a hello event."""
-        device_response = self.register_device("SSE Hello Device")
-        token = device_response.json()["token"]
-        device_id = device_response.json()["device"]["id"]
+        device, token = self.register_device("SSE Hello Device")
         
         response = self.client.get(
             "/api/events/stream",
@@ -155,35 +137,12 @@ class SSEEndpointTests(TestCase):
         # This test verifies the connection works and headers are correct
         self.assertEqual(response.status_code, 200)
 
-    @pytest.mark.skip(reason="Async streaming content not iterable in sync test mode")
-    def test_stream_creates_device_connected_event(self):
-        """Test that connecting creates a device.connected event."""
-        device_response = self.register_device("SSE Event Device")
-        token = device_response.json()["token"]
-        device_id = device_response.json()["device"]["id"]
-        
-        # Clear any existing events
-        Event.objects.all().delete()
-        
-        # Connect to SSE (read just enough to establish connection)
-        response = self.client.get(
-            "/api/events/stream",
-            headers={"Authorization": f"Bearer {token}"}
-        )
-        
-        # Async streaming requires async test client - this test is skipped
-        # In real usage, device.connected event is created on connection
-
     @pytest.mark.skip(reason="Async streaming content requires async test client")
     def test_message_notification_sent_via_sse(self):
         """Test that sending a message notifies via SSE stream."""
         # Register two devices
-        sender_response = self.register_device("SSE Sender")
-        recipient_response = self.register_device("SSE Recipient")
-        
-        sender_token = sender_response.json()["token"]
-        recipient_token = recipient_response.json()["token"]
-        recipient_id = recipient_response.json()["device"]["id"]
+        sender, sender_token = self.register_device("SSE Sender")
+        recipient, recipient_token = self.register_device("SSE Recipient")
         
         # Start SSE connection for recipient
         sse_response = self.client.get(
@@ -198,8 +157,7 @@ class SSEEndpointTests(TestCase):
     @override_settings(LINKHOP_MAX_SSE_STREAMS_PER_DEVICE=1)
     def test_stream_limit_enforced(self):
         """Test that stream limit is enforced per device."""
-        device_response = self.register_device("SSE Limited Device")
-        token = device_response.json()["token"]
+        device, token = self.register_device("SSE Limited Device")
         
         # Start first stream (will work)
         response1 = self.client.get(
@@ -214,8 +172,7 @@ class SSEEndpointTests(TestCase):
 
     def test_sse_response_headers(self):
         """Test that SSE response has correct headers."""
-        device_response = self.register_device("SSE Headers Device")
-        token = device_response.json()["token"]
+        device, token = self.register_device("SSE Headers Device")
         
         response = self.client.get(
             "/api/events/stream",
@@ -230,12 +187,10 @@ class SSEEndpointTests(TestCase):
     @pytest.mark.skip(reason="Async streaming content requires async test client")
     def test_last_seen_updated_on_connect(self):
         """Test that device last_seen_at is updated on SSE connect."""
-        device_response = self.register_device("SSE Last Seen Device")
-        token = device_response.json()["token"]
-        device_id = device_response.json()["device"]["id"]
-        
+        device, token = self.register_device("SSE Last Seen Device")
+
         # Get device before connection
-        device_before = Device.objects.get(id=device_id)
+        device_before = Device.objects.get(id=device.id)
         last_seen_before = device_before.last_seen_at
         
         # Connect to SSE - async streaming requires async test client
@@ -253,26 +208,9 @@ class SSEMessageStreamTests(TestCase):
 
     def setUp(self):
         """Set up devices for message streaming tests."""
-        self.sender_response = self._register_device("Message Stream Sender")
-        self.recipient_response = self._register_device("Message Stream Recipient")
-        
-        self.sender_token = self.sender_response.json()["token"]
-        self.recipient_token = self.recipient_response.json()["token"]
-        self.recipient_id = self.recipient_response.json()["device"]["id"]
-
-    def _register_device(self, name: str):
-        """Helper to register a device."""
-        _, enrollment_token = create_enrollment_token(label=f"{name} token")
-        return self.client.post(
-            "/api/devices/register",
-            data=json.dumps({
-                "enrollment_token": enrollment_token,
-                "device_name": name,
-                "platform_label": "test",
-                "app_version": "1.0",
-            }),
-            content_type="application/json",
-        )
+        self.sender, self.sender_token = create_device_token(name="Message Stream Sender")
+        self.recipient, self.recipient_token = create_device_token(name="Message Stream Recipient")
+        self.recipient_id = str(self.recipient.id)
 
     def _send_message(self, body: str, msg_type: str = "text"):
         """Helper to send a message."""

@@ -4,7 +4,6 @@ from django.db import transaction
 from django.utils import timezone
 
 from core.models import Device, Message, MessageStatus
-from core.services.events import create_event
 from core.services.push import notify_device_push_subscriptions
 
 
@@ -45,12 +44,6 @@ def create_message(
     )
     message.full_clean()
     message.save()
-    create_event(
-        event_type="message.created",
-        device=sender_device,
-        message=message,
-        metadata={"recipient_device_id": str(recipient_device.id)},
-    )
     transaction.on_commit(
         lambda: notify_device_push_subscriptions(device=recipient_device, message=message)
     )
@@ -89,7 +82,6 @@ def mark_message_received(*, device: Device, message_id) -> Message:
 
     if dirty_fields:
         message.save(update_fields=[*dirty_fields, "updated_at"])
-        create_event(event_type="message.received", device=device, message=message)
     return message
 
 
@@ -112,7 +104,6 @@ def mark_message_presented(*, device: Device, message_id) -> Message:
 
     if dirty_fields:
         message.save(update_fields=[*dirty_fields, "updated_at"])
-        create_event(event_type="message.presented", device=device, message=message)
     return message
 
 
@@ -136,5 +127,4 @@ def mark_message_opened(*, device: Device, message_id) -> Message:
 
     if dirty_fields:
         message.save(update_fields=[*dirty_fields, "updated_at"])
-        create_event(event_type="message.opened", device=device, message=message)
     return message
