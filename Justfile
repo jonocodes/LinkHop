@@ -1,4 +1,5 @@
 # LinkHop development tasks
+set dotenv-load
 
 # Default recipe - show available commands
 default:
@@ -20,12 +21,8 @@ kill:
     @pkill -f "gunicorn" 2>/dev/null || true
     @echo "Done"
 
-# Run development server via Django manage.py
+# Run development server via Django manage.py . this will not allow for live messages, but it does not hang on reloads. good for admin development
 run:
-    python manage.py runserver
-
-# Run on all interfaces
-run-all:
     python manage.py runserver 0.0.0.0:8000
 
 # =============================================================================

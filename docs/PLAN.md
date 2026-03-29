@@ -8,8 +8,7 @@ Its primary purpose is reliable handoff, not storage or sync.
 
 Core characteristics:
 
-* Single-user
-* Self-hosted
+* Multi-user, self-hosted
 * Ephemeral, queue-backed delivery
 * Works without browser extensions
 * Supports URL and plain text messages
@@ -33,7 +32,6 @@ Make it easy to send a URL or text message from one device to another, even when
 
 ### Non-goals for v1
 
-* Multi-user support
 * Long-term message history/archive
 * File transfer
 * End-to-end encryption
@@ -44,13 +42,17 @@ Make it easy to send a URL or text message from one device to another, even when
 
 ## Core Concepts
 
+### User
+
+Each user has their own isolated set of devices. Users log in through `/account/` using a separate session from the system admin at `/admin/`. Only admins can create user accounts (no self-registration).
+
 ### Device
 
 An addressable browser or app context that can send and receive messages.
 
 Notes:
 
-* In practice there will usually be one active device per device/browser context
+* Each device belongs to a user (owner)
 * Devices authenticate with per-device tokens
 * No per-device policy settings in v1
 * Global settings apply to all devices
@@ -59,14 +61,10 @@ Notes:
 
 A piece of ephemeral content sent from one device to another.
 
-Supported message types in v1:
+Supported message types:
 
 * `url`
 * `text`
-
-Message payload field:
-
-* `body`
 
 ### Event
 
@@ -82,6 +80,7 @@ A user can send a message from:
 
 * the normal web app
 * Android via HTTP Shortcuts opening the send page
+* the bookmarklet
 * later, a browser extension
 * later, a CLI
 
@@ -126,9 +125,7 @@ Allowed values:
 ### Ephemeral nature
 
 Messages are intended to be transient.
-The service should retain them long enough to support reliable handoff, but devices are not expected to provide long-term searchable history.
-
-Admin/log visibility may retain operational records longer than end-user inboxes.
+The service retains them long enough to support reliable handoff, but devices are not expected to provide long-term searchable history.
 
 ---
 
@@ -158,12 +155,6 @@ Fields:
 * `type`
 * `body`
 * `recipient_device_id`
-
-Use cases:
-
-* normal browser use
-* richer multiline text
-* extensionless sending
 
 ---
 
@@ -207,13 +198,6 @@ Behavior:
 * user selects recipient device dynamically in the web UI
 * user submits from the app page
 
-Rationale:
-
-* no native app required
-* no special mobile handling
-* works with dynamic device selection
-* supports URL and text
-
 ---
 
 ## 4. Receive flow
@@ -234,83 +218,36 @@ When a device is offline:
 
 ## Confirmation Signals
 
-### Goal
-
-Track meaningful delivery and user interaction without auto-opening URLs.
-
-### Signals
-
 #### `received`
 
 The client has accepted the message and can show it later.
 
 #### `presented`
 
-The message was surfaced in a user-visible way.
-Examples:
-
-* browser notification shown
-* inbox item rendered in active UI
+The message was surfaced in a user-visible way (browser notification shown, inbox item rendered).
 
 #### `opened`
 
-The user intentionally interacted with the message.
-Examples:
-
-* clicked a notification
-* clicked a message row
-
----
-
-## Notes on Terminology
-
-To keep the docs consistent:
-
-* "reliable handoff" means messages are queued server-side until received, rather than being dropped just because the target device was offline
-* "ephemeral" means LinkHop is not meant to be a long-term archive or sync system
-* realtime delivery is an optimization layered on top of the queue, not the source of truth
-
-### URL open tracking
-
-For URL messages, user interaction should go through an app route first:
-
-* `GET /messages/{id}/open`
-* record `opened`
-* redirect to destination URL
-
-### Text open tracking
-
-For text messages:
-
-* `GET /messages/{id}`
-* record `opened`
-* render text message detail
-
-### Notes
-
-* Notification display does not equal opened
-* In v1, opening a text message detail can also count as reading it
+The user intentionally interacted with the message (clicked a notification, clicked a message row).
 
 ---
 
 ## Message Lifecycle
 
-Recommended lifecycle timestamps:
+Timestamps:
 
 * `created_at`
 * `received_at`
 * `presented_at`
 * `opened_at`
 
-Recommended statuses:
+Statuses:
 
 * `queued`
 * `received`
 * `presented`
 * `opened`
 * `failed`
-
-Operationally, events should provide more detail than statuses.
 
 ---
 
@@ -339,7 +276,7 @@ The core value is surfacing actionable messages the user can click.
 
 ### Transport
 
-Use Server-Sent Events (SSE) for realtime notification.
+Server-Sent Events (SSE) for realtime notification.
 
 Why:
 
@@ -348,8 +285,6 @@ Why:
 * simpler than WebSockets for v1
 
 ### SSE events
-
-Initial stream events:
 
 * `hello`
 * `message`
@@ -363,13 +298,19 @@ Initial stream events:
 
 ---
 
-## Authentication and Enrollment
+## Authentication
 
-### Admin auth
+### System admin
 
-* Django admin for operational management
-* django-axes for admin login throttling
-* no email registration required
+* Django admin at `/admin/` for operational management
+* django-axes for login throttling
+* admin-only user account creation
+
+### Account dashboard
+
+* Per-user dashboard at `/account/`
+* Completely separate session auth from system admin
+* Logging into `/admin/` does not affect `/account/` and vice versa
 
 ### Device auth
 
@@ -377,21 +318,12 @@ Initial stream events:
 * device tokens are revocable
 * device tokens authenticate API calls and SSE
 
-### Enrollment
+### Device enrollment
 
-Use API/admin-controlled enrollment rather than email.
-
-Requirements:
-
-* blank environment should be easy to bootstrap
-* automated tests should be able to create/register devices programmatically
-
-Recommended support:
-
-* bootstrap admin secret for fresh environment
-* enrollment token flow for normal device registration
-* optional pairing URL / QR onboarding flow for new devices
-* optional test-only seed endpoints in test mode
+* user creates a short-lived pairing PIN from the account dashboard
+* new device visits connect page with PIN pre-filled
+* device name is entered at connect time
+* PIN is single-use and expires after 10 minutes
 
 ---
 
@@ -403,7 +335,7 @@ Recommended support:
 * make thresholds adjustable in admin
 * avoid automatic quarantine/removal behavior in v1
 
-### Recommended globally configurable limits
+### Globally configurable limits
 
 * admin login attempts/window
 * message sends per minute
@@ -413,174 +345,54 @@ Recommended support:
 * max URL length
 * max text body size
 
-### Compromise containment
-
-If a device token is compromised:
-
-* revoke the token/device from admin
-* rely on global rate limits to limit abuse
-* use logs for investigation
-
 ---
 
-## Admin and Operational Visibility
+## Implementation Conventions
 
-### Purpose
+### IDs
 
-Operational/admin visibility is for debugging and system oversight, not user-facing message history.
+Use UUID primary keys for externally referenced models.
 
-### Admin areas
+### Time
 
-Django admin should expose:
+Store timezone-aware UTC timestamps everywhere.
 
-* Devices
-* Messages
-* Events
-* Global settings
+### Token storage
 
-### Useful admin filters
+Never store raw device tokens. Use strong random token generation with a one-way hash persisted in the database, and constant-time comparison.
 
-* by device
-* by message type
-* by status
-* by time range
+### Service boundaries
 
-### Recommended logged events
+Prefer:
 
-* `message.created`
-* `message.received`
-* `message.presented`
-* `message.opened`
-* `device.connected`
-* `device.disconnected`
+* model validation for field-level correctness
+* service functions for state transitions and event creation
+* selectors/query helpers for common reads
+
+Avoid:
+
+* event creation spread across unrelated views
+* direct state mutation from templates or route handlers
 
 ---
 
 ## Technology Stack
 
-### Backend
-
-* Django
-* Django Admin
+* Python / Django
 * Django Ninja for JSON API
-* plain Django view for SSE endpoint
-
-### Database
-
-* SQLite initially
-
-### Security package
-
-* django-axes for admin login throttling
-
-### Future CLI
-
-* Python
-* interactive by default
-* can reuse logic/schemas from Django project where practical
-
----
-
-## CLI Direction (Later)
-
-The CLI should be interactive-first.
-
-Desired flow:
-
-1. choose message type
-2. enter content
-3. choose recipient device from a list
-4. confirm send
-
-Additional design goals:
-
-* searchable device selection
-* support non-interactive flags later
-* reuse API contracts and shared Python code where appropriate
-
----
-
-## Testing Strategy
-
-### Goals
-
-A blank environment should be easy to spin up and test automatically.
-
-Desired automated flow:
-
-1. start app with empty database
-2. bootstrap admin access
-3. register or seed two devices
-4. connect device stream(s)
-5. send message from device A to device B
-6. verify receipt/presentation/open flow
-7. inspect logs/events
-
-### Testing layers
-
-* model/unit tests
-* API integration tests
-* end-to-end tests for send/receive flows
-
-### Important design implication
-
-Do not make SSE the only path to correctness.
-HTTP APIs must support verification and recovery.
-
----
-
-## Suggested Initial Build Order
-
-1. Define models:
-
-   * Device
-   * Message
-   * Event
-   * Global settings
-2. Configure Django admin
-3. Add admin auth protection with django-axes
-4. Implement device enrollment/auth
-5. Build message send API
-6. Build `/send` and `/hop` pages
-7. Build inbox/message detail/open routes
-8. Implement SSE stream
-9. Add confirmation endpoints:
-
-   * received
-   * presented
-   * opened
-10. Add rate limiting and test utilities
-11. Add browser notifications
-12. Later add extension and CLI
+* Unfold for admin theme
+* django-axes for login throttling
+* SQLite (default), upgradeable to PostgreSQL
+* SSE for realtime delivery hints
 
 ---
 
 ## Open Questions / Deferred Items
 
-These are intentionally deferred for later:
-
-* browser extension implementation details
-* secondary PWA/mobile features beyond push-first notifications
+* browser extension implementation
+* secondary PWA/mobile features beyond push notifications
 * long-term retention policy
 * advanced message search/history UX
 * richer message types beyond URL/text
 * file transfer
-* multi-user support
 * WebSocket support
-
----
-
-## Summary
-
-LinkHop is a self-hosted, single-user, ephemeral message handoff service for personal devices.
-
-It prioritizes:
-
-* simple architecture
-* reliable queued delivery
-* extensionless usability
-* good admin/debug visibility
-* straightforward automation and testing
-
-The system should feel lightweight and temporary:
-messages are meant to get where they need to go, not live forever.

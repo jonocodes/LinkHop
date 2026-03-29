@@ -4,13 +4,16 @@ from pathlib import Path
 BASE_DIR = Path(__file__).resolve().parent.parent.parent
 
 SECRET_KEY = os.getenv(
-    "DJANGO_SECRET_KEY",
-    "dev-only-secret-key-change-me",
+    "SECRET_KEY",
+    os.getenv("DJANGO_SECRET_KEY", "dev-only-secret-key-change-me"),
 )
 
-DEBUG = os.getenv("DJANGO_DEBUG", "0") == "1"
+DEBUG = os.getenv("DEBUG", os.getenv("DJANGO_DEBUG", "False")) == "True"
 
-ALLOWED_HOSTS = os.getenv("DJANGO_ALLOWED_HOSTS", "localhost,127.0.0.1").split(",")
+ALLOWED_HOSTS = os.getenv(
+    "ALLOWED_HOSTS",
+    os.getenv("DJANGO_ALLOWED_HOSTS", "localhost,127.0.0.1"),
+).split(",")
 
 INSTALLED_APPS = [
     "unfold",
@@ -91,6 +94,7 @@ UNFOLD = {
     "SITE_TITLE": "LinkHop Admin",
     "SITE_HEADER": "LinkHop",
     "SITE_SYMBOL": "link",
+    "THEME": "auto",
     "SHOW_HISTORY": True,
     "SHOW_VIEW_ON_SITE": False,
     "SIDEBAR": {

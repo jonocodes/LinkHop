@@ -1,5 +1,7 @@
 .flox
 .venv/
+.env
+.envrc
 __pycache__/
 *.py[cod]
 db.sqlite3
