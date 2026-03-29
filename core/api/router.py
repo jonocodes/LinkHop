@@ -12,18 +12,34 @@ from core.api.schemas import (
     DeviceSchema,
     ErrorResponseSchema,
     MessageSchema,
+    PairingPinOut,
+    PushConfigSchema,
+    PushSubscriptionDeleteIn,
+    PushSubscriptionIn,
     RegisterDeviceIn,
     RegisterDeviceOut,
+    RegisterWithPinIn,
 )
 from core.models import Device, GlobalSettings
 from core.selectors import is_device_online, list_active_devices
-from core.services.auth import consume_enrollment_token, create_device_token, get_device_for_token
+from core.services.auth import (
+    consume_enrollment_token,
+    create_device_token,
+    create_pairing_pin,
+    get_device_for_token,
+    register_device_with_pairing_pin,
+)
 from core.services.messages import (
     create_message,
     list_incoming_messages,
     mark_message_opened,
     mark_message_presented,
     mark_message_received,
+)
+from core.services.push import (
+    deactivate_push_subscription,
+    get_public_push_config,
+    upsert_push_subscription,
 )
 from core.services.rate_limiter import (
     check_confirmation_rate_limit,
@@ -78,6 +94,54 @@ def register_device(request: HttpRequest, payload: RegisterDeviceIn):
     }
 
 
+@router.post("/pairings/pin", auth=auth, response=PairingPinOut)
+def pairing_pin_create(request: HttpRequest):
+    pairing_pin, raw_pin = create_pairing_pin(device=request.auth)
+    return {
+        "pin": raw_pin,
+        "expires_at": pairing_pin.expires_at,
+    }
+
+
+@router.post(
+    "/pairings/pin/register",
+    response={201: RegisterDeviceOut, 400: ErrorResponseSchema, 429: ErrorResponseSchema},
+)
+def register_device_with_pin(request: HttpRequest, payload: RegisterWithPinIn):
+    ip_address = get_client_ip(request)
+    allowed, limit = check_registration_rate_limit(ip_address=ip_address)
+    if not allowed:
+        return 429, _error(
+            "rate_limit_exceeded",
+            f"Too many registration attempts. Maximum {limit} per hour.",
+        )
+
+    try:
+        registration = register_device_with_pairing_pin(
+            raw_pin=payload.pin,
+            name=payload.device_name,
+            platform_label=payload.platform_label,
+            app_version=payload.app_version,
+        )
+    except IntegrityError:
+        return _error("device_name_conflict", "A device with that name already exists.")
+
+    if registration is None:
+        return _error("invalid_pairing_pin", "Pairing PIN is invalid or expired.")
+
+    device, raw_token = registration
+
+    return 201, {
+        "device": {
+            "id": device.id,
+            "name": device.name,
+            "is_active": device.is_active,
+            "last_seen_at": device.last_seen_at,
+        },
+        "token": raw_token,
+    }
+
+
 @router.get("/device/me", auth=auth, response=DeviceSchema)
 def device_me(request: HttpRequest):
     device = request.auth
@@ -103,6 +167,33 @@ def devices_list(request: HttpRequest):
         }
         for device in devices
     ]
+
+
+@router.get("/push/config", auth=auth, response=PushConfigSchema)
+def push_config(request: HttpRequest):
+    del request
+    return get_public_push_config()
+
+
+@router.post("/push/subscriptions", auth=auth, response={204: None, 400: ErrorResponseSchema})
+def push_subscription_create(request: HttpRequest, payload: PushSubscriptionIn):
+    if not payload.endpoint or not payload.keys.p256dh or not payload.keys.auth:
+        return _error("validation_error", "Push subscription is incomplete.")
+
+    upsert_push_subscription(
+        device=request.auth,
+        endpoint=payload.endpoint,
+        p256dh=payload.keys.p256dh,
+        auth_secret=payload.keys.auth,
+        user_agent=request.META.get("HTTP_USER_AGENT", ""),
+    )
+    return 204, None
+
+
+@router.delete("/push/subscriptions", auth=auth, response={204: None})
+def push_subscription_delete(request: HttpRequest, payload: PushSubscriptionDeleteIn):
+    deactivate_push_subscription(device=request.auth, endpoint=payload.endpoint)
+    return 204, None
 
 
 @router.post(

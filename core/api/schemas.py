@@ -35,8 +35,39 @@ class RegisterDeviceOut(Schema):
     token: str
 
 
+class PairingPinOut(Schema):
+    pin: str
+    expires_at: datetime
+
+
+class RegisterWithPinIn(Schema):
+    pin: str
+    device_name: str
+    platform_label: str = ""
+    app_version: str = ""
+
+
 class DeviceListItemSchema(DeviceSchema):
     is_online: bool
+
+
+class PushConfigSchema(Schema):
+    supported: bool
+    vapid_public_key: str
+
+
+class PushSubscriptionKeysIn(Schema):
+    p256dh: str
+    auth: str
+
+
+class PushSubscriptionIn(Schema):
+    endpoint: str
+    keys: PushSubscriptionKeysIn
+
+
+class PushSubscriptionDeleteIn(Schema):
+    endpoint: str
 
 
 class CreateMessageIn(Schema):

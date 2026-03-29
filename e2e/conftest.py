@@ -8,6 +8,8 @@ from typing import Generator
 import subprocess
 import time
 import socket
+import os
+import sys
 
 
 def wait_for_server(host: str, port: int, timeout: float = 30.0) -> bool:
@@ -25,31 +27,35 @@ def wait_for_server(host: str, port: int, timeout: float = 30.0) -> bool:
 @pytest.fixture(scope="session")
 def django_server() -> Generator[str, None, None]:
     """Start Django development server for testing."""
-    import os
-    
+
     # Use existing server if LINKHOP_TEST_SERVER is set
     if os.environ.get("LINKHOP_TEST_SERVER"):
         yield os.environ["LINKHOP_TEST_SERVER"]
         return
-    
+
     print("\n🚀 Starting Django development server...")
-    
+
     # Start the server
+    env = os.environ.copy()
+    env.setdefault("LINKHOP_WEBPUSH_VAPID_PUBLIC_KEY", "test-public-key")
+    env.setdefault("LINKHOP_WEBPUSH_VAPID_PRIVATE_KEY", "test-private-key")
+    env.setdefault("LINKHOP_WEBPUSH_VAPID_SUBJECT", "mailto:test@example.com")
     process = subprocess.Popen(
-        ["python", "manage.py", "runserver", "127.0.0.1:8000", "--noreload"],
+        [sys.executable, "manage.py", "runserver", "127.0.0.1:8000", "--noreload"],
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
+        env=env,
     )
-    
+
     # Wait for server to start
     if not wait_for_server("127.0.0.1", 8000, timeout=30):
         process.terminate()
         raise RuntimeError("Django server failed to start")
-    
+
     print("✅ Django server ready on http://127.0.0.1:8000\n")
-    
+
     yield "http://127.0.0.1:8000"
-    
+
     # Cleanup
     print("\n🛑 Stopping Django server...")
     process.terminate()

@@ -53,6 +53,17 @@
     }
   }
 
+  if (typeof navigator !== 'undefined' &&
+      navigator.serviceWorker &&
+      typeof navigator.serviceWorker.addEventListener === 'function') {
+    navigator.serviceWorker.addEventListener('message', function (e) {
+      if (!e.data) return;
+      if (e.data.type === 'linkhop_push_notified' && e.data.messageId) {
+        _markNotified(e.data.messageId);
+      }
+    });
+  }
+
   // --- Notification display ---
 
   function _show(message) {

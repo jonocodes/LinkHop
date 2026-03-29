@@ -1,51 +1,57 @@
 # LinkHop PWA / Mobile Web Specification
 
-## Version 1.0.0 - Draft
+## Version 1.1.0 - Draft
 
-This document defines the specification for LinkHop as a Progressive Web App (PWA) for mobile devices.
+This document defines the push-first PWA strategy for LinkHop on mobile devices.
+The purpose of the PWA is device notifications when the web app is not actively open.
+Installability, manifest support, and service workers matter because they enable push,
+not because a standalone shell is valuable on its own.
 
 ---
 
-## 1. PWA Install Strategy
+## 1. Product Goal and Scope
 
-### 1.1 Recommendation: OPTIONAL but ENCOURAGED
+### 1.1 Primary Goal: Device Notifications
 
-**Positioning:**
-- PWA installation is **optional** - the web app works perfectly in the browser
-- PWA installation is **encouraged** for users who want:
-  - Home screen icon for quick access
-  - Full-screen experience without browser chrome
-  - Standalone app feel
-  - Better offline support
+**Primary Goal:**
+- deliver notifications to the user's device even when LinkHop is not open in a tab
+- make those notifications work reliably enough on mobile to replace ad hoc browser-tab usage
 
-### 1.2 Install Prompt Strategy
+**Non-Goal for the first PWA phase:**
+- polished standalone app chrome
+- offline-first message composition
+- gesture-heavy mobile UX
+- install-prompt optimization
 
-**When to Show Prompt:**
+### 1.2 Required Building Blocks
 
-1. **After 3rd visit** - User has demonstrated interest
-2. **After first successful send** - User sees value
-3. **Never on first visit** - Don't interrupt onboarding
+To achieve the goal above, the first PWA implementation needs:
 
-**Prompt Design:**
+- an installable PWA shell
+- a service worker
+- Web Push subscription management
+- server-side push delivery
+- notification click handling into LinkHop routes
 
-```
-┌─────────────────────────────────┐
-│  ⭐ Add LinkHop to Home Screen   │
-│                                 │
-│  Install LinkHop for quicker    │
-│  access and offline support.    │
-│                                 │
-│  [Not Now]  [Add to Home]      │
-└─────────────────────────────────┘
-```
+Installation is therefore a prerequisite for push on some platforms, especially iOS.
 
-**Prompt Rules:**
-- Show maximum 3 times
-- If user clicks "Not Now", wait 7 days before next prompt
-- If user dismisses 3 times, never prompt again
-- Respect browser's native install prompt when available
+### 1.3 Install Strategy
 
-### 1.3 Install Experience by Platform
+**Recommendation:**
+- PWA installation is optional in product messaging
+- PWA installation is operationally required for mobile push on iOS
+- the app should explain this plainly instead of overselling "app-like" behavior
+
+**Install prompt strategy for the first push-focused phase:**
+- keep prompting minimal
+- rely on native browser install affordances first
+- add custom install education only where platform support requires it
+
+**Rule:**
+- do not build sophisticated install-prompt heuristics before push exists
+- installation UX should support notification setup, not become a parallel product track
+
+### 1.4 Install Experience by Platform
 
 **iOS (Safari):**
 ```
@@ -70,7 +76,7 @@ This document defines the specification for LinkHop as a Progressive Web App (PW
 3. App opens in standalone window
 ```
 
-### 1.4 Manifest Configuration
+### 1.5 Manifest Configuration
 
 ```json
 {
@@ -110,17 +116,15 @@ This document defines the specification for LinkHop as a Progressive Web App (PW
 }
 ```
 
-### 1.5 Display Mode Strategy
+### 1.6 Display Mode Strategy
 
 **Primary: `standalone`**
-- Full-screen without browser UI
-- Native app feel
-- System status bar visible
+- required for the expected installed-PWA behavior
+- sufficient for push-related entry flows
 
 **Fallback: `minimal-ui`**
-- Shows minimal browser controls
-- Better for first-time users
-- Easy access to URL bar if needed
+- acceptable fallback
+- not a primary design objective
 
 **iOS Quirk:**
 - `standalone` not fully supported
@@ -132,15 +136,13 @@ This document defines the specification for LinkHop as a Progressive Web App (PW
 
 ### 2.1 Goals
 
-**Primary Goal:** Enable users to receive message notifications on mobile devices even when the PWA is not actively open.
-
 **Specific Goals:**
 
 1. **Timely Delivery** - Notifications within 10 seconds of message send
 2. **Battery Efficient** - Minimal battery impact when not in use
 3. **User Control** - Granular notification permissions
 4. **Cross-Platform** - iOS and Android support
-5. **Web Push Fallback** - Graceful degradation when native notifications unavailable
+5. **Graceful degradation** - fall back to open-tab notifications when push is unavailable
 
 ### 2.2 Constraints
 
@@ -373,7 +375,7 @@ def send_push_notification(message, recipient_device):
 ### 3.4 Push Subscription Management
 
 **Storage:**
-- Store subscription in `Device.push_subscription` (JSONField)
+- Store subscriptions in a dedicated `PushSubscription` model linked to a device
 - Update subscription when it changes
 - Remove subscription if push fails with invalid subscription error
 
@@ -1003,27 +1005,31 @@ describe('PWA', () => {
 
 ## 10. Implementation Roadmap
 
-### Phase 1: Basic PWA (v2.0)
+### Phase 1: Push-Ready PWA Shell (v2.0)
 
-- [ ] Web App Manifest
-- [ ] Service Worker (static caching)
-- [ ] Mobile-optimized UI
-- [ ] Touch gestures (swipe, pull-to-refresh)
-- [ ] Install prompts
+- [x] Web App Manifest
+- [x] Service Worker registration
+- [x] Service Worker static caching for shell assets
+- [x] Icons required for installability
+- [ ] Minimal install guidance where needed for push setup
 
 ### Phase 2: Push Notifications (v2.1)
 
-- [ ] Web Push API integration
-- [ ] Push subscription management
-- [ ] Background sync
-- [ ] Notification actions
+- [x] Web Push API integration
+- [x] Push subscription management per device
+- [x] Server-side push delivery hook on message creation
+- [x] Service worker push handler
+- [x] Notification click actions
+- [x] Notification dedupe against open-tab SSE/browser notifications
 
-### Phase 3: Advanced Mobile (v2.2)
+### Phase 3: Secondary Mobile Features (Later)
 
+- [ ] Better install prompts
 - [ ] Share Target API
 - [ ] Badging API
 - [ ] Offline form submission
-- [ ] Background fetch
+- [ ] Background sync / background fetch
+- [ ] Touch gestures and other mobile UI polish
 
 ---
 
@@ -1047,6 +1053,6 @@ linkhop/
 
 ---
 
-**Document Status:** Draft v1.0.0
-**Last Updated:** 2026-03-26
+**Document Status:** Draft v1.1.0
+**Last Updated:** 2026-03-27
 **Next Review:** Before PWA implementation

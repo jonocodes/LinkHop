@@ -23,8 +23,38 @@
   <button type="submit" class="btn">Connect</button>
 </form>
 
+<hr style="margin:2rem 0;border:none;border-top:1px solid #ddd">
+
+<h2 style="font-size:1.125rem;margin:0 0 1rem">Or pair with a 6-digit PIN</h2>
+
+{% if pin_error %}
+<div class="alert alert-error">{{ pin_error }}</div>
+{% endif %}
+
+<form method="post" action="{% url 'connect' %}">
+  {% csrf_token %}
+  <input type="hidden" name="mode" value="pin">
+  <div class="field">
+    <label for="id_pin">Pairing PIN</label>
+    <input type="text" id="id_pin" name="pin" inputmode="numeric" pattern="[0-9]{6}" maxlength="6" placeholder="123456" value="{{ pin|default:'' }}" autocomplete="one-time-code">
+  </div>
+  <div class="field">
+    <label for="id_device_name">Device name</label>
+    <input type="text" id="id_device_name" name="device_name" value="{{ device_name|default:'' }}" placeholder="Phone Safari" autocomplete="off">
+  </div>
+  <div class="field">
+    <label for="id_platform_label">Platform label</label>
+    <input type="text" id="id_platform_label" name="platform_label" value="{{ platform_label|default:'' }}" placeholder="iOS">
+  </div>
+  <div class="field">
+    <label for="id_app_version">App version</label>
+    <input type="text" id="id_app_version" name="app_version" value="{{ app_version|default:'' }}" placeholder="browser">
+  </div>
+  <button type="submit" class="btn">Pair device</button>
+</form>
+
 <p style="margin-top:2rem;font-size:0.875rem;color:#666">
   Don't have a token yet? Ask your server admin to create an enrollment token,
-  then register this device via <code>POST /api/devices/register</code>.
+  register this device via <code>POST /api/devices/register</code>, or generate a pairing PIN from an already connected device.
 </p>
 {% endblock %}

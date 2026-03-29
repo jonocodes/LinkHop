@@ -227,6 +227,12 @@ Recommended enrollment token properties:
 * optionally single-use
 * short lifetime, default `24 hours`
 
+Future pairing URL / QR onboarding should follow the same model:
+
+* pairing URLs are one-time bootstrap secrets, not long-lived credentials
+* the QR code should encode the temporary pairing URL, never the long-lived device token
+* successful pairing always mints a unique per-device bearer token
+
 ---
 
 ## API Contract

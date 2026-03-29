@@ -2,10 +2,21 @@ from django.contrib import admin
 from django.contrib.auth.admin import GroupAdmin as BaseGroupAdmin
 from django.contrib.auth.admin import UserAdmin as BaseUserAdmin
 from django.contrib.auth.models import Group, User
+from django.shortcuts import redirect
+from django.urls import reverse
 from unfold.admin import ModelAdmin
 from unfold.forms import AdminPasswordChangeForm, UserChangeForm, UserCreationForm
 
-from core.models import Device, EnrollmentToken, Event, GlobalSettings, Message, MessageType
+from core.models import (
+    Device,
+    EnrollmentToken,
+    Event,
+    GlobalSettings,
+    Message,
+    MessageType,
+    PairingPin,
+    PushSubscription,
+)
 from core.services.messages import create_message
 
 admin.site.unregister(User)
@@ -73,6 +84,22 @@ class EnrollmentTokenAdmin(ModelAdmin):
     readonly_fields = ("created_at", "updated_at", "used_at")
 
 
+@admin.register(PairingPin)
+class PairingPinAdmin(ModelAdmin):
+    list_display = ("id", "created_by_device", "is_active", "used_at", "expires_at", "created_at")
+    list_filter = ("is_active", "used_at", "expires_at", "created_at")
+    search_fields = ("id", "created_by_device__name")
+    readonly_fields = ("created_at", "updated_at", "used_at", "code_hash")
+
+
+@admin.register(PushSubscription)
+class PushSubscriptionAdmin(ModelAdmin):
+    list_display = ("device", "is_active", "last_success_at", "last_failure_at", "updated_at")
+    list_filter = ("is_active", "last_success_at", "last_failure_at", "updated_at")
+    search_fields = ("device__name", "endpoint")
+    readonly_fields = ("created_at", "updated_at", "last_success_at", "last_failure_at")
+
+
 @admin.register(Message)
 class MessageAdmin(ModelAdmin):
     list_display = ("id", "type", "status", "recipient_device", "created_at", "expires_at")
@@ -104,3 +131,19 @@ class GlobalSettingsAdmin(ModelAdmin):
         "api_confirmations_per_minute",
     )
     readonly_fields = ("created_at", "updated_at")
+
+    def changelist_view(self, request, extra_context=None):
+        del extra_context
+        return redirect(reverse("admin_settings"))
+
+    def change_view(self, request, object_id, form_url="", extra_context=None):
+        del object_id, form_url, extra_context
+        return redirect(reverse("admin_settings"))
+
+    def has_add_permission(self, request):
+        del request
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        del request, obj
+        return False

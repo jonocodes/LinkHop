@@ -5,6 +5,7 @@ from django.utils import timezone
 
 from core.models import Device, Message, MessageStatus
 from core.services.events import create_event
+from core.services.push import notify_device_push_subscriptions
 
 
 def _get_global_settings():
@@ -49,6 +50,9 @@ def create_message(
         device=sender_device,
         message=message,
         metadata={"recipient_device_id": str(recipient_device.id)},
+    )
+    transaction.on_commit(
+        lambda: notify_device_push_subscriptions(device=recipient_device, message=message)
     )
     return message
 

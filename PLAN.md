@@ -390,6 +390,7 @@ Recommended support:
 
 * bootstrap admin secret for fresh environment
 * enrollment token flow for normal device registration
+* optional pairing URL / QR onboarding flow for new devices
 * optional test-only seed endpoints in test mode
 
 ---
@@ -559,7 +560,7 @@ HTTP APIs must support verification and recovery.
 These are intentionally deferred for later:
 
 * browser extension implementation details
-* PWA/mobile notification specifics
+* secondary PWA/mobile features beyond push-first notifications
 * long-term retention policy
 * advanced message search/history UX
 * richer message types beyond URL/text

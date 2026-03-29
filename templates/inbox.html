@@ -15,6 +15,13 @@
   <button id="notify-dismiss" style="background:none;border:none;cursor:pointer;color:#999;font-size:1rem;padding:0;margin-left:auto">&times;</button>
 </div>
 
+<div id="push-bar" style="display:none;margin-bottom:1.25rem;padding:0.6rem 0.875rem;background:#eef5ff;border:1px solid #c7dcff;border-radius:4px;font-size:0.875rem;align-items:center;gap:0.75rem">
+  <span id="push-copy">Enable push notifications for this installed device?</span>
+  <button id="push-btn" class="btn" style="padding:0.25rem 0.75rem;font-size:0.875rem">Enable Push</button>
+  <button id="push-disable" style="display:none;background:none;border:none;cursor:pointer;color:#666;font-size:0.875rem;padding:0">Disable</button>
+  <span id="push-status" style="color:#4b5563"></span>
+</div>
+
 {% if not messages %}
 <p style="color:#666">No pending messages.</p>
 {% else %}
@@ -48,6 +55,7 @@
 </script>
 <script src="{% static 'linkhop/sse-client.js' %}"></script>
 <script src="{% static 'linkhop/notifications.js' %}"></script>
+<script src="{% static 'linkhop/push.js' %}"></script>
 <script>
   (function () {
     var token = "{{ device_token|escapejs }}";
@@ -55,6 +63,56 @@
     var notifyBar = document.getElementById('notify-bar');
     var notifyBtn = document.getElementById('notify-btn');
     var notifyDismiss = document.getElementById('notify-dismiss');
+    var pushBar = document.getElementById('push-bar');
+    var pushCopy = document.getElementById('push-copy');
+    var pushBtn = document.getElementById('push-btn');
+    var pushDisable = document.getElementById('push-disable');
+    var pushStatus = document.getElementById('push-status');
+
+    function renderPushState(state) {
+      if (!state.supported) {
+        pushBar.style.display = 'none';
+        return;
+      }
+
+      pushBar.style.display = 'flex';
+      pushBtn.disabled = false;
+
+      if (!state.standalone) {
+        pushCopy.textContent = 'Install LinkHop to this device to enable push notifications.';
+        pushBtn.style.display = 'none';
+        pushDisable.style.display = 'none';
+        pushStatus.textContent = '';
+        return;
+      }
+
+      pushBtn.style.display = '';
+
+      if (state.subscribed) {
+        pushCopy.textContent = 'Push notifications are enabled for this device.';
+        pushBtn.textContent = 'Enabled';
+        pushBtn.disabled = true;
+        pushDisable.style.display = '';
+        pushStatus.textContent = state.permission === 'granted' ? '' : 'Browser permission is not granted.';
+        return;
+      }
+
+      pushDisable.style.display = 'none';
+      pushBtn.textContent = 'Enable Push';
+
+      if (state.permission === 'denied') {
+        pushCopy.textContent = 'Browser notification permission is blocked for this device.';
+        pushStatus.textContent = 'Allow notifications in browser settings, then try again.';
+        return;
+      }
+
+      pushCopy.textContent = 'Enable push notifications for this installed device?';
+      pushStatus.textContent = '';
+    }
+
+    function refreshPushState() {
+      LinkHopPush.getState(renderPushState);
+    }
 
     if (LinkHopNotifications.isSupported() &&
         Notification.permission === 'default' &&
@@ -72,6 +130,46 @@
       notifyBar.style.display = 'none';
       localStorage.setItem('linkhop_notify_dismissed', '1');
     });
+
+    if (LinkHopPush.isSupported()) {
+      LinkHopPush.syncAuthToken(token);
+      refreshPushState();
+    }
+
+    pushBtn.addEventListener('click', function () {
+      pushStatus.textContent = 'Working...';
+      LinkHopPush.enable(token, function (ok, message) {
+        if (ok) {
+          notifyBar.style.display = 'none';
+          pushStatus.textContent = 'Push enabled.';
+          refreshPushState();
+          return;
+        }
+        pushStatus.textContent = message || 'Push setup failed.';
+        refreshPushState();
+      });
+    });
+
+    pushDisable.addEventListener('click', function () {
+      pushStatus.textContent = 'Disabling...';
+      LinkHopPush.disable(token, function (ok) {
+        pushStatus.textContent = ok ? 'Push disabled.' : 'Failed to disable push.';
+        refreshPushState();
+      });
+    });
+
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.addEventListener('message', function (e) {
+        if (!e.data) return;
+        if (e.data.type === LinkHopPush.refreshEventName) {
+          pushStatus.textContent = 'Push subscription changed. Refreshing...';
+          LinkHopPush.enable(token, function (ok, message) {
+            pushStatus.textContent = ok ? 'Push subscription refreshed.' : (message || 'Failed to refresh push.');
+            refreshPushState();
+          });
+        }
+      });
+    }
 
     var pageIds = [{% for msg in messages %}"{{ msg.id }}"{% if not forloop.last %},{% endif %}{% endfor %}];
 

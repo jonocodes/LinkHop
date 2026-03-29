@@ -1,0 +1,30 @@
+{% extends "admin/base_site.html" %}
+
+{% block content %}
+<div id="content-main">
+  <form method="post" novalidate>
+    {% csrf_token %}
+
+    {% if form.non_field_errors %}
+    <p class="errornote">
+      {{ form.non_field_errors }}
+    </p>
+    {% endif %}
+
+    <div class="module aligned">
+      <h2 style="margin-bottom:0.5rem">Runtime Settings</h2>
+      <p style="margin:0 0 1rem;color:var(--body-quiet-color, #666)">
+        These settings apply globally and are stored in the database. Changes take effect immediately.
+      </p>
+    </div>
+
+    {% for fieldset in adminform %}
+      {% include "admin/includes/fieldset.html" %}
+    {% endfor %}
+
+    <div class="submit-row">
+      <input type="submit" value="Save settings" class="default">
+    </div>
+  </form>
+</div>
+{% endblock %}

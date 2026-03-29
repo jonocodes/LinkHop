@@ -14,7 +14,10 @@ The tests are configured to work with your existing Playwright setup from `../sa
 # Run all E2E tests
 pytest e2e/ -v
 
-# Run specific test
+# Run push enrollment browser test
+pytest e2e/test_pwa_push.py -v
+
+# Run SSE browser test
 pytest e2e/test_sse_realtime.py -v
 
 # Run with headed browser (visible)
@@ -46,6 +49,7 @@ pytest e2e/ -v
 ## Test Structure
 
 - `conftest.py` - Playwright fixtures and Django server setup
+- `test_pwa_push.py` - Installed-PWA push enrollment and unsubscribe flow
 - `test_sse_realtime.py` - Tests for SSE real-time message delivery
   - Device enrollment through browser
   - Real-time message delivery
@@ -56,10 +60,21 @@ pytest e2e/ -v
 
 1. **Django Server Fixture**: Automatically starts `manage.py runserver` on port 8000
 2. **Browser Contexts**: Creates isolated browser contexts for each device
-3. **Device Enrollment**: Uses the web UI to enroll devices (simulates real user)
-4. **SSE Connection**: The inbox page automatically establishes SSE connection
-5. **Message Sending**: Uses the send form to send messages
+3. **Device Enrollment**: Browser tests use the current token or PIN-based connect flow
+4. **Push Mocking**: `test_pwa_push.py` mocks browser push APIs while persisting real subscriptions server-side
+5. **SSE Connection**: The inbox page automatically establishes SSE connection
 6. **Real-time Verification**: Checks that messages appear without page refresh
+
+## Push E2E Notes
+
+`test_pwa_push.py` does not require a real browser push service. It:
+
+1. Creates a real device token through the LinkHop API
+2. Connects through `/connect`
+3. Mocks `Notification`, `serviceWorker`, and `PushManager`
+4. Verifies `/api/push/subscriptions` persists and deactivates the subscription row
+
+The Django server fixture sets test VAPID env vars automatically if they are not already present, so `GET /api/push/config` stays enabled during browser runs.
 
 ## Troubleshooting
 

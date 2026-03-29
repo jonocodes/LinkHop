@@ -115,6 +115,71 @@ Get information about the authenticated device.
 
 ---
 
+### Push Configuration
+
+Get push capability for the authenticated device and the public VAPID key needed
+for subscription from an installed PWA.
+
+**Endpoint:** `GET /api/push/config`
+
+**Authentication:** Bearer token required
+
+**Response (200 OK):**
+```json
+{
+  "supported": true,
+  "vapid_public_key": "BExamplePublicKey"
+}
+```
+
+**Notes:**
+- `supported` is `false` when Web Push is not configured server-side
+- when `supported` is `false`, `vapid_public_key` is empty
+
+---
+
+### Save Push Subscription
+
+Store or update the browser push subscription for the authenticated device.
+
+**Endpoint:** `POST /api/push/subscriptions`
+
+**Authentication:** Bearer token required
+
+**Request Body:**
+```json
+{
+  "endpoint": "https://push.example.test/sub/123",
+  "keys": {
+    "p256dh": "base64url-p256dh",
+    "auth": "base64url-auth"
+  }
+}
+```
+
+**Response (204 No Content)**
+
+---
+
+### Remove Push Subscription
+
+Deactivate the stored browser push subscription for the authenticated device.
+
+**Endpoint:** `DELETE /api/push/subscriptions`
+
+**Authentication:** Bearer token required
+
+**Request Body:**
+```json
+{
+  "endpoint": "https://push.example.test/sub/123"
+}
+```
+
+**Response (204 No Content)**
+
+---
+
 ### Send Message
 
 Send a URL or text message to another device.

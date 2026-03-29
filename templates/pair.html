@@ -1,0 +1,24 @@
+{% extends "base.html" %}
+
+{% block title %}Pair Device — LinkHop{% endblock %}
+
+{% block content %}
+<h1>Pair a new device</h1>
+
+<p style="color:#444;margin-bottom:1.5rem">
+  Generate a short-lived 6-digit PIN on this trusted device, then enter it on the new device’s
+  <a href="{% url 'connect' %}">connect page</a> together with a device name.
+</p>
+
+{% if pin %}
+<div class="alert alert-success">
+  <strong data-pairing-pin="{{ pin }}" style="display:block;font-size:2rem;letter-spacing:0.25rem">{{ pin }}</strong>
+  Expires at {{ expires_at|date:"Y-m-d H:i" }} UTC.
+</div>
+{% endif %}
+
+<form method="post" action="{% url 'pair' %}">
+  {% csrf_token %}
+  <button type="submit" class="btn">{% if pin %}Generate new PIN{% else %}Generate PIN{% endif %}</button>
+</form>
+{% endblock %}

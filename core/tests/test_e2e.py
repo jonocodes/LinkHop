@@ -43,6 +43,29 @@ class EndToEndTestCase(TestCase):
         self.assertEqual(Event.objects.count(), 0)
         self.assertEqual(Message.objects.count(), 0)
 
+    def test_manifest_route_returns_pwa_metadata(self):
+        response = self.client.get("/manifest.json")
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertEqual(payload["name"], "LinkHop")
+        self.assertEqual(payload["start_url"], "/inbox")
+        self.assertEqual(payload["display"], "standalone")
+        self.assertEqual(len(payload["icons"]), 2)
+
+    def test_service_worker_route_returns_javascript(self):
+        response = self.client.get("/service-worker.js")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("application/javascript", response.headers["Content-Type"])
+        self.assertIn(b"CACHE_NAME", response.content)
+        self.assertIn(b"/manifest.json", response.content)
+        self.assertIn(b"linkhop_push_notified", response.content)
+        self.assertIn(b"hasVisibleClient", response.content)
+        self.assertIn(b"pushsubscriptionchange", response.content)
+        self.assertIn(b"linkhop_push_auth", response.content)
+        self.assertIn(b"linkhop_push_refresh_required", response.content)
+
     def test_bootstrap_admin_creation(self):
         """Create an admin user to manage the system."""
         admin = User.objects.create_superuser(
@@ -752,6 +775,80 @@ class EndToEndTestCase(TestCase):
         # Verify disconnected (redirected to connect)
         response = self.client.get("/inbox")
         self.assertEqual(response.status_code, 302)
+
+    def test_connect_page_includes_manifest_link(self):
+        response = self.client.get("/connect")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(b'rel="manifest" href="/manifest.json"', response.content)
+
+    def test_inbox_page_includes_push_state_controls(self):
+        _, token = create_enrollment_token(label="Push UI enrollment")
+
+        response = self.client.post(
+            "/api/devices/register",
+            data=json.dumps({
+                "enrollment_token": token,
+                "device_name": "Push UI Device",
+                "platform_label": "web",
+                "app_version": "1.0",
+            }),
+            content_type="application/json",
+        )
+        device_token = response.json()["token"]
+        self.client.post("/connect", data={"token": device_token})
+
+        response = self.client.get("/inbox")
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(b'id="push-disable"', response.content)
+        self.assertIn(b'refreshPushState', response.content)
+
+    def test_web_pairing_pin_flow(self):
+        """Generate a PIN on one device and use it to pair a second browser."""
+        _, token = create_enrollment_token(label="PIN Issuer enrollment")
+
+        response = self.client.post(
+            "/api/devices/register",
+            data=json.dumps({
+                "enrollment_token": token,
+                "device_name": "PIN Issuer",
+                "platform_label": "web",
+                "app_version": "1.0",
+            }),
+            content_type="application/json",
+        )
+        issuer_token = response.json()["token"]
+
+        response = self.client.post("/connect", data={"token": issuer_token})
+        self.assertEqual(response.status_code, 302)
+
+        response = self.client.post("/pair")
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(b"Generate new PIN", response.content)
+
+        import re
+
+        match = re.search(rb'data-pairing-pin="([0-9]{6})"', response.content)
+        self.assertIsNotNone(match)
+        pin = match.group(1).decode("ascii")
+
+        new_client = self.client_class()
+        response = new_client.post(
+            "/connect",
+            data={
+                "mode": "pin",
+                "pin": pin,
+                "device_name": "Pinned Browser",
+                "platform_label": "iOS",
+                "app_version": "browser",
+            },
+        )
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response.url, "/inbox")
+
+        response = new_client.get("/inbox")
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(b"Pinned Browser", response.content)
 
     def test_web_send_page_url_flow(self):
         """Test sending URL via web send page."""

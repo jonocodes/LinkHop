@@ -59,6 +59,54 @@ class EnrollmentToken(TimestampedModel):
         return self.is_active and self.used_at is None and self.expires_at > timezone.now()
 
 
+class PairingPin(TimestampedModel):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    code_hash = models.CharField(max_length=128, unique=True)
+    created_by_device = models.ForeignKey(
+        Device,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="created_pairing_pins",
+    )
+    expires_at = models.DateTimeField()
+    is_active = models.BooleanField(default=True)
+    used_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+
+    def __str__(self) -> str:
+        return f"pairing-pin:{self.id}"
+
+    @property
+    def is_usable(self) -> bool:
+        return self.is_active and self.used_at is None and self.expires_at > timezone.now()
+
+
+class PushSubscription(TimestampedModel):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    device = models.ForeignKey(
+        Device,
+        on_delete=models.CASCADE,
+        related_name="push_subscriptions",
+    )
+    endpoint = models.URLField(unique=True, max_length=1000)
+    p256dh = models.CharField(max_length=255)
+    auth_secret = models.CharField(max_length=255)
+    user_agent = models.CharField(max_length=255, blank=True)
+    is_active = models.BooleanField(default=True)
+    last_success_at = models.DateTimeField(null=True, blank=True)
+    last_failure_at = models.DateTimeField(null=True, blank=True)
+    last_error = models.CharField(max_length=255, blank=True)
+
+    class Meta:
+        ordering = ["-updated_at"]
+
+    def __str__(self) -> str:
+        return f"push:{self.device.name}"
+
+
 class MessageType(models.TextChoices):
     URL = "url", "URL"
     TEXT = "text", "Text"

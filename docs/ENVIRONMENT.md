@@ -167,6 +167,63 @@ python -c "import secrets; print(secrets.token_urlsafe(50))"
 - **Default:** `10`
 - **Description:** Default HTTP timeout for external requests
 
+### LINKHOP_WEBPUSH_VAPID_PUBLIC_KEY
+- **Required:** No
+- **Default:** empty
+- **Description:** Base64 URL-safe VAPID public key for Web Push subscriptions
+
+### LINKHOP_WEBPUSH_VAPID_PRIVATE_KEY
+- **Required:** No
+- **Default:** empty
+- **Description:** VAPID private key used to sign Web Push requests
+
+### LINKHOP_WEBPUSH_VAPID_SUBJECT
+- **Required:** No
+- **Default:** `mailto:admin@localhost`
+- **Description:** VAPID subject claim used for Web Push delivery
+
+**Setup Note:**
+Generate a P-256 VAPID keypair and place the resulting URL-safe base64 values in your real `.env`.
+Do not commit the private key.
+
+Example generation flow with `openssl`:
+
+```bash
+tmpdir=$(mktemp -d)
+openssl ecparam -name prime256v1 -genkey -noout -out "$tmpdir/private.pem"
+openssl ec -in "$tmpdir/private.pem" -text -noout > "$tmpdir/key.txt"
+python - <<'PY' "$tmpdir/key.txt"
+import sys, base64, pathlib
+text = pathlib.Path(sys.argv[1]).read_text().splitlines()
+priv = []
+pub = []
+mode = None
+for line in text:
+    s = line.strip()
+    if s == "priv:":
+        mode = "priv"
+        continue
+    if s == "pub:":
+        mode = "pub"
+        continue
+    if s.startswith("ASN1 OID:") or s.startswith("NIST CURVE:"):
+        mode = None
+    if mode in {"priv", "pub"} and s:
+        hex_line = s.replace(":", "").replace(" ", "")
+        if mode == "priv":
+            priv.append(hex_line)
+        else:
+            pub.append(hex_line)
+
+def b64u(data: bytes) -> str:
+    return base64.urlsafe_b64encode(data).rstrip(b"=").decode("ascii")
+
+print("LINKHOP_WEBPUSH_VAPID_PUBLIC_KEY=" + b64u(bytes.fromhex("".join(pub))))
+print("LINKHOP_WEBPUSH_VAPID_PRIVATE_KEY=" + b64u(bytes.fromhex("".join(priv))))
+PY
+rm -rf "$tmpdir"
+```
+
 ### LINKHOP_ADMIN_SESSION_TIMEOUT_MINUTES
 - **Required:** No
 - **Default:** `30`
