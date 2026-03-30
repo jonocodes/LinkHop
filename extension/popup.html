@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>LinkHop</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <header>
+    <span class="logo">↗ LinkHop</span>
+    <span id="status-dot" class="dot dot-unknown" title="Connection status"></span>
+  </header>
+
+  <!-- Setup screen (shown when not linked) -->
+  <section id="screen-setup" class="screen hidden">
+    <h2>Connect to LinkHop</h2>
+    <p class="hint">Enter your server URL and a pairing PIN from an existing device.</p>
+
+    <label for="server-url">Server URL</label>
+    <input id="server-url" type="url" placeholder="https://linkhop.example.com" autocomplete="off">
+
+    <label for="device-name">Device name</label>
+    <input id="device-name" type="text" placeholder="Firefox Extension" autocomplete="off">
+
+    <label for="pin">Pairing PIN</label>
+    <input id="pin" type="text" placeholder="123456" maxlength="6" autocomplete="off">
+
+    <button id="btn-link" class="btn-primary">Link device</button>
+    <p id="setup-error" class="error hidden"></p>
+  </section>
+
+  <!-- Main screen (shown when linked) -->
+  <section id="screen-main" class="screen hidden">
+    <div id="connection-status" class="status-bar">
+      <span id="status-text">Connecting…</span>
+    </div>
+
+    <label for="device-select">Send to</label>
+    <select id="device-select">
+      <option value="">— select device —</option>
+    </select>
+
+    <label for="send-type">Type</label>
+    <div class="radio-group">
+      <label><input type="radio" name="send-type" value="url" checked> URL</label>
+      <label><input type="radio" name="send-type" value="text"> Text</label>
+    </div>
+
+    <label for="send-body">Content</label>
+    <textarea id="send-body" rows="3" placeholder="https://…"></textarea>
+
+    <button id="btn-send" class="btn-primary">Send</button>
+    <p id="send-feedback" class="feedback hidden"></p>
+
+    <hr>
+    <button id="btn-unlink" class="btn-secondary">Unlink device</button>
+  </section>
+
+  <script src="popup.js"></script>
+</body>
+</html>

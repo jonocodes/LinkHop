@@ -22,6 +22,7 @@ dev = [
   "pytest-playwright>=0.7,<0.8",
   "playwright>=1.51,<1.52",
   "ruff>=0.11,<0.12",
+  "requests>=2,<3",
 ]
 
 [tool.setuptools.packages.find]
