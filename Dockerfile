@@ -19,13 +19,7 @@ COPY linkhop/ ./linkhop/
 COPY manage.py .
 
 # Install dependencies
-RUN pip install --no-cache-dir --user \
-    Django>=5.1,<5.3 \
-    django-ninja>=1.3,<1.4 \
-    django-axes>=7,<8 \
-    django-unfold>=0,<1 \
-    uvicorn>=0.34,<0.35 \
-    gunicorn
+RUN pip install --user -e .
 
 # Stage 2: Production image
 FROM python:3.12-slim
@@ -48,11 +42,11 @@ ENV PATH=/home/linkhop/.local/bin:$PATH
 # Copy application code
 COPY --chown=linkhop:linkhop core/ ./core/
 COPY --chown=linkhop:linkhop linkhop/ ./linkhop/
+COPY --chown=linkhop:linkhop templates/ ./templates/
 COPY --chown=linkhop:linkhop manage.py .
-COPY --chown=linkhop:linkhop docs/ ./docs/
 
-# Create data directory for SQLite
-RUN mkdir -p /app/data && chown -R linkhop:linkhop /app
+# Create data and static directories
+RUN mkdir -p /app/data /app/staticfiles && chown -R linkhop:linkhop /app
 
 # Switch to non-root user
 USER linkhop

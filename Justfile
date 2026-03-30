@@ -130,19 +130,9 @@ docker-build:
 docker-up:
     docker compose up -d
 
-docker-down:
-    docker compose down
-
-docker-logs:
-    docker compose logs -f
-
 # Start services with development overrides
 docker-dev:
     docker compose -f docker-compose.yml -f docker-compose.override.yml up -d
-
-# Stop all services and remove volumes
-docker-down-volumes:
-    docker compose down -v
 
 # Run migrations in Docker
 docker-migrate:
@@ -152,9 +142,6 @@ docker-migrate:
 docker-createsuperuser:
     docker compose exec linkhop python manage.py createsuperuser
 
-# Shell into container
-docker-shell:
-    docker compose exec linkhop sh
 
 # Clean up Docker artifacts
 docker-clean:

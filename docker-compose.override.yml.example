@@ -1,0 +1,31 @@
+# Docker Compose Override for Development
+# This file is automatically loaded by docker-compose when present
+# It overrides production settings with development-friendly defaults
+
+services:
+  linkhop:
+    environment:
+      - DEBUG=True
+      - DJANGO_SETTINGS_MODULE=linkhop.settings.development
+      - SECRET_KEY=dev-secret-key-not-for-production
+      - ALLOWED_HOSTS=localhost,127.0.0.1,0.0.0.0
+    volumes:
+      # Mount source code for hot-reloading during development
+      - ./core:/app/core
+      - ./linkhop:/app/linkhop
+      - ./manage.py:/app/manage.py
+    command: >
+      sh -c "python manage.py migrate --noinput && 
+             python manage.py runserver 0.0.0.0:8000"
+    ports:
+      - "8000:8000"
+
+  # Disable nginx in development - use Django's runserver directly
+  caddy:
+    deploy:
+      replicas: 0
+
+  # Disable certbot in development
+  # certbot:
+  #   deploy:
+  #     replicas: 0
