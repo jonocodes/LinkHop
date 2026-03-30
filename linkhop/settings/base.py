@@ -15,6 +15,10 @@ ALLOWED_HOSTS = os.getenv(
     os.getenv("DJANGO_ALLOWED_HOSTS", "localhost,127.0.0.1"),
 ).split(",")
 
+_csrf_origins = os.getenv("CSRF_TRUSTED_ORIGINS", "").strip()
+if _csrf_origins:
+    CSRF_TRUSTED_ORIGINS = [o.strip() for o in _csrf_origins.split(",")]
+
 INSTALLED_APPS = [
     "unfold",
     "django.contrib.admin",
@@ -29,6 +33,7 @@ INSTALLED_APPS = [
 
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
+    "whitenoise.middleware.WhiteNoiseMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
