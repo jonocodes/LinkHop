@@ -56,12 +56,6 @@ def build_admin_sidebar_navigation(request: HttpRequest) -> list[dict]:
                     "link": reverse("admin:auth_user_changelist"),
                     "permission": lambda req: req.user.has_perm("auth.view_user"),
                 },
-                {
-                    "title": "Groups",
-                    "icon": "groups",
-                    "link": reverse("admin:auth_group_changelist"),
-                    "permission": lambda req: req.user.has_perm("auth.view_group"),
-                },
             ],
         },
         {

@@ -1,11 +1,12 @@
-from django.contrib.admin import AdminSite
 from django.shortcuts import redirect
+from unfold.sites import UnfoldAdminSite
 
 from core.admin_navigation import build_admin_sidebar_navigation
 
 
-class AccountAdminSite(AdminSite):
-    site_header = "LinkHop"
+class AccountAdminSite(UnfoldAdminSite):
+    settings_name = "UNFOLD_ACCOUNT"
+    site_header = "LinkHop Account"
     site_title = "LinkHop"
     index_title = "My account"
 
@@ -15,23 +16,13 @@ class AccountAdminSite(AdminSite):
 
     def each_context(self, request):
         from core.account_auth import get_account_user
-
-        def _with_permissions(groups):
-            for group in groups:
-                items = group.get("items", [])
-                for item in items:
-                    perm = item.get("permission")
-                    item["has_permission"] = perm(request) if callable(perm) else True
-                    if "items" in item:
-                        item["items"] = _with_permissions([{"items": item["items"]}])[0]["items"]
-            return groups
-
         context = super().each_context(request)
-        context["account_user"] = get_account_user(request)
+        account_user = get_account_user(request)
+        context["account_user"] = account_user
         context["available_apps"] = []
-        # Account dashboard uses session auth separate from Django admin user perms.
-        # Build sidebar items explicitly and attach has_permission for Unfold template.
-        context["sidebar_navigation"] = _with_permissions(build_admin_sidebar_navigation(request))
+        # Give Unfold's templates (avatar, account links) a real user object.
+        if account_user is not None:
+            context["user"] = account_user
         return context
 
     def index(self, request, extra_context=None):

@@ -14,7 +14,6 @@
   <div style="display:flex;flex-wrap:wrap;gap:0.75rem;margin-bottom:1rem">
     <a class="btn" href="{% url 'connect' %}" style="text-decoration:none">Connect Device</a>
     <a class="btn" href="{% url 'account_connected_devices' %}" style="text-decoration:none;background:#1f2937">Account</a>
-    <a class="btn" href="/admin/" style="text-decoration:none;background:#374151">System admin</a>
     <a class="btn" href="{{ github_url }}" style="text-decoration:none;background:#fff;color:#1a1a1a;border:1px solid #ccc" target="_blank" rel="noopener noreferrer">GitHub</a>
   </div>
 
@@ -23,9 +22,12 @@
     <p style="margin:0 0 0.5rem">Connected as <strong>{{ device.name }}</strong>.</p>
     <p style="margin:0"><a href="{% url 'inbox' %}">Open inbox</a> or <a href="{% url 'send' %}">send a message</a>.</p>
     {% else %}
-    <p style="margin:0 0 0.5rem">New device? Use a 6-digit pairing PIN from an existing device.</p>
-    <p style="margin:0">Need server control? Use the admin interface for settings and enrollment management.</p>
+    <p style="margin:0">New device? Use a 6-digit pairing PIN from an existing device.</p>
     {% endif %}
   </div>
+
+  <p style="margin:1.5rem 0 0;font-size:0.8rem;color:#aaa">
+    <a href="/admin/" style="color:#aaa">System admin</a>
+  </p>
 </section>
 {% endblock %}

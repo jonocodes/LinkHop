@@ -1,4 +1,5 @@
 from django import forms
+from unfold.widgets import UnfoldAdminIntegerFieldWidget, UnfoldBooleanSwitchWidget
 
 from core.models import GlobalSettings
 
@@ -47,5 +48,11 @@ class GlobalSettingsForm(forms.ModelForm):
             "allow_self_send",
         ]
         widgets = {
-            "allow_self_send": forms.CheckboxInput(),
+            "message_retention_days": UnfoldAdminIntegerFieldWidget(),
+            "api_sends_per_minute": UnfoldAdminIntegerFieldWidget(),
+            "api_confirmations_per_minute": UnfoldAdminIntegerFieldWidget(),
+            "api_registrations_per_hour": UnfoldAdminIntegerFieldWidget(),
+            "max_sse_streams_per_device": UnfoldAdminIntegerFieldWidget(),
+            "max_pending_messages": UnfoldAdminIntegerFieldWidget(),
+            "allow_self_send": UnfoldBooleanSwitchWidget(),
         }

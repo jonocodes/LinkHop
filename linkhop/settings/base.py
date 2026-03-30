@@ -92,11 +92,38 @@ DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
 UNFOLD = {
     "SITE_TITLE": "LinkHop Admin",
-    "SITE_HEADER": "LinkHop",
+    "SITE_HEADER": "LinkHop Admin",
     "SITE_SYMBOL": "link",
-    "THEME": "auto",
     "SHOW_HISTORY": True,
     "SHOW_VIEW_ON_SITE": False,
+    "SIDEBAR": {
+        "show_search": False,
+        "show_all_applications": False,
+        "navigation": "core.admin_navigation.build_admin_sidebar_navigation",
+    },
+}
+
+UNFOLD_ACCOUNT = {
+    "SITE_TITLE": "LinkHop Account",
+    "SITE_HEADER": "LinkHop Account",
+    "SITE_SYMBOL": "person",
+    "SHOW_HISTORY": False,
+    "SHOW_VIEW_ON_SITE": False,
+    "COLORS": {
+        "primary": {
+            "50": "oklch(98.0% .025 170)",
+            "100": "oklch(95.0% .055 165)",
+            "200": "oklch(90.0% .095 162)",
+            "300": "oklch(83.0% .140 160)",
+            "400": "oklch(73.0% .175 162)",
+            "500": "oklch(62.0% .175 165)",
+            "600": "oklch(53.0% .160 164)",
+            "700": "oklch(45.0% .135 163)",
+            "800": "oklch(37.0% .105 163)",
+            "900": "oklch(30.0% .080 163)",
+            "950": "oklch(22.0% .055 163)",
+        },
+    },
     "SIDEBAR": {
         "show_search": False,
         "show_all_applications": False,

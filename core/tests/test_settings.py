@@ -155,12 +155,12 @@ class AdminSettingsViewTests(TestCase):
 
     def test_account_add_device_page_creates_pin(self):
         self._account_login()
-        # POST redirects back to the page (PRG pattern); follow to get the PIN display
+        # POST redirects back to the page (PRG pattern); follow to get the registration link display
         response = self.client.post(reverse("account_add_device"), follow=True)
 
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, "Pairing PIN")
-        self.assertContains(response, "Create another PIN")
+        self.assertContains(response, "Registration link")
+        self.assertContains(response, "Cancel registration")
         self.assertContains(response, 'id="pairing-countdown"')
 
     def test_account_bookmarklet_page_renders_drag_link(self):
@@ -172,3 +172,36 @@ class AdminSettingsViewTests(TestCase):
         self.assertContains(response, "javascript:")
         self.assertContains(response, "/hop")
         self.assertContains(response, 'draggable="true"')
+
+
+class AccountNonAdminViewTests(TestCase):
+    """Tests account views when request.user is anonymous (no force_login).
+
+    This reproduces the real-world case where a regular user logs in via
+    /account/login/ only — request.user is AnonymousUser, account session holds
+    the user. Unfold templates must not crash on an empty username.
+    """
+
+    def setUp(self):
+        from core.account_auth import SESSION_KEY
+        self.user = User.objects.create_user(
+            username="alice", password="pass", email="alice@example.com"
+        )
+        session = self.client.session
+        session[SESSION_KEY] = self.user.pk
+        session.save()
+        # Intentionally no force_login — request.user stays anonymous.
+
+    def test_connected_devices_page_renders_for_non_admin_account_user(self):
+        response = self.client.get(reverse("account_connected_devices"))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Add device")
+
+    def test_add_device_page_renders_for_non_admin_account_user(self):
+        response = self.client.get(reverse("account_add_device"))
+        self.assertEqual(response.status_code, 200)
+
+    def test_bookmarklet_page_renders_for_non_admin_account_user(self):
+        response = self.client.get(reverse("account_bookmarklet"))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "javascript:")

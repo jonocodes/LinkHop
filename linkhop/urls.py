@@ -1,6 +1,8 @@
 from django.contrib import admin
 from django.urls import include, path
 
+from core.account_site import account_site
+
 from core.sse import sse_view
 from core.views import (
     account_add_device_view,
@@ -38,6 +40,7 @@ urlpatterns = [
     path("account/connected-devices/<str:device_id>/remove", account_remove_device_view, name="account_remove_device"),
     path("account/add-device/", account_add_device_view, name="account_add_device"),
     path("account/bookmarklet/", account_bookmarklet_view, name="account_bookmarklet"),
+    path("account/", account_site.urls),
     path("healthz", healthcheck, name="healthcheck"),
     path("connect", connect_view, name="connect"),
     path("disconnect", disconnect_view, name="disconnect"),

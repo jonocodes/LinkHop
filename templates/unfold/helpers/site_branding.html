@@ -1,0 +1,9 @@
+<div id="site-name">
+    {% if site_dropdown %}
+        {{ site_header|default:'Django administration' }}
+    {% else %}
+        <a href="{% if account_user %}{% url 'account_connected_devices' %}{% else %}{% url 'admin:index' %}{% endif %}">
+            {{ site_header|default:'Django administration' }}
+        </a>
+    {% endif %}
+</div>
