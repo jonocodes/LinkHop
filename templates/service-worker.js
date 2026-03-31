@@ -144,7 +144,7 @@ self.addEventListener("push", (event) => {
       const hasVisibleClient = clients.some(
         (client) => client.visibilityState === "visible" || client.focused
       );
-      if (hasVisibleClient) {
+      if (hasVisibleClient && !data.test) {
         return undefined;
       }
 
