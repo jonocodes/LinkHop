@@ -131,6 +131,9 @@ db-check:
 docker-build:
     docker compose build
 
+docker-build-nix:
+    docker build -f nix-Dockerfile -t linkhop:nix .
+
 docker-up:
     docker compose up -d
 

@@ -1,0 +1,46 @@
+# LinkHop Nix Dockerfile
+# Build the runtime with Nix, then copy only the Nix closure and runtime tree
+# into a minimal scratch image.
+
+FROM nixos/nix:latest AS builder
+
+WORKDIR /tmp/build
+
+COPY flake.nix .
+COPY flake.lock .
+COPY pyproject.toml .
+COPY uv.lock .
+COPY core/ ./core/
+COPY linkhop/ ./linkhop/
+COPY templates/ ./templates/
+COPY manage.py .
+
+RUN nix \
+    --extra-experimental-features "nix-command flakes" \
+    build
+
+RUN mkdir -p /tmp/image-root/nix/store
+RUN cp -R $(nix-store -qR result/) /tmp/image-root/nix/store
+RUN cp -R result/. /tmp/image-root/
+
+FROM scratch
+
+WORKDIR /app
+
+COPY --from=builder --chown=65534:65534 /tmp/image-root/ /
+
+USER 65534:65534
+
+ENV PYTHONDONTWRITEBYTECODE=1
+ENV PYTHONUNBUFFERED=1
+ENV DJANGO_SETTINGS_MODULE=linkhop.settings.production
+ENV DATABASE_URL=sqlite:///data/db.sqlite3
+ENV STATIC_ROOT=/app/staticfiles
+ENV SSL_CERT_FILE=/etc/ssl/certs/ca-bundle.crt
+
+EXPOSE 8000
+
+HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
+    CMD ["/bin/linkhop-healthcheck"]
+
+CMD ["/bin/linkhop-entrypoint"]

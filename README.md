@@ -335,6 +335,77 @@ GPL v3
 
 ---
 
+## Optional Nix Docker Build
+
+The default [Dockerfile](./Dockerfile) remains the conventional Python-based
+container build.
+
+If you want the Nix-based container build instead, use
+[nix-Dockerfile](./nix-Dockerfile). It uses a Nix builder stage and then copies
+only the built runtime tree plus its `/nix/store` closure into a final
+`scratch` image.
+
+This follows the same broad pattern described in Mitchell Hashimoto's
+"Using Nix with Dockerfiles": Nix is a build tool here, not part of the runtime
+image.
+
+The Nix dependency graph is generated from [pyproject.toml](./pyproject.toml)
+and [uv.lock](./uv.lock) via `uv2nix`, so the Python dependency source of truth
+stays with `uv` instead of being duplicated in the flake.
+
+### Build the Docker image
+
+```bash
+docker compose build
+```
+
+### Build the Nix Docker image
+
+```bash
+docker build -f nix-Dockerfile -t linkhop:nix .
+```
+
+Or with Just:
+
+```bash
+just docker-build-nix
+```
+
+### Build the runtime directly with Nix
+
+```bash
+nix build
+```
+
+The Nix flake output contains:
+
+* `/app` with the LinkHop source tree and writable `data` / `staticfiles` dirs
+* `/bin/linkhop-entrypoint` to run migrations, collect static files, and start Gunicorn
+* `/bin/linkhop-healthcheck` for the container healthcheck
+
+Some Python packages still need small Nix overrides because `uv.lock` does not
+record all build-system metadata for source builds. Those overrides live in
+[flake.nix](./flake.nix).
+
+### Why `scratch` works here
+
+The final image is `FROM scratch` because the Python interpreter, Gunicorn,
+SQLite binary, CA bundle, and all Python dependencies are already captured in
+the Nix store closure copied from the builder stage.
+
+That means the runtime image does not need:
+
+* `apt`
+* `pip`
+* the Nix CLI
+* a distro base image
+
+If you decide later that you want easier ad-hoc debugging inside the container,
+switching the final stage from `scratch` to a tiny base such as Debian slim is
+straightforward.
+
+---
+
 ## Summary
 
 LinkHop is built around a simple idea:
