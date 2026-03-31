@@ -1,0 +1,10 @@
+{% extends "admin/login.html" %}
+
+{% block content %}
+<p style="margin:0 0 1.25rem;padding:0.75rem 1rem;background:#fff3cd;border:1px solid #ffc107;border-radius:4px;font-size:0.875rem;color:#664d03;line-height:1.5">
+  <strong>You probably don't need this.</strong><br>
+  The admin panel is for global settings or managing multiple users.
+  To manage your devices, <a href="/account/login/" style="color:#664d03;font-weight:600">sign in to /account</a> instead.
+</p>
+{{ block.super }}
+{% endblock %}
