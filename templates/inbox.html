@@ -139,6 +139,12 @@
         return;
       }
 
+      if (state.permission === 'granted') {
+        pushCopy.textContent = 'Push subscription was lost.';
+        setPushStatus('Notifications were enabled but the subscription expired. Re-enable to restore.', true);
+        return;
+      }
+
       pushCopy.textContent = 'Enable push notifications for this installed device?';
       setPushStatus('');
     }
