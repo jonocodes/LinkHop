@@ -117,7 +117,11 @@
   <h2>Push actions</h2>
   <p style="font-size:0.875rem;color:#555;margin-bottom:0.75rem">Run each step in order.</p>
 
-  <button class="btn" onclick="stepPermission()">Request notification permission</button>
+  <button class="btn" onclick="stepUnsubscribe()" style="background:#dc2626">Unsubscribe existing subscription</button>
+  <div class="result" id="r-unsubscribe"></div>
+
+  <br>
+  <button class="btn" onclick="stepPermission()" style="margin-top:0.75rem">Request notification permission</button>
   <div class="result" id="r-permission"></div>
 
   <br>
@@ -205,6 +209,26 @@
     set('b-sw-url', '—');
     set('b-sub', '—');
   }
+
+  window.stepUnsubscribe = function () {
+    if (!('serviceWorker' in navigator)) { result('r-unsubscribe', 'Service workers not supported.', 'err'); return; }
+    navigator.serviceWorker.ready.then(function (reg) {
+      return reg.pushManager.getSubscription();
+    }).then(function (sub) {
+      if (!sub) { result('r-unsubscribe', 'No existing subscription found.', 'info'); return; }
+      return sub.unsubscribe().then(function (ok) {
+        if (ok) {
+          result('r-unsubscribe', 'Unsubscribed. You can now subscribe with the current VAPID key.', 'ok');
+          set('b-sub', 'none', 'warn');
+          pendingSubscription = null;
+        } else {
+          result('r-unsubscribe', 'Unsubscribe returned false.', 'err');
+        }
+      });
+    }).catch(function (e) {
+      result('r-unsubscribe', 'Error: ' + e.message, 'err');
+    });
+  };
 
   window.stepPermission = function () {
     if (!('Notification' in window)) { result('r-permission', 'Notification API not available.', 'err'); return; }
