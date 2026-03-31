@@ -4,7 +4,7 @@ services:
     container_name: linkhop-app
     # restart: unless-stopped
     # ports:
-      # - "8000:8000"
+    # - "8000:8000"
     environment:
       - SECRET_KEY=${SECRET_KEY:?SECRET_KEY is required}
       - DEBUG=${DEBUG:-False}
@@ -16,7 +16,8 @@ services:
       - LINKHOP_WEBPUSH_VAPID_PRIVATE_KEY=${LINKHOP_WEBPUSH_VAPID_PRIVATE_KEY:-}
       - LINKHOP_WEBPUSH_VAPID_SUBJECT=${LINKHOP_WEBPUSH_VAPID_SUBJECT:-mailto:admin@localhost}
     volumes:
-      - linkhop-data:/app/data
+      # - linkhop-data:/app/data
+      - ./data:/app/data
       - linkhop-static:/app/staticfiles
     networks:
       - linkhop-network
@@ -42,8 +43,8 @@ services:
     #   - "443:443"
     volumes:
       - linkhop-static:/var/www/static:ro
-      - caddy-data:/data
-      - caddy-config:/config
+      - caddy-data:/data # cached ssl certs?
+      # - caddy-config:/config
     environment:
       - CADDY_INGRESS_NETWORKS=linkhop-network
     command: caddy run --config /etc/caddy/Caddyfile --adapter caddyfile
@@ -99,9 +100,9 @@ volumes:
   caddy-data:
     driver: local
     name: linkhop-caddy-data
-  caddy-config:
-    driver: local
-    name: linkhop-caddy-config
+  # caddy-config:
+  #   driver: local
+  #   name: linkhop-caddy-config
 
 networks:
   linkhop-network:
