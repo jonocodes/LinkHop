@@ -242,18 +242,19 @@ ruff check .
 
 ## Getting started
 
-### 1. Create an admin user
+### 1. Create a user account
 
 ```bash
 python manage.py createsuperuser
 ```
 
-Sign in at `/admin/` to access the admin interface.
-Use `/admin/settings/` to manage the singleton runtime settings page.
+Sign in at `/account/login/` with those credentials to access the account dashboard. This is the primary interface for managing devices.
+
+`/admin/` is the Django admin panel — useful for inspecting raw database records, but not required for normal use.
 
 ### 2. Pair the first device
 
-Generate a 6-digit PIN from the admin interface or from an already connected device.
+Generate a 6-digit PIN from `/account/add-device/` or from an already connected device.
 
 ### 3. Connect each device to the web interface
 
