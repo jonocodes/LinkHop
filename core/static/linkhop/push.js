@@ -131,11 +131,15 @@
               })
               .then(function (subscription) {
                 if (!subscription) return;
+                var payload = Object.assign({}, subscription.toJSON(), {
+                  client_type: window.matchMedia && window.matchMedia('(display-mode: standalone)').matches
+                    ? 'pwa' : 'browser'
+                });
                 return postJson(
                   "/api/push/subscriptions",
                   token,
                   "POST",
-                  subscription.toJSON()
+                  payload
                 ).then(function (response) {
                   callback(response.status === 204, response.status === 204 ? "" : "Failed to save push subscription.");
                 });

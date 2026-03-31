@@ -218,6 +218,7 @@ def admin_connected_devices_view(request: HttpRequest) -> HttpResponse:
     device_list = []
     for d in all_devices:
         status = device_presence_status(d)
+        last_active = d.last_active_at
         device_list.append({
             "id": str(d.id),
             "name": d.name,
@@ -226,9 +227,14 @@ def admin_connected_devices_view(request: HttpRequest) -> HttpResponse:
             "revoked_at": d.revoked_at,
             "last_seen_at": d.last_seen_at,
             "last_seen_ago": format_time_ago(d.last_seen_at),
+            "last_active_at": last_active,
+            "last_active_ago": format_time_ago(last_active),
+            "device_type": d.device_type,
+            "browser": d.browser,
+            "os": d.os,
             "created_at": d.created_at,
         })
-    device_list.sort(key=lambda d: (status_order[d["presence"]], d["last_seen_at"] is None, -(d["last_seen_at"].timestamp() if d["last_seen_at"] else 0)))
+    device_list.sort(key=lambda d: (status_order[d["presence"]], d["last_active_at"] is None, -(d["last_active_at"].timestamp() if d["last_active_at"] else 0)))
 
     context = {
         **admin.site.each_context(request),
@@ -590,6 +596,7 @@ def account_connected_devices_view(request: HttpRequest) -> HttpResponse:
     device_list = []
     for d in all_devices:
         status = device_presence_status(d)
+        last_active = d.last_active_at
         device_list.append({
             "id": str(d.id),
             "name": d.name,
@@ -598,12 +605,17 @@ def account_connected_devices_view(request: HttpRequest) -> HttpResponse:
             "revoked_at": d.revoked_at,
             "last_seen_at": d.last_seen_at,
             "last_seen_ago": format_time_ago(d.last_seen_at),
+            "last_active_at": last_active,
+            "last_active_ago": format_time_ago(last_active),
+            "device_type": d.device_type,
+            "browser": d.browser,
+            "os": d.os,
             "created_at": d.created_at,
         })
     device_list.sort(key=lambda d: (
         status_order[d["presence"]],
-        d["last_seen_at"] is None,
-        -(d["last_seen_at"].timestamp() if d["last_seen_at"] else 0),
+        d["last_active_at"] is None,
+        -(d["last_active_at"].timestamp() if d["last_active_at"] else 0),
     ))
 
     context = {

@@ -11,6 +11,7 @@ dependencies = [
   "uvicorn>=0.34,<0.35",
   "gunicorn>=23,<24",
   "whitenoise>=6,<7",
+  "user-agents>=2,<3",
 ]
 name = "linkhop"
 version = "0.1.0"

@@ -36,8 +36,12 @@
   }
 
   LinkHopSSE.prototype._url = function () {
-    if (!this._token) return STREAM_URL;
-    return STREAM_URL + '?token=' + encodeURIComponent(this._token);
+    var params = [];
+    if (this._token) params.push('token=' + encodeURIComponent(this._token));
+    var clientType = window.matchMedia && window.matchMedia('(display-mode: standalone)').matches
+      ? 'pwa' : 'browser';
+    params.push('client_type=' + clientType);
+    return STREAM_URL + (params.length ? '?' + params.join('&') : '');
   };
 
   LinkHopSSE.prototype._connect = function () {

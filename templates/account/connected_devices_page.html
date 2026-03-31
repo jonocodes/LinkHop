@@ -17,7 +17,8 @@
         <tr style="border-bottom:2px solid var(--border-color,#ddd)">
           <th style="text-align:left;padding:0.5rem 0.75rem;font-size:0.75rem;font-weight:700;letter-spacing:0.06em;text-transform:uppercase;color:var(--body-quiet-color,#666)">Device</th>
           <th style="text-align:left;padding:0.5rem 0.75rem;font-size:0.75rem;font-weight:700;letter-spacing:0.06em;text-transform:uppercase;color:var(--body-quiet-color,#666)">Status</th>
-          <th style="text-align:left;padding:0.5rem 0.75rem;font-size:0.75rem;font-weight:700;letter-spacing:0.06em;text-transform:uppercase;color:var(--body-quiet-color,#666)">Last seen</th>
+          <th style="text-align:left;padding:0.5rem 0.75rem;font-size:0.75rem;font-weight:700;letter-spacing:0.06em;text-transform:uppercase;color:var(--body-quiet-color,#666)">Browser / OS</th>
+          <th style="text-align:left;padding:0.5rem 0.75rem;font-size:0.75rem;font-weight:700;letter-spacing:0.06em;text-transform:uppercase;color:var(--body-quiet-color,#666)">Last active</th>
           <th style="padding:0.5rem 0.75rem"></th>
         </tr>
       </thead>
@@ -25,12 +26,20 @@
         {% for device in devices %}
         <tr style="border-bottom:1px solid var(--border-color,#eee){% if device.revoked_at %};opacity:0.55{% endif %}">
           <td style="padding:0.65rem 0.75rem">
-            <span style="font-weight:600">{{ device.name }}</span>
-            {% if device.revoked_at %}
-            <span style="margin-left:0.5rem;font-size:0.7rem;font-weight:600;letter-spacing:0.06em;text-transform:uppercase;color:#856404;background:#fff3cd;padding:0.1rem 0.4rem;border-radius:3px">Revoked</span>
-            {% elif not device.is_active %}
-            <span style="margin-left:0.5rem;font-size:0.7rem;font-weight:600;letter-spacing:0.06em;text-transform:uppercase;color:#721c24;background:#f8d7da;padding:0.1rem 0.4rem;border-radius:3px">Inactive</span>
-            {% endif %}
+            <div style="display:flex;align-items:center;gap:0.4rem;flex-wrap:wrap">
+              {% if device.device_type == "pwa" %}📱
+              {% elif device.device_type == "extension" %}🧩
+              {% elif device.device_type == "cli" %}⌨️
+              {% elif device.device_type == "browser" %}🌐
+              {% elif device.device_type == "api" %}🔌
+              {% endif %}
+              <span style="font-weight:600">{{ device.name }}</span>
+              {% if device.revoked_at %}
+              <span style="font-size:0.7rem;font-weight:600;letter-spacing:0.06em;text-transform:uppercase;color:#856404;background:#fff3cd;padding:0.1rem 0.4rem;border-radius:3px">Revoked</span>
+              {% elif not device.is_active %}
+              <span style="font-size:0.7rem;font-weight:600;letter-spacing:0.06em;text-transform:uppercase;color:#721c24;background:#f8d7da;padding:0.1rem 0.4rem;border-radius:3px">Inactive</span>
+              {% endif %}
+            </div>
           </td>
           <td style="padding:0.65rem 0.75rem">
             {% if device.presence == "online" %}
@@ -50,9 +59,16 @@
             </span>
             {% endif %}
           </td>
+          <td style="padding:0.65rem 0.75rem;color:var(--body-quiet-color,#666);font-size:0.85rem">
+            {% if device.browser or device.os %}
+            {{ device.browser }}{% if device.browser and device.os %} / {% endif %}{{ device.os }}
+            {% else %}
+            <span style="color:var(--body-quiet-color,#999)">—</span>
+            {% endif %}
+          </td>
           <td style="padding:0.65rem 0.75rem;color:var(--body-quiet-color,#666)">
-            {% if device.last_seen_at %}
-            <span title="{{ device.last_seen_at|date:'Y-m-d H:i:s' }} UTC">{{ device.last_seen_ago }}</span>
+            {% if device.last_active_at %}
+            <span title="{{ device.last_active_at|date:'Y-m-d H:i:s' }} UTC">{{ device.last_active_ago }}</span>
             {% else %}
             <span>Never</span>
             {% endif %}

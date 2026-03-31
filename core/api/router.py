@@ -3,6 +3,7 @@ import uuid
 from functools import wraps
 
 from django.core.exceptions import PermissionDenied
+from django.utils import timezone
 from django.core.exceptions import ValidationError as DjangoValidationError
 from django.db import IntegrityError
 from django.http import HttpRequest, HttpResponse, JsonResponse
@@ -77,6 +78,7 @@ def require_device_auth(view_func):
         request.auth = device
         request.device = device
         request.device_token = raw_token
+        Device.objects.filter(id=device.id).update(last_seen_at=timezone.now())
         return view_func(request, *args, **kwargs)
 
     return wrapped
@@ -199,6 +201,25 @@ def push_subscriptions(request: HttpRequest):
         auth_secret=auth_secret,
         user_agent=request.META.get("HTTP_USER_AGENT", ""),
     )
+
+    # Update device type and browser/OS info from this request
+    from core.ua import parse_ua
+    client_type = str(payload.get("client_type", "")).strip()[:20]
+    ua_string = request.META.get("HTTP_USER_AGENT", "")
+    browser, os_str = parse_ua(ua_string)
+    update_fields = []
+    if client_type:
+        request.auth.device_type = client_type
+        update_fields.append("device_type")
+    if browser and not request.auth.browser:
+        request.auth.browser = browser
+        update_fields.append("browser")
+    if os_str and not request.auth.os:
+        request.auth.os = os_str
+        update_fields.append("os")
+    if update_fields:
+        request.auth.save(update_fields=update_fields + ["updated_at"])
+
     return HttpResponse(status=204)
 
 
@@ -332,7 +353,6 @@ def push_test(request: HttpRequest) -> JsonResponse:
         return json_error("no_subscription", "No active push subscription found for this device.")
 
     from core.models import Message, MessageStatus, MessageType
-    from django.utils import timezone
     from datetime import timedelta
 
     # Build a fake transient message — not persisted, just enough for the push payload
@@ -348,7 +368,7 @@ def push_test(request: HttpRequest) -> JsonResponse:
     )
 
     try:
-        notify_device_push_subscriptions(device=request.auth, message=fake_message)
+        notify_device_push_subscriptions(device=request.auth, message=fake_message, is_test=True)
     except Exception as exc:
         return json_error("push_failed", str(exc))
 

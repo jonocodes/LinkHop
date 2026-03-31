@@ -63,7 +63,7 @@ def deactivate_push_subscription(*, device: Device, endpoint: str) -> int:
     )
 
 
-def notify_device_push_subscriptions(*, device: Device, message: Message) -> None:
+def notify_device_push_subscriptions(*, device: Device, message: Message, is_test: bool = False) -> None:
     if not push_is_configured():
         return
 
@@ -74,6 +74,7 @@ def notify_device_push_subscriptions(*, device: Device, message: Message) -> Non
             "body": message.body,
             "sender": message.sender_device.name if message.sender_device_id else "unknown",
             "recipient_device_id": str(device.id),
+            **({"test": True} if is_test else {}),
         }
     )
 
@@ -109,6 +110,8 @@ def notify_device_push_subscriptions(*, device: Device, message: Message) -> Non
             logger.warning("Push delivery failed for %s: %s", subscription.endpoint, exc)
             continue
 
-        subscription.last_success_at = timezone.now()
+        now = timezone.now()
+        subscription.last_success_at = now
         subscription.last_error = ""
         subscription.save(update_fields=["last_success_at", "last_error", "updated_at"])
+        Device.objects.filter(id=device.id).update(last_push_at=now)

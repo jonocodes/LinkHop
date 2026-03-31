@@ -16,6 +16,14 @@ class TimestampedModel(models.Model):
         abstract = True
 
 
+class DeviceType(models.TextChoices):
+    PWA = "pwa", "PWA"
+    BROWSER = "browser", "Browser"
+    EXTENSION = "extension", "Extension"
+    CLI = "cli", "CLI"
+    API = "api", "API"
+
+
 class Device(TimestampedModel):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     owner = models.ForeignKey(
@@ -30,6 +38,16 @@ class Device(TimestampedModel):
     is_active = models.BooleanField(default=True)
     revoked_at = models.DateTimeField(null=True, blank=True)
     last_seen_at = models.DateTimeField(null=True, blank=True)
+    last_push_at = models.DateTimeField(null=True, blank=True)
+    device_type = models.CharField(max_length=20, choices=DeviceType.choices, blank=True, default="")
+    browser = models.CharField(max_length=100, blank=True, default="")
+    os = models.CharField(max_length=100, blank=True, default="")
+
+    @property
+    def last_active_at(self):
+        """Most recent activity — SSE connection or push delivery."""
+        candidates = [t for t in (self.last_seen_at, self.last_push_at) if t is not None]
+        return max(candidates) if candidates else None
 
     class Meta:
         ordering = ["name"]

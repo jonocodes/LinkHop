@@ -79,6 +79,24 @@ def _update_last_seen(device: Device) -> None:
     device.save(update_fields=["last_seen_at", "updated_at"])
 
 
+@sync_to_async
+def _update_device_info(device: Device, client_type: str, ua_string: str) -> None:
+    from core.ua import parse_ua
+    browser, os_str = parse_ua(ua_string)
+    fields = ["updated_at"]
+    if client_type:
+        device.device_type = client_type
+        fields.append("device_type")
+    if browser:
+        device.browser = browser
+        fields.append("browser")
+    if os_str:
+        device.os = os_str
+        fields.append("os")
+    if len(fields) > 1:
+        device.save(update_fields=fields)
+
+
 
 @sync_to_async
 def _get_pending_ids(device: Device) -> list[str]:
@@ -143,6 +161,10 @@ async def sse_view(request: HttpRequest) -> HttpResponse:
     device = await _authenticate(request)
     if device is None:
         return HttpResponse("Unauthorized", status=401, content_type="text/plain")
+
+    client_type = request.GET.get("client_type", "").strip()[:20]
+    ua_string = request.META.get("HTTP_USER_AGENT", "")
+    await _update_device_info(device, client_type, ua_string)
 
     response = StreamingHttpResponse(_stream(device), content_type="text/event-stream")
     response["Cache-Control"] = "no-cache"
