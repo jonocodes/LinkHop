@@ -18,12 +18,10 @@ def parse_ua(ua_string: str) -> tuple[str, str]:
         ua = user_agents.parse(ua_string)
 
         browser_family = ua.browser.family or ""
-        browser_ver = (ua.browser.version or (0,))[0]  # major version only
-        browser = f"{browser_family} {browser_ver}".strip() if browser_family else ""
+        browser = browser_family
 
         os_family = ua.os.family or ""
-        os_ver = (ua.os.version or (0,))[0]
-        os_str = f"{os_family} {os_ver}".strip() if os_family else ""
+        os_str = os_family
 
         # Trim useless "Other" family
         if browser_family == "Other":
