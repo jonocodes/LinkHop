@@ -6,7 +6,7 @@
 <h1>Connect this device</h1>
 
 <p style="color:#444;margin-bottom:1.5rem">
-  {% if pin %}Give this device a name to finish connecting.{% else %}Enter the 6-digit PIN from an existing device or from the admin panel.{% endif %}
+  {% if pin and not pin_error %}Give this device a name to finish connecting.{% else %}Enter the 6-digit PIN from an existing device or from the admin panel.{% endif %}
 </p>
 
 {% if pin_error %}
@@ -17,12 +17,12 @@
   {% csrf_token %}
   <input type="hidden" name="mode" value="pin">
   <input type="hidden" name="next" value="{{ redirect_to|default:'' }}">
-  {% if pin %}
+  {% if pin and not pin_error %}
   <input type="hidden" name="pin" value="{{ pin }}">
   {% else %}
   <div class="field">
     <label for="id_pin">Pairing PIN</label>
-    <input type="text" id="id_pin" name="pin" inputmode="numeric" pattern="[0-9]{6}" maxlength="6" placeholder="123456" value="" autocomplete="one-time-code" autofocus>
+    <input type="tel" id="id_pin" name="pin" pattern="[0-9]{6}" maxlength="6" placeholder="123456" value="{{ pin|default:'' }}" autocomplete="one-time-code" autofocus>
   </div>
   {% endif %}
   <div class="field">
