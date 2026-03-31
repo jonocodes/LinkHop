@@ -95,36 +95,6 @@ test-clean:
     rm -f coverage.xml
 
 # =============================================================================
-# Database
-# =============================================================================
-
-# Backup database
-backup:
-    mkdir -p backups
-    sqlite3 data/db.sqlite3 ".backup 'backups/db-$(date +%Y%m%d-%H%M%S).sqlite3'" 2>/dev/null || \
-    sqlite3 db.sqlite3 ".backup 'backups/db-$(date +%Y%m%d-%H%M%S).sqlite3'"
-    @echo "Backup created in backups/"
-
-# Restore database from backup (usage: just restore backups/db-20240326-120000.sqlite3)
-restore BACKUP_FILE:
-    cp {{BACKUP_FILE}} data/db.sqlite3 2>/dev/null || cp {{BACKUP_FILE}} db.sqlite3
-    @echo "Database restored from {{BACKUP_FILE}}"
-
-# Show database info
-db-info:
-    @echo "Database info:"
-    @ls -lh data/*.sqlite3 2>/dev/null || ls -lh *.sqlite3 2>/dev/null || echo "No SQLite database found"
-
-# Vacuum database (reclaim space)
-db-vacuum:
-    sqlite3 data/db.sqlite3 "VACUUM;" 2>/dev/null || sqlite3 db.sqlite3 "VACUUM;"
-    @echo "Database optimized"
-
-# Check database integrity
-db-check:
-    sqlite3 data/db.sqlite3 "PRAGMA integrity_check;" 2>/dev/null || sqlite3 db.sqlite3 "PRAGMA integrity_check;"
-
-# =============================================================================
 # Docker
 # =============================================================================
 

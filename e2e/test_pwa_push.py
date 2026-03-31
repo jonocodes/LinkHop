@@ -20,7 +20,7 @@ from playwright.sync_api import Browser, BrowserContext, Page, expect
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-DB_PATH = REPO_ROOT / "db.sqlite3"
+DB_PATH = REPO_ROOT / "data" / "e2e-test.sqlite3"
 
 
 def create_enrollment_token() -> str:

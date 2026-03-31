@@ -4,8 +4,6 @@
 .envrc
 __pycache__/
 *.py[cod]
-db.sqlite3
-test.sqlite3
 staticfiles/
 .pytest_cache/
 .ruff_cache/

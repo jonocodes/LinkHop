@@ -16,7 +16,6 @@ services:
       - LINKHOP_WEBPUSH_VAPID_PRIVATE_KEY=${LINKHOP_WEBPUSH_VAPID_PRIVATE_KEY:-}
       - LINKHOP_WEBPUSH_VAPID_SUBJECT=${LINKHOP_WEBPUSH_VAPID_SUBJECT:-mailto:admin@localhost}
     volumes:
-      # - linkhop-data:/app/data
       - ./data:/app/data
       - linkhop-static:/app/staticfiles
     networks:

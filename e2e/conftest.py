@@ -37,6 +37,7 @@ def django_server() -> Generator[str, None, None]:
 
     # Start the server
     env = os.environ.copy()
+    env["DJANGO_SETTINGS_MODULE"] = "linkhop.settings.e2e"
     env.setdefault("LINKHOP_WEBPUSH_VAPID_PUBLIC_KEY", "test-public-key")
     env.setdefault("LINKHOP_WEBPUSH_VAPID_PRIVATE_KEY", "test-private-key")
     env.setdefault("LINKHOP_WEBPUSH_VAPID_SUBJECT", "mailto:test@example.com")

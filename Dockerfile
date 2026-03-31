@@ -24,9 +24,6 @@ RUN pip install --user -e .
 # Stage 2: Production image
 FROM python:3.12-slim
 
-# Create non-root user
-RUN groupadd -r linkhop && useradd -r -g linkhop linkhop
-
 WORKDIR /app
 
 # Install runtime dependencies
@@ -36,20 +33,17 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy Python packages from builder
-COPY --from=builder /root/.local /home/linkhop/.local
-ENV PATH=/home/linkhop/.local/bin:$PATH
+COPY --from=builder /root/.local /root/.local
+ENV PATH=/root/.local/bin:$PATH
 
 # Copy application code
-COPY --chown=linkhop:linkhop core/ ./core/
-COPY --chown=linkhop:linkhop linkhop/ ./linkhop/
-COPY --chown=linkhop:linkhop templates/ ./templates/
-COPY --chown=linkhop:linkhop manage.py .
+COPY core/ ./core/
+COPY linkhop/ ./linkhop/
+COPY templates/ ./templates/
+COPY manage.py .
 
 # Create data and static directories
-RUN mkdir -p /app/data /app/staticfiles && chown -R linkhop:linkhop /app
-
-# Switch to non-root user
-USER linkhop
+RUN mkdir -p /app/data /app/staticfiles
 
 # Environment variables
 ENV PYTHONDONTWRITEBYTECODE=1
