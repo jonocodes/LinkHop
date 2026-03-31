@@ -31,6 +31,12 @@ def build_admin_sidebar_navigation(request: HttpRequest) -> list[dict]:
                         "link": reverse("account_bookmarklet"),
                         "permission": lambda req: True,
                     },
+                    {
+                        "title": "Change password",
+                        "icon": "lock",
+                        "link": reverse("account_change_password"),
+                        "permission": lambda req: True,
+                    },
                 ],
             },
         ]

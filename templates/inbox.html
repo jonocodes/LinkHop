@@ -6,7 +6,10 @@
 {% block content %}
 <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:1rem">
   <h1 style="margin:0">Inbox</h1>
-  <span id="live-indicator" style="font-size:0.8rem;color:#aaa;display:none">&#9679; Live</span>
+  <div style="display:flex;align-items:baseline;gap:1rem">
+    <span id="live-indicator" style="font-size:0.8rem;color:#aaa;display:none">&#9679; Live</span>
+    <a href="{% url 'debug' %}" style="font-size:0.75rem;color:#aaa;text-decoration:none">debug</a>
+  </div>
 </div>
 
 <div id="notify-bar" style="display:none;margin-bottom:1.25rem;padding:0.6rem 0.875rem;background:#fff;border:1px solid #ddd;border-radius:4px;font-size:0.875rem;align-items:center;gap:0.75rem">

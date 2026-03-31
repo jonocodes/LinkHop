@@ -1,4 +1,6 @@
+import datetime
 import json
+import os
 
 from django.contrib import messages
 from django.contrib import admin
@@ -506,16 +508,44 @@ def message_detail_view(request: HttpRequest, message_id: str) -> HttpResponse:
 
 
 @device_login_required
-def push_debug_view(request: HttpRequest) -> HttpResponse:
+def debug_view(request: HttpRequest) -> HttpResponse:
     from core.models import PushSubscription
     from core.services.push import get_public_push_config
 
     subs = PushSubscription.objects.filter(device=request.device).order_by("-updated_at")
-    return render(request, "push_debug.html", {
+
+    # Uptime via /proc/self/stat (start time in clock ticks since boot)
+    uptime_str = "unavailable"
+    try:
+        with open("/proc/uptime") as f:
+            boot_seconds = float(f.read().split()[0])
+        proc_start_ticks = int(open("/proc/self/stat").read().split()[21])
+        clock_ticks = os.sysconf("SC_CLK_TCK")
+        proc_uptime_seconds = boot_seconds - (proc_start_ticks / clock_ticks)
+        uptime = datetime.timedelta(seconds=int(proc_uptime_seconds))
+        hours, remainder = divmod(int(uptime.total_seconds()), 3600)
+        minutes, seconds = divmod(remainder, 60)
+        uptime_str = f"{hours}h {minutes}m {seconds}s"
+    except Exception:
+        pass
+
+    message_counts = {
+        "total": Message.objects.count(),
+        "queued": Message.objects.filter(status=MessageStatus.QUEUED).count(),
+        "received": Message.objects.filter(status=MessageStatus.RECEIVED).count(),
+        "presented": Message.objects.filter(status=MessageStatus.PRESENTED).count(),
+        "opened": Message.objects.filter(status=MessageStatus.OPENED).count(),
+    }
+    device_count = Device.objects.filter(is_active=True).exclude(name=_SYSTEM_DEVICE_NAME).count()
+
+    return render(request, "debug.html", {
         "device": request.device,
         "device_token": request.device_token,
         "push_config": get_public_push_config(),
         "subscriptions": subs,
+        "uptime": uptime_str,
+        "message_counts": message_counts,
+        "device_count": device_count,
     })
 
 
@@ -690,3 +720,38 @@ def account_bookmarklet_view(request: HttpRequest) -> HttpResponse:
         "hop_url": hop_url,
     }
     return render(request, "account/bookmarklet_page.html", context)
+
+
+@account_login_required
+def account_change_password_view(request: HttpRequest) -> HttpResponse:
+    error = None
+    success = False
+
+    if request.method == "POST":
+        from django.contrib.auth import authenticate as django_authenticate
+        current = request.POST.get("current_password", "")
+        new = request.POST.get("new_password", "")
+        confirm = request.POST.get("confirm_password", "")
+
+        user = request.account_user
+        if not user.check_password(current):
+            error = "Current password is incorrect."
+        elif not new:
+            error = "New password cannot be empty."
+        elif new != confirm:
+            error = "New passwords do not match."
+        else:
+            user.set_password(new)
+            user.save()
+            # Re-authenticate the session so the user isn't logged out
+            from core.account_auth import account_session_login
+            account_session_login(request, user)
+            success = True
+
+    context = {
+        **account_site.each_context(request),
+        "title": "Change password",
+        "error": error,
+        "success": success,
+    }
+    return render(request, "account/change_password_page.html", context)

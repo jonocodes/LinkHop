@@ -5,9 +5,10 @@ from core.account_site import account_site
 
 from core.sse import sse_view
 from core.views import (
-    push_debug_view,
+    debug_view,
     account_add_device_view,
     account_bookmarklet_view,
+    account_change_password_view,
     account_connected_devices_view,
     account_login_view,
     account_logout_view,
@@ -41,6 +42,7 @@ urlpatterns = [
     path("account/connected-devices/<str:device_id>/remove", account_remove_device_view, name="account_remove_device"),
     path("account/add-device/", account_add_device_view, name="account_add_device"),
     path("account/bookmarklet/", account_bookmarklet_view, name="account_bookmarklet"),
+    path("account/password/", account_change_password_view, name="account_change_password"),
     path("account/", account_site.urls),
     path("healthz", healthcheck, name="healthcheck"),
     path("connect", connect_view, name="connect"),
@@ -51,7 +53,7 @@ urlpatterns = [
     path("inbox", inbox_view, name="inbox"),
     path("messages/<str:message_id>/open", message_open_view, name="message_open"),
     path("messages/<str:message_id>", message_detail_view, name="message_detail"),
-    path("push-debug", push_debug_view, name="push_debug"),
+    path("debug", debug_view, name="debug"),
     path("api/events/stream", sse_view, name="sse_stream"),
     path("api/", include("core.api.urls")),
 ]

@@ -15,6 +15,7 @@ class AccountAdminSite(UnfoldAdminSite):
         return True
 
     def each_context(self, request):
+        from django.urls import reverse as _reverse
         from core.account_auth import get_account_user
         context = super().each_context(request)
         account_user = get_account_user(request)
@@ -23,6 +24,10 @@ class AccountAdminSite(UnfoldAdminSite):
         # Give Unfold's templates (avatar, account links) a real user object.
         if account_user is not None:
             context["user"] = account_user
+        # Override the Unfold user-menu links to point to our account pages.
+        context["account_links"] = [
+            {"title": "Change password", "link": _reverse("account_change_password")},
+        ]
         return context
 
     def index(self, request, extra_context=None):

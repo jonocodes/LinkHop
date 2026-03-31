@@ -1,10 +1,10 @@
 {% extends "base.html" %}
 {% load static %}
 
-{% block title %}Push Debug — LinkHop{% endblock %}
+{% block title %}Debug — LinkHop{% endblock %}
 
 {% block content %}
-<h1 style="margin-bottom:1.5rem">Push Notification Debug</h1>
+<h1 style="margin-bottom:1.5rem">Debug</h1>
 
 <style>
   .section { background:#fff; border:1px solid #ddd; border-radius:6px; padding:1rem 1.25rem; margin-bottom:1.25rem }
@@ -18,7 +18,6 @@
   .err { color:#991b1b; font-weight:600 }
   .btn { display:inline-block; padding:0.4rem 1rem; background:#0066cc; color:#fff; border:none; border-radius:4px; cursor:pointer; font-size:0.875rem; margin-top:0.5rem }
   .btn:disabled { background:#aaa; cursor:default }
-  .btn-sm { padding:0.25rem 0.6rem; font-size:0.8rem }
   .result { margin-top:0.75rem; padding:0.6rem 0.875rem; border-radius:4px; font-size:0.8rem; font-family:monospace; white-space:pre-wrap; display:none }
   .result.ok { background:#f0fdf4; border:1px solid #bbf7d0; color:#166534 }
   .result.err { background:#fef2f2; border:1px solid #fecaca; color:#991b1b }
@@ -27,9 +26,42 @@
   .sub-row:last-child { border-bottom:none }
 </style>
 
-{# ── Server config ─────────────────────────────────────────────────────────── #}
+{# ── System info ───────────────────────────────────────────────────────────── #}
 <div class="section">
-  <h2>1. Server config</h2>
+  <h2>System</h2>
+  <div class="row">
+    <span class="label">Process uptime</span>
+    <span class="val">{{ uptime }}</span>
+  </div>
+  <div class="row">
+    <span class="label">Active devices</span>
+    <span class="val">{{ device_count }}</span>
+  </div>
+  <div class="row">
+    <span class="label">Messages (total)</span>
+    <span class="val">{{ message_counts.total }}</span>
+  </div>
+  <div class="row">
+    <span class="label">Messages queued</span>
+    <span class="val">{{ message_counts.queued }}</span>
+  </div>
+  <div class="row">
+    <span class="label">Messages received</span>
+    <span class="val">{{ message_counts.received }}</span>
+  </div>
+  <div class="row">
+    <span class="label">Messages presented</span>
+    <span class="val">{{ message_counts.presented }}</span>
+  </div>
+  <div class="row">
+    <span class="label">Messages opened</span>
+    <span class="val">{{ message_counts.opened }}</span>
+  </div>
+</div>
+
+{# ── Server push config ────────────────────────────────────────────────────── #}
+<div class="section">
+  <h2>Server push config</h2>
   <div class="row">
     <span class="label">Device</span>
     <span class="val">{{ device.name }}</span>
@@ -69,7 +101,7 @@
 
 {# ── Browser / SW status ───────────────────────────────────────────────────── #}
 <div class="section">
-  <h2>2. Browser &amp; service worker</h2>
+  <h2>Browser &amp; service worker</h2>
   <div class="row"><span class="label">serviceWorker</span><span class="val" id="b-sw">checking…</span></div>
   <div class="row"><span class="label">PushManager</span><span class="val" id="b-push">checking…</span></div>
   <div class="row"><span class="label">Notification API</span><span class="val" id="b-notif">checking…</span></div>
@@ -82,11 +114,8 @@
 
 {# ── Step-by-step actions ─────────────────────────────────────────────────── #}
 <div class="section">
-  <h2>3. Step-by-step actions</h2>
-
-  <p style="font-size:0.875rem;color:#555;margin-bottom:0.75rem">
-    Run each step in order. Each result shows what happened and any error detail.
-  </p>
+  <h2>Push actions</h2>
+  <p style="font-size:0.875rem;color:#555;margin-bottom:0.75rem">Run each step in order.</p>
 
   <button class="btn" onclick="stepPermission()">Request notification permission</button>
   <div class="result" id="r-permission"></div>
@@ -106,7 +135,7 @@
 
 {# ── Full log ─────────────────────────────────────────────────────────────── #}
 <div class="section">
-  <h2>4. Log</h2>
+  <h2>Log</h2>
   <div id="log" style="font-size:0.78rem;font-family:monospace;max-height:300px;overflow-y:auto;white-space:pre-wrap;color:#333"></div>
 </div>
 
@@ -118,7 +147,6 @@
 
   var pendingSubscription = null;
 
-  // ── Logging ──────────────────────────────────────────────────────────────
   var logEl = document.getElementById('log');
   function log(msg) {
     var ts = new Date().toTimeString().slice(0, 8);
@@ -134,7 +162,6 @@
     log('[' + id + '] ' + type.toUpperCase() + ': ' + text);
   }
 
-  // ── Browser checks ───────────────────────────────────────────────────────
   function set(id, text, cls) {
     var el = document.getElementById(id);
     el.textContent = text;
@@ -150,7 +177,6 @@
     return outputArray;
   }
 
-  // Populate browser status rows
   set('b-sw', 'serviceWorker' in navigator ? 'yes' : 'NO', 'serviceWorker' in navigator ? 'ok' : 'err');
   set('b-push', 'PushManager' in window ? 'yes' : 'NO', 'PushManager' in window ? 'ok' : 'err');
   set('b-notif', 'Notification' in window ? 'yes' : 'NO', 'Notification' in window ? 'ok' : 'err');
@@ -167,12 +193,10 @@
       var state = reg.active ? 'active' : reg.waiting ? 'waiting' : reg.installing ? 'installing' : 'registered';
       set('b-sw-state', state, state === 'active' ? 'ok' : 'warn');
       set('b-sw-url', (reg.active || reg.installing || reg.waiting || {scriptURL: '?'}).scriptURL || '?');
-
       reg.pushManager.getSubscription().then(function (sub) {
         if (!sub) { set('b-sub', 'none', 'warn'); return; }
         var ep = sub.endpoint;
-        var short = ep.length > 60 ? ep.slice(0, 30) + '…' + ep.slice(-20) : ep;
-        set('b-sub', short, 'ok');
+        set('b-sub', ep.length > 60 ? ep.slice(0, 30) + '…' + ep.slice(-20) : ep, 'ok');
         pendingSubscription = sub;
       }).catch(function (e) { set('b-sub', 'error: ' + e.message, 'err'); });
     }).catch(function (e) { set('b-sw-state', 'error: ' + e.message, 'err'); });
@@ -182,37 +206,25 @@
     set('b-sub', '—');
   }
 
-  // ── Step 1: Request permission ───────────────────────────────────────────
   window.stepPermission = function () {
-    if (!('Notification' in window)) { result('r-permission', 'Notification API not available in this browser.', 'err'); return; }
+    if (!('Notification' in window)) { result('r-permission', 'Notification API not available.', 'err'); return; }
     if (Notification.permission === 'granted') { result('r-permission', 'Already granted.', 'ok'); return; }
-    if (Notification.permission === 'denied') { result('r-permission', 'Blocked. Go to browser settings and allow notifications for this site.', 'err'); return; }
+    if (Notification.permission === 'denied') { result('r-permission', 'Blocked. Allow in browser settings.', 'err'); return; }
     Notification.requestPermission().then(function (p) {
-      if (p === 'granted') {
-        result('r-permission', 'Granted!', 'ok');
-        set('b-perm', 'granted', 'ok');
-      } else {
-        result('r-permission', 'Not granted: ' + p + '. On Android, tap "Allow" when the system prompt appears.', 'err');
-        set('b-perm', p, 'err');
-      }
+      if (p === 'granted') { result('r-permission', 'Granted!', 'ok'); set('b-perm', 'granted', 'ok'); }
+      else { result('r-permission', 'Not granted: ' + p, 'err'); set('b-perm', p, 'err'); }
     });
   };
 
-  // ── Step 2: Subscribe ────────────────────────────────────────────────────
   window.stepSubscribe = function () {
     if (!('serviceWorker' in navigator)) { result('r-subscribe', 'Service workers not supported.', 'err'); return; }
     if (!VAPID_KEY) { result('r-subscribe', 'Server has no VAPID public key configured.', 'err'); return; }
-
     navigator.serviceWorker.ready.then(function (reg) {
       log('SW ready, subscribing...');
       var key;
       try { key = urlBase64ToUint8Array(VAPID_KEY); }
       catch (e) { result('r-subscribe', 'VAPID key decode error: ' + e.message, 'err'); return; }
-
-      return reg.pushManager.subscribe({
-        userVisibleOnly: true,
-        applicationServerKey: key,
-      });
+      return reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: key });
     }).then(function (sub) {
       if (!sub) return;
       pendingSubscription = sub;
@@ -220,47 +232,27 @@
       result('r-subscribe',
         'Subscribed!\nendpoint: ' + sub.endpoint +
         '\np256dh: ' + (j.keys && j.keys.p256dh ? j.keys.p256dh.slice(0, 20) + '…' : 'missing') +
-        '\nauth: ' + (j.keys && j.keys.auth ? j.keys.auth : 'missing'),
-        'ok');
+        '\nauth: ' + (j.keys && j.keys.auth ? j.keys.auth : 'missing'), 'ok');
       set('b-sub', sub.endpoint.slice(0, 30) + '…', 'ok');
     }).catch(function (e) {
-      result('r-subscribe',
-        'Subscribe failed: ' + e.name + ': ' + e.message +
-        '\n\nCommon causes:\n' +
-        '• Notification permission not granted\n' +
-        '• VAPID key mismatch (key changed after previous subscription)\n' +
-        '• Browser push service unreachable (network issue)\n' +
-        '• App opened in browser tab, not installed PWA (some Android Chrome versions require standalone)',
-        'err');
+      result('r-subscribe', 'Subscribe failed: ' + e.name + ': ' + e.message +
+        '\n\nCommon causes:\n• Notification permission not granted\n• VAPID key mismatch\n• Network issue\n• Not installed as PWA', 'err');
     });
   };
 
-  // ── Step 3: Save subscription ────────────────────────────────────────────
   window.stepSaveSubscription = function () {
-    if (!pendingSubscription) {
-      result('r-save', 'No subscription in memory. Run "Subscribe to push" first.', 'err');
-      return;
-    }
-    var payload = pendingSubscription.toJSON();
+    if (!pendingSubscription) { result('r-save', 'No subscription. Run "Subscribe to push" first.', 'err'); return; }
     log('Saving subscription to server...');
     fetch('/api/push/subscriptions', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + TOKEN },
-      body: JSON.stringify(payload),
+      body: JSON.stringify(pendingSubscription.toJSON()),
     }).then(function (resp) {
-      if (resp.status === 204) {
-        result('r-save', 'Saved. Server now has this subscription.', 'ok');
-      } else {
-        return resp.text().then(function (t) {
-          result('r-save', 'Server returned ' + resp.status + ':\n' + t, 'err');
-        });
-      }
-    }).catch(function (e) {
-      result('r-save', 'Network error: ' + e.message, 'err');
-    });
+      if (resp.status === 204) { result('r-save', 'Saved.', 'ok'); }
+      else { resp.text().then(function (t) { result('r-save', 'Server returned ' + resp.status + ':\n' + t, 'err'); }); }
+    }).catch(function (e) { result('r-save', 'Network error: ' + e.message, 'err'); });
   };
 
-  // ── Step 4: Server sends test push ───────────────────────────────────────
   window.stepTestPush = function () {
     log('Asking server to send test push...');
     fetch('/api/push/test', {
@@ -269,21 +261,12 @@
     }).then(function (resp) {
       return resp.json().then(function (data) {
         if (resp.ok) {
-          result('r-testpush',
-            'Server sent the push to ' + data.subscriptions + ' subscription(s).\n' +
-            'You should receive a notification in a few seconds.\n\n' +
-            'If nothing arrives:\n' +
-            '• Check the server subscription list above for last_error\n' +
-            '• Make sure the app is NOT open/focused (Android suppresses push notifications for visible windows)\n' +
-            '• Check Android notification settings for this app',
-            'ok');
+          result('r-testpush', 'Server sent push to ' + data.subscriptions + ' subscription(s).\nYou should receive a notification shortly.\n\nIf nothing arrives: check subscription list above for last_error, ensure app is not in foreground.', 'ok');
         } else {
           result('r-testpush', 'Server error ' + resp.status + ':\n' + JSON.stringify(data, null, 2), 'err');
         }
       });
-    }).catch(function (e) {
-      result('r-testpush', 'Network error: ' + e.message, 'err');
-    });
+    }).catch(function (e) { result('r-testpush', 'Network error: ' + e.message, 'err'); });
   };
 
   log('Page loaded. Device: {{ device.name|escapejs }}');
