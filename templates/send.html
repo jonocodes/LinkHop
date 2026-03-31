@@ -17,6 +17,19 @@
   {% csrf_token %}
 
   <div class="field">
+    <label for="id_recipient">To</label>
+    <select id="id_recipient" name="recipient_device_id">
+      <option value="">— choose a device —</option>
+      {% for device in devices %}
+      <option value="{{ device.id }}"{% if device.id == selected_recipient %}selected{% endif %} data-device-id="{{ device.id }}" data-name="{{ device.name }}">
+        {{ device.name }}{% if device.is_online %} ●{% else %} ○{% endif %} {% if device.is_online %}(online){% else %}(seen {{ device.last_seen_ago }}){% endif %}
+      </option>
+      {% endfor %}
+    </select>
+    {% if errors.recipient %}<p class="field-error">{{ errors.recipient }}</p>{% endif %}
+  </div>
+
+  <div class="field">
     <label for="id_type">Type</label>
     <select id="id_type" name="type">
       <option value="text" {% if type == "text" %}selected{% endif %}>Text</option>
@@ -43,19 +56,6 @@
       {% if type == "url" %}style="display:none"{% endif %}
     >{% if type == "text" %}{{ body|default:'' }}{% endif %}</textarea>
     {% if errors.body %}<p class="field-error">{{ errors.body }}</p>{% endif %}
-  </div>
-
-  <div class="field">
-    <label for="id_recipient">To</label>
-    <select id="id_recipient" name="recipient_device_id">
-      <option value="">— choose a device —</option>
-      {% for device in devices %}
-      <option value="{{ device.id }}"{% if device.id == selected_recipient %}selected{% endif %} data-device-id="{{ device.id }}" data-name="{{ device.name }}">
-        {{ device.name }}{% if device.is_online %} ●{% else %} ○{% endif %} {% if device.is_online %}(online){% else %}(seen {{ device.last_seen_ago }}){% endif %}
-      </option>
-      {% endfor %}
-    </select>
-    {% if errors.recipient %}<p class="field-error">{{ errors.recipient }}</p>{% endif %}
   </div>
 
   <button type="submit" class="btn">Send</button>
