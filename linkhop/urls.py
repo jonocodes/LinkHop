@@ -5,6 +5,7 @@ from core.account_site import account_site
 
 from core.sse import sse_view
 from core.views import (
+    push_debug_view,
     account_add_device_view,
     account_bookmarklet_view,
     account_connected_devices_view,
@@ -50,6 +51,7 @@ urlpatterns = [
     path("inbox", inbox_view, name="inbox"),
     path("messages/<str:message_id>/open", message_open_view, name="message_open"),
     path("messages/<str:message_id>", message_detail_view, name="message_detail"),
+    path("push-debug", push_debug_view, name="push_debug"),
     path("api/events/stream", sse_view, name="sse_stream"),
     path("api/", include("core.api.urls")),
 ]

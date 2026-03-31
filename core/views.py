@@ -505,6 +505,20 @@ def message_detail_view(request: HttpRequest, message_id: str) -> HttpResponse:
     })
 
 
+@device_login_required
+def push_debug_view(request: HttpRequest) -> HttpResponse:
+    from core.models import PushSubscription
+    from core.services.push import get_public_push_config
+
+    subs = PushSubscription.objects.filter(device=request.device).order_by("-updated_at")
+    return render(request, "push_debug.html", {
+        "device": request.device,
+        "device_token": request.device_token,
+        "push_config": get_public_push_config(),
+        "subscriptions": subs,
+    })
+
+
 # ---------------------------------------------------------------------------
 # Account dashboard views  (/account/...)
 # ---------------------------------------------------------------------------

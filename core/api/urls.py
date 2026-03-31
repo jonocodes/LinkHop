@@ -10,6 +10,7 @@ urlpatterns = [
     path("devices", router.devices_list),
     path("push/config", router.push_config),
     path("push/subscriptions", router.push_subscriptions),
+    path("push/test", router.push_test),
     path("messages", router.messages_create),
     path("messages/incoming", router.messages_incoming),
     path("messages/<str:message_id>", router.message_get),

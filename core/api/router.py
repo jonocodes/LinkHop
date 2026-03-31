@@ -17,7 +17,12 @@ from core.services.messages import (
     mark_message_presented,
     mark_message_received,
 )
-from core.services.push import deactivate_push_subscription, get_public_push_config, upsert_push_subscription
+from core.services.push import (
+    deactivate_push_subscription,
+    get_public_push_config,
+    notify_device_push_subscriptions,
+    upsert_push_subscription,
+)
 from core.services.rate_limiter import (
     check_confirmation_rate_limit,
     check_registration_rate_limit,
@@ -312,6 +317,42 @@ def _message_transition(request: HttpRequest, message_id: str, handler):
         return json_error("forbidden", str(exc), status=403)
 
     return json_message_response(message)
+
+
+@require_device_auth
+def push_test(request: HttpRequest) -> JsonResponse:
+    """Send a test push notification to the requesting device."""
+    if request.method != "POST":
+        return HttpResponse(status=405)
+
+    from core.models import PushSubscription
+
+    subs = PushSubscription.objects.filter(device=request.auth, is_active=True)
+    if not subs.exists():
+        return json_error("no_subscription", "No active push subscription found for this device.")
+
+    from core.models import Message, MessageStatus, MessageType
+    from django.utils import timezone
+    from datetime import timedelta
+
+    # Build a fake transient message — not persisted, just enough for the push payload
+    fake_message = Message(
+        id=uuid.uuid4(),
+        sender_device=request.auth,
+        recipient_device=request.auth,
+        type=MessageType.TEXT,
+        body="LinkHop push test — it works!",
+        status=MessageStatus.QUEUED,
+        created_at=timezone.now(),
+        expires_at=timezone.now() + timedelta(minutes=1),
+    )
+
+    try:
+        notify_device_push_subscriptions(device=request.auth, message=fake_message)
+    except Exception as exc:
+        return json_error("push_failed", str(exc))
+
+    return JsonResponse({"ok": True, "subscriptions": subs.count()})
 
 
 def serialize_device(device: Device) -> dict:
