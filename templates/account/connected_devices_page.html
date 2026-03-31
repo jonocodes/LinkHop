@@ -26,7 +26,7 @@
         {% for device in devices %}
         <tr style="border-bottom:1px solid var(--border-color,#eee){% if device.revoked_at %};opacity:0.55{% endif %}">
           <td style="padding:0.65rem 0.75rem">
-            <div style="display:flex;align-items:center;gap:0.4rem;flex-wrap:wrap">
+            <div style="display:flex;align-items:center;gap:0.4rem;flex-wrap:wrap;margin-bottom:0.3rem">
               {% if device.device_type == "pwa" %}📱
               {% elif device.device_type == "extension" %}🧩
               {% elif device.device_type == "cli" %}⌨️
@@ -40,6 +40,11 @@
               <span style="font-size:0.7rem;font-weight:600;letter-spacing:0.06em;text-transform:uppercase;color:#721c24;background:#f8d7da;padding:0.1rem 0.4rem;border-radius:3px">Inactive</span>
               {% endif %}
             </div>
+            <form method="post" action="{% url 'account_rename_device' device.id %}" style="display:flex;gap:0.3rem;align-items:center">
+              {% csrf_token %}
+              <input type="text" name="name" value="{{ device.name }}" maxlength="100" required style="padding:0.2rem 0.4rem;font-size:0.8rem;border:1px solid var(--border-color,#ccc);border-radius:3px;width:10rem">
+              <button type="submit" style="padding:0.2rem 0.5rem;background:transparent;color:var(--body-fg,#333);border:1px solid var(--border-color,#ccc);border-radius:3px;font-size:0.75rem;cursor:pointer">Rename</button>
+            </form>
           </td>
           <td style="padding:0.65rem 0.75rem">
             {% if device.presence == "online" %}

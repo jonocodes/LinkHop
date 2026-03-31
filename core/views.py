@@ -667,6 +667,30 @@ def account_send_test_message_view(request: HttpRequest, device_id: str) -> Http
 
 
 @account_login_required
+def account_rename_device_view(request: HttpRequest, device_id: str) -> HttpResponse:
+    if request.method != "POST":
+        return redirect("account_connected_devices")
+    try:
+        device = Device.objects.get(id=device_id, owner=request.account_user)
+    except Device.DoesNotExist:
+        messages.error(request, "Device not found.")
+        return redirect("account_connected_devices")
+
+    new_name = request.POST.get("name", "").strip()
+    if not new_name:
+        messages.error(request, "Name cannot be empty.")
+        return redirect("account_connected_devices")
+    if len(new_name) > 100:
+        messages.error(request, "Name is too long.")
+        return redirect("account_connected_devices")
+
+    device.name = new_name
+    device.save(update_fields=["name", "updated_at"])
+    messages.success(request, f"Device renamed to \"{new_name}\".")
+    return redirect("account_connected_devices")
+
+
+@account_login_required
 def account_remove_device_view(request: HttpRequest, device_id: str) -> HttpResponse:
     if request.method != "POST":
         return redirect("account_connected_devices")
