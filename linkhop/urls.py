@@ -27,6 +27,7 @@ from core.views import (
     pair_view,
     service_worker_view,
     send_view,
+    sent_view,
 )
 
 urlpatterns = [
@@ -51,6 +52,7 @@ urlpatterns = [
     path("send", send_view, name="send"),
     path("hop", hop_view, name="hop"),
     path("inbox", inbox_view, name="inbox"),
+    path("sent", sent_view, name="sent"),
     path("messages/<str:message_id>/open", message_open_view, name="message_open"),
     path("messages/<str:message_id>", message_detail_view, name="message_detail"),
     path("debug", debug_view, name="debug"),

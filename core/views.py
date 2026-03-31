@@ -472,6 +472,23 @@ def send_view(request: HttpRequest) -> HttpResponse:
 
 
 @device_login_required
+def sent_view(request: HttpRequest) -> HttpResponse:
+    messages = (
+        Message.objects.filter(
+            sender_device=request.device,
+            expires_at__gt=timezone.now(),
+        )
+        .select_related("sender_device", "recipient_device")
+        .order_by("-created_at")
+    )
+    return render(request, "sent.html", {
+        "messages": messages,
+        "device": request.device,
+        "device_token": request.device_token,
+    })
+
+
+@device_login_required
 def inbox_view(request: HttpRequest) -> HttpResponse:
     messages = (
         Message.objects.filter(
