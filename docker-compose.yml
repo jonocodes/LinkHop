@@ -92,12 +92,16 @@ configs:
 volumes:
   linkhop-data:
     driver: local
+    name: linkhop-data
   linkhop-static:
     driver: local
+    name: linkhop-static
   caddy-data:
     driver: local
+    name: linkhop-caddy-data
   caddy-config:
     driver: local
+    name: linkhop-caddy-config
 
 networks:
   linkhop-network:
