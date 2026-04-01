@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>LinkHop</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <header>
+    <span class="logo">↗ LinkHop</span>
+    <span id="status-dot" class="dot dot-unknown" title="Push status"></span>
+  </header>
+
+  <!-- Setup screen -->
+  <section id="screen-setup" class="screen hidden">
+    <h2>Connect to LinkHop</h2>
+    <p class="hint">Enter your server URL, then click Open to connect via the web UI.</p>
+
+    <label for="server-url">Server URL</label>
+    <input id="server-url" type="url" placeholder="https://linkhop.example.com" autocomplete="off">
+
+    <button id="btn-link" class="btn-primary">Open settings</button>
+    <p id="setup-error" class="error hidden"></p>
+  </section>
+
+  <!-- Main screen -->
+  <section id="screen-main" class="screen hidden">
+    <div id="connection-status" class="status-bar">
+      <span id="status-text">Checking…</span>
+      <button id="btn-enable-push" class="btn-secondary" style="margin-left:auto;padding:0.2rem 0.6rem;font-size:0.8rem;display:none">Enable notifications</button>
+    </div>
+
+    <label for="device-select">Send to</label>
+    <select id="device-select">
+      <option value="">— select device —</option>
+    </select>
+
+    <label for="send-type">Type</label>
+    <div class="radio-group">
+      <label><input type="radio" name="send-type" value="url" checked> URL</label>
+      <label><input type="radio" name="send-type" value="text"> Text</label>
+    </div>
+
+    <label for="send-body">Content</label>
+    <textarea id="send-body" rows="3" placeholder="https://…"></textarea>
+
+    <button id="btn-send" class="btn-primary">Send</button>
+    <p id="send-feedback" class="feedback hidden"></p>
+
+    <hr>
+    <button id="btn-unlink" class="btn-secondary">Unlink device</button>
+  </section>
+
+  <script src="popup.js"></script>
+</body>
+</html>

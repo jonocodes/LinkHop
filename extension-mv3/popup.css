@@ -1,0 +1,155 @@
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  font-family: system-ui, sans-serif;
+  font-size: 13px;
+  width: 280px;
+  background: #1a1a2e;
+  color: #e0e0e0;
+  padding: 0;
+}
+
+header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 12px;
+  background: #0066cc;
+  color: white;
+}
+
+.logo {
+  font-weight: bold;
+  font-size: 14px;
+}
+
+.dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  display: inline-block;
+}
+.dot-unknown  { background: #888; }
+.dot-ok       { background: #22c55e; }
+.dot-error    { background: #ef4444; }
+
+.screen {
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.screen h2 {
+  font-size: 14px;
+  font-weight: 600;
+  margin-bottom: 4px;
+}
+
+.hint {
+  color: #aaa;
+  font-size: 12px;
+  margin-bottom: 4px;
+}
+
+label {
+  font-size: 11px;
+  color: #aaa;
+  margin-top: 4px;
+}
+
+input, select, textarea {
+  width: 100%;
+  padding: 6px 8px;
+  background: #16213e;
+  border: 1px solid #333;
+  border-radius: 4px;
+  color: #e0e0e0;
+  font-size: 12px;
+  outline: none;
+}
+
+input:focus, select:focus, textarea:focus {
+  border-color: #0066cc;
+}
+
+textarea {
+  resize: vertical;
+  font-family: inherit;
+}
+
+.radio-group {
+  display: flex;
+  gap: 12px;
+}
+
+.radio-group label {
+  color: #e0e0e0;
+  font-size: 12px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  cursor: pointer;
+  margin-top: 0;
+}
+
+.btn-primary {
+  background: #0066cc;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  padding: 8px;
+  width: 100%;
+  font-size: 13px;
+  cursor: pointer;
+  margin-top: 4px;
+}
+
+.btn-primary:hover { background: #0055aa; }
+.btn-primary:disabled { background: #555; cursor: default; }
+
+.btn-secondary {
+  background: transparent;
+  color: #888;
+  border: 1px solid #444;
+  border-radius: 4px;
+  padding: 6px;
+  width: 100%;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.btn-secondary:hover { border-color: #888; color: #ccc; }
+
+.error {
+  color: #ef4444;
+  font-size: 12px;
+}
+
+.feedback {
+  font-size: 12px;
+}
+
+.feedback.ok { color: #22c55e; }
+.feedback.err { color: #ef4444; }
+
+.status-bar {
+  font-size: 11px;
+  padding: 4px 0;
+  color: #aaa;
+}
+
+.status-bar.connected { color: #22c55e; }
+.status-bar.disconnected { color: #ef4444; }
+
+hr {
+  border: none;
+  border-top: 1px solid #333;
+  margin: 4px 0;
+}
+
+.hidden { display: none !important; }
