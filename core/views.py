@@ -72,8 +72,7 @@ def manifest_view(request: HttpRequest) -> JsonResponse:
         ],
         "share_target": {
             "action": "/share",
-            "method": "POST",
-            "enctype": "multipart/form-data",
+            "method": "GET",
             "params": {
                 "title": "title",
                 "text": "text",
@@ -84,17 +83,11 @@ def manifest_view(request: HttpRequest) -> JsonResponse:
     return JsonResponse(manifest)
 
 
-from django.views.decorators.csrf import csrf_exempt
-
-@csrf_exempt
 def share_target_view(request: HttpRequest) -> HttpResponse:
     """Handle Web Share Target API requests from Android."""
-    if request.method != "POST":
-        return redirect("/send")
-
-    title = request.POST.get("title", "")
-    text = request.POST.get("text", "")
-    url = request.POST.get("url", "")
+    title = request.GET.get("title", "")
+    text = request.GET.get("text", "")
+    url = request.GET.get("url", "")
 
     shared_content = url or text or title
     if text and url and text != url:
