@@ -516,6 +516,23 @@ def account_activate_device_view(request: HttpRequest) -> HttpResponse:
             "redirect_to": redirect_to,
         })
 
+    # Populate browser/OS from User-Agent
+    from core.ua import parse_ua
+    ua_string = request.META.get("HTTP_USER_AGENT", "")
+    browser, os_str = parse_ua(ua_string)
+    update_fields = []
+    if browser:
+        _device.browser = browser
+        update_fields.append("browser")
+    if os_str:
+        _device.os = os_str
+        update_fields.append("os")
+    if not _device.device_type:
+        _device.device_type = "browser"
+        update_fields.append("device_type")
+    if update_fields:
+        _device.save(update_fields=update_fields)
+
     # Check for pending share in session
     pending_share = request.session.get("pending_share")
     if pending_share:
