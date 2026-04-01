@@ -179,6 +179,11 @@ def admin_bookmarklet_view(request: HttpRequest) -> HttpResponse:
 def admin_send_test_message_view(request: HttpRequest, device_id: str) -> HttpResponse:
     if request.method != "POST":
         return redirect("admin_connected_devices")
+
+    sender_device, _ = get_device_from_request(request)
+    if sender_device is None:
+        sender_device = get_system_device()
+
     try:
         recipient = Device.objects.get(id=device_id)
     except Device.DoesNotExist:
@@ -187,7 +192,7 @@ def admin_send_test_message_view(request: HttpRequest, device_id: str) -> HttpRe
 
     try:
         relay_message(
-            sender_device=get_system_device(),
+            sender_device=sender_device,
             recipient_device=recipient,
             message_type=MessageType.TEXT,
             body="test message",
@@ -601,6 +606,12 @@ def account_connected_devices_view(request: HttpRequest) -> HttpResponse:
 def account_send_test_message_view(request: HttpRequest, device_id: str) -> HttpResponse:
     if request.method != "POST":
         return redirect("account_connected_devices")
+
+    sender_device, _ = get_device_from_request(request)
+    if sender_device is None:
+        messages.info(request, "Register this device first to send test messages.")
+        return redirect("account_activate_device")
+
     try:
         recipient = Device.objects.get(id=device_id, owner=request.account_user)
     except Device.DoesNotExist:
@@ -609,7 +620,7 @@ def account_send_test_message_view(request: HttpRequest, device_id: str) -> Http
 
     try:
         relay_message(
-            sender_device=get_system_device(),
+            sender_device=sender_device,
             recipient_device=recipient,
             message_type=MessageType.TEXT,
             body="test message",
