@@ -14,27 +14,20 @@
 </div>
 <p id="ext-status" style="display:none;margin:-0.5rem 0 1rem;padding:0.4rem 0.75rem;border-radius:4px;font-size:0.875rem"></p>
 <script>
-async function connectExtension() {
-  const btn = document.getElementById('btn-ext');
-  const status = document.getElementById('ext-status');
-  try {
-    await browser.runtime.sendMessage('linkhop@extension', {
-      type: 'session_link',
+function connectExtension() {
+  window.postMessage({
+    type: 'linkhop:connect_extension',
+    payload: {
       token: '{{ device_token|escapejs }}',
       deviceId: '{{ device.id|escapejs }}',
       deviceName: '{{ device.name|escapejs }}',
       serverUrl: window.location.origin,
-    });
-    status.textContent = '✓ Extension connected!';
-    status.style.background = '#d4edda';
-    status.style.color = '#155724';
-  } catch (e) {
-    status.textContent = e.message.includes('Could not establish connection')
-      ? 'LinkHop extension not found — is it installed?'
-      : 'Error: ' + e.message;
-    status.style.background = '#f8d7da';
-    status.style.color = '#721c24';
-  }
+    },
+  }, window.location.origin);
+  const status = document.getElementById('ext-status');
+  status.textContent = '✓ Extension connected! You can close the extension popup and reopen it.';
+  status.style.background = '#d4edda';
+  status.style.color = '#155724';
   status.style.display = 'block';
 }
 </script>

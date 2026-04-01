@@ -257,6 +257,19 @@ browser.contextMenus.onClicked.addListener(async (info, tab) => {
 // ---------------------------------------------------------------------------
 
 browser.runtime.onMessage.addListener(async (msg) => {
+  if (msg.type === "session_link" && msg.token && msg.serverUrl) {
+    const config = {
+      serverUrl: msg.serverUrl,
+      token: msg.token,
+      deviceId: msg.deviceId,
+      deviceName: msg.deviceName,
+      defaultDeviceId: null,
+    };
+    await saveConfig(config);
+    reconnectAttempts = 0;
+    await startSSE();
+    return { ok: true };
+  }
   if (msg.type === "linked") {
     // New credentials saved, start SSE
     reconnectAttempts = 0;
