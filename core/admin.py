@@ -15,7 +15,6 @@ from unfold.forms import AdminPasswordChangeForm, UserChangeForm, UserCreationFo
 from core.models import (
     Device,
     GlobalSettings,
-    MessageLog,
     PushSubscription,
 )
 
@@ -81,31 +80,6 @@ class DeviceAdmin(ModelAdmin):
     def has_add_permission(self, request):
         return False
 
-
-
-@admin.register(MessageLog)
-class MessageLogAdmin(ModelAdmin):
-    list_display = ("created_at", "sender", "recipient", "message_type", "delivery_status")
-    list_filter = ("message_type", "created_at")
-    search_fields = ("sender__name", "recipient__name")
-    readonly_fields = ("id", "sender", "recipient", "message_type", "push_subscriptions", "push_delivered", "created_at")
-    list_per_page = 50
-
-    @admin.display(description="Delivery")
-    def delivery_status(self, obj):
-        if obj.push_subscriptions == 0:
-            return format_html('<span style="color:#92400e">no subscriptions</span>')
-        if obj.push_delivered == obj.push_subscriptions:
-            return format_html('<span style="color:#166534">{}/{} delivered</span>', obj.push_delivered, obj.push_subscriptions)
-        if obj.push_delivered > 0:
-            return format_html('<span style="color:#92400e">{}/{} delivered</span>', obj.push_delivered, obj.push_subscriptions)
-        return format_html('<span style="color:#991b1b">0/{} failed</span>', obj.push_subscriptions)
-
-    def has_add_permission(self, request):
-        return False
-
-    def has_change_permission(self, request, obj=None):
-        return False
 
 
 @admin.register(PushSubscription)

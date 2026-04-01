@@ -153,6 +153,36 @@ AXES_COOLOFF_TIME = 1
 AXES_RESET_ON_SUCCESS = True
 AXES_LOCKOUT_TEMPLATE = None
 
+_LOG_DIR = BASE_DIR / "data"
+LOGGING = {
+    "version": 1,
+    "disable_existing_loggers": False,
+    "formatters": {
+        "standard": {
+            "format": "%(asctime)s %(levelname)s %(name)s %(message)s",
+        },
+    },
+    "handlers": {
+        "console": {
+            "class": "logging.StreamHandler",
+            "formatter": "standard",
+        },
+        "file": {
+            "class": "logging.handlers.RotatingFileHandler",
+            "filename": os.environ.get("LINKHOP_LOG_FILE", _LOG_DIR / "linkhop.log"),
+            "maxBytes": 5 * 1024 * 1024,  # 5 MB
+            "backupCount": 3,
+            "formatter": "standard",
+        },
+    },
+    "loggers": {
+        "core": {
+            "handlers": ["console", "file"],
+            "level": "INFO",
+        },
+    },
+}
+
 LINKHOP_MESSAGE_URL_MAX_LENGTH = 2048
 LINKHOP_MESSAGE_TEXT_MAX_LENGTH = 3500
 LINKHOP_API_SENDS_PER_MINUTE = 30

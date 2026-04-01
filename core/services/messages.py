@@ -1,11 +1,14 @@
+import logging
 import uuid
 
 from django.conf import settings
 from django.core.exceptions import ValidationError
 from django.utils import timezone
 
-from core.models import Device, MessageLog, MessageType
+from core.models import Device, MessageType
 from core.services.push import relay_push_message
+
+logger = logging.getLogger(__name__)
 
 
 def _get_global_settings():
@@ -76,13 +79,14 @@ def relay_message(
             body="pong (server)",
         )
 
-    MessageLog.objects.create(
-        id=message_id,
-        sender=sender_device,
-        recipient=recipient_device,
-        message_type=message_type,
-        push_subscriptions=push_result["total"],
-        push_delivered=push_result["delivered"],
+    logger.info(
+        "message_relayed id=%s type=%s sender=%s recipient=%s push=%d/%d",
+        message_id,
+        message_type,
+        sender_device.name,
+        recipient_device.name,
+        push_result["delivered"],
+        push_result["total"],
     )
 
     return {
