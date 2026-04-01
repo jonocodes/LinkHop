@@ -55,27 +55,25 @@ function urlBase64ToUint8Array(base64String) {
 // ---------------------------------------------------------------------------
 
 async function registerPush(config) {
-  try {
-    const resp = await apiFetch(config, "/api/push/config");
-    if (!resp.ok) return;
-    const pushConfig = await resp.json();
-    if (!pushConfig.supported || !pushConfig.vapid_public_key) return;
+  const resp = await apiFetch(config, "/api/push/config");
+  if (!resp.ok) throw new Error(`push/config returned ${resp.status}`);
+  const pushConfig = await resp.json();
+  if (!pushConfig.supported) throw new Error("push not configured on server");
+  if (!pushConfig.vapid_public_key) throw new Error("missing VAPID key");
 
-    const existing = await self.registration.pushManager.getSubscription();
-    const subscription =
-      existing ||
-      (await self.registration.pushManager.subscribe({
-        userVisibleOnly: true,
-        applicationServerKey: urlBase64ToUint8Array(pushConfig.vapid_public_key),
-      }));
+  const existing = await self.registration.pushManager.getSubscription();
+  const subscription =
+    existing ||
+    (await self.registration.pushManager.subscribe({
+      userVisibleOnly: true,
+      applicationServerKey: urlBase64ToUint8Array(pushConfig.vapid_public_key),
+    }));
 
-    await apiFetch(config, "/api/push/subscriptions", {
-      method: "POST",
-      body: JSON.stringify({ ...subscription.toJSON(), client_type: "extension" }),
-    });
-  } catch (err) {
-    console.error("[LinkHop] Push registration failed:", err);
-  }
+  const saveResp = await apiFetch(config, "/api/push/subscriptions", {
+    method: "POST",
+    body: JSON.stringify({ ...subscription.toJSON(), client_type: "extension" }),
+  });
+  if (!saveResp.ok) throw new Error(`push/subscriptions returned ${saveResp.status}`);
 }
 
 async function unregisterPush(config) {
@@ -186,8 +184,13 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
 
     if (msg.type === "register_push") {
       const config = await getConfig();
-      if (config) await registerPush(config);
-      sendResponse({ ok: true });
+      if (!config) { sendResponse({ ok: false, error: "not linked" }); return; }
+      try {
+        await registerPush(config);
+        sendResponse({ ok: true });
+      } catch (err) {
+        sendResponse({ ok: false, error: err.message });
+      }
       return;
     }
 
