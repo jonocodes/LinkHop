@@ -9,7 +9,7 @@
     "notifications",
     "tabs",
     "contextMenus",
-    "background"
+    "<all_urls>"
   ],
 
   "background": {

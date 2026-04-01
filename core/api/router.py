@@ -97,6 +97,7 @@ def pairing_pin_create(request: HttpRequest) -> JsonResponse:
     )
 
 
+@csrf_exempt
 def register_device_with_pin(request: HttpRequest) -> JsonResponse:
     if request.method != "POST":
         return HttpResponse(status=405)
