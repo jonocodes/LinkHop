@@ -76,13 +76,24 @@ function connectExtension() {
   }
 
   function renderPushState(state) {
-    if (!state.supported) {
+    if (!state.supported && !state.hint) {
       pushBar.style.display = 'none';
       return;
     }
 
     pushBar.style.display = 'flex';
     pushBtn.disabled = false;
+
+    // Show install hint for iOS/Safari users who haven't installed as PWA
+    if (!state.supported && state.hint) {
+      pushCopy.textContent = state.hint;
+      pushBtn.style.display = 'none';
+      pushDisable.style.display = 'none';
+      setPushStatusText('');
+      return;
+    }
+
+    pushBtn.style.display = '';
 
     if (state.subscribed) {
       pushCopy.textContent = 'Push notifications are enabled.';

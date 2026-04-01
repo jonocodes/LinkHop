@@ -80,12 +80,6 @@ def build_admin_sidebar_navigation(request: HttpRequest) -> list[dict]:
                     "permission": lambda req: req.user.has_perm("core.view_device"),
                 },
                 {
-                    "title": "Messages",
-                    "icon": "mail",
-                    "link": reverse("admin:core_message_changelist"),
-                    "permission": lambda req: req.user.has_perm("core.view_message"),
-                },
-                {
                     "title": "Pairing PINs",
                     "icon": "pin",
                     "link": reverse("admin:core_pairingpin_changelist"),

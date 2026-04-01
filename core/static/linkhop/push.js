@@ -48,6 +48,16 @@
     });
   }
 
+  function isIOS() {
+    return /iPad|iPhone|iPod/.test(navigator.userAgent) ||
+      (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+  }
+
+  function isSafari() {
+    return /Safari/.test(navigator.userAgent) &&
+      !/Chrome|Chromium|Firefox|Edg|OPR|Opera/.test(navigator.userAgent);
+  }
+
   window.LinkHopPush = {
     refreshEventName: REFRESH_EVENT,
 
@@ -56,8 +66,31 @@
     },
 
     isStandalone: function () {
+      // iOS uses navigator.standalone; other browsers use display-mode media query
+      if (navigator.standalone === true) return true;
       return window.matchMedia &&
         window.matchMedia("(display-mode: standalone)").matches;
+    },
+
+    isIOS: isIOS,
+    isSafari: isSafari,
+
+    /**
+     * Returns a hint string explaining why push may not work, or "" if no issue.
+     * Useful for showing guidance to the user.
+     */
+    getPushHint: function () {
+      if (this.isSupported()) return "";
+
+      if (isIOS() && !this.isStandalone()) {
+        return "On iOS, push notifications require installing LinkHop to your home screen. Tap the share button, then \"Add to Home Screen\".";
+      }
+
+      if (isSafari() && !this.isStandalone()) {
+        return "On Safari, push works best when LinkHop is installed as an app. Use \"Add to Dock\" from the File menu.";
+      }
+
+      return "Push notifications are not supported in this browser.";
     },
 
     getState: function (callback) {
@@ -66,28 +99,32 @@
       if (!this.isSupported()) {
         callback({
           supported: false,
-          standalone: false,
+          standalone: this.isStandalone(),
           permission: "unsupported",
-          subscribed: false
+          subscribed: false,
+          hint: this.getPushHint()
         });
         return;
       }
 
+      var self = this;
       getSubscription()
         .then(function (subscription) {
           callback({
             supported: true,
-            standalone: window.LinkHopPush.isStandalone(),
+            standalone: self.isStandalone(),
             permission: Notification.permission,
-            subscribed: !!subscription
+            subscribed: !!subscription,
+            hint: ""
           });
         })
         .catch(function () {
           callback({
             supported: true,
-            standalone: window.LinkHopPush.isStandalone(),
+            standalone: self.isStandalone(),
             permission: Notification.permission,
-            subscribed: false
+            subscribed: false,
+            hint: ""
           });
         });
     },
@@ -96,7 +133,7 @@
       callback = callback || function () {};
 
       if (!this.isSupported()) {
-        callback(false, "Push is not supported on this device.");
+        callback(false, this.getPushHint() || "Push is not supported on this device.");
         return;
       }
 
@@ -132,8 +169,7 @@
               .then(function (subscription) {
                 if (!subscription) return;
                 var payload = Object.assign({}, subscription.toJSON(), {
-                  client_type: window.matchMedia && window.matchMedia('(display-mode: standalone)').matches
-                    ? 'pwa' : 'browser'
+                  client_type: window.LinkHopPush.isStandalone() ? 'pwa' : 'browser'
                 });
                 return postJson(
                   "/api/push/subscriptions",

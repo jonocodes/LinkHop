@@ -5,7 +5,7 @@ from datetime import timedelta
 from django.db import transaction
 from django.utils import timezone
 
-from core.models import Device, DeviceType, Message, PairingPin
+from core.models import Device, DeviceType, PairingPin
 
 
 def hash_token(raw_token: str) -> str:
@@ -140,5 +140,4 @@ def get_device_for_token(raw_token: str) -> Device | None:
 
 @transaction.atomic
 def forget_device(*, device: Device) -> None:
-    Message.objects.filter(sender_device=device).delete()
     device.delete()

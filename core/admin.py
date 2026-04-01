@@ -15,7 +15,6 @@ from unfold.forms import AdminPasswordChangeForm, UserChangeForm, UserCreationFo
 from core.models import (
     Device,
     GlobalSettings,
-    Message,
     MessageType,
     PairingPin,
     PushSubscription,
@@ -128,28 +127,12 @@ class PushSubscriptionAdmin(ModelAdmin):
     readonly_fields = ("created_at", "updated_at", "last_success_at", "last_failure_at")
 
 
-@admin.register(Message)
-class MessageAdmin(ModelAdmin):
-    list_display = ("id", "type", "status", "recipient_device", "created_at", "expires_at")
-    list_filter = ("type", "status", "recipient_device", "created_at", "expires_at")
-    search_fields = ("body", "recipient_device__name", "sender_device__name")
-    readonly_fields = (
-        "created_at",
-        "updated_at",
-        "received_at",
-        "presented_at",
-        "opened_at",
-    )
-
-
-
 @admin.register(GlobalSettings)
 class GlobalSettingsAdmin(ModelAdmin):
     list_display = (
         "singleton_key",
-        "message_retention_days",
         "api_sends_per_minute",
-        "api_confirmations_per_minute",
+        "api_registrations_per_hour",
     )
     readonly_fields = ("created_at", "updated_at")
 
