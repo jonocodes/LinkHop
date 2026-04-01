@@ -15,11 +15,8 @@ from unfold.forms import AdminPasswordChangeForm, UserChangeForm, UserCreationFo
 from core.models import (
     Device,
     GlobalSettings,
-    MessageType,
     PushSubscription,
 )
-from core.services.auth import get_system_device
-from core.services.messages import relay_message
 
 admin.site.unregister(User)
 admin.site.unregister(Group)
@@ -73,34 +70,12 @@ class GroupAdmin(BaseGroupAdmin, ModelAdmin):
     pass
 
 
-@admin.action(description="Send test message to selected devices")
-def send_test_message(modeladmin, request, queryset):
-    sent = 0
-    sender = get_system_device()
-    for recipient in queryset:
-        try:
-            relay_message(
-                sender_device=sender,
-                recipient_device=recipient,
-                message_type=MessageType.TEXT,
-                body="test message",
-                _skip_self_send_check=sender.id == recipient.id,
-            )
-            sent += 1
-        except Exception as exc:
-            modeladmin.message_user(request, f"Failed to send to {recipient.name}: {exc}", level="error")
-
-    if sent:
-        modeladmin.message_user(request, f"Sent {sent} test message(s).")
-
-
 @admin.register(Device)
 class DeviceAdmin(ModelAdmin):
     list_display = ("name", "is_active", "last_seen_at", "revoked_at", "created_at")
     list_filter = ("is_active", "created_at", "last_seen_at", "revoked_at")
     search_fields = ("name",)
     readonly_fields = ("created_at", "updated_at", "last_seen_at", "token_hash")
-    actions = [send_test_message]
 
     def has_add_permission(self, request):
         return False

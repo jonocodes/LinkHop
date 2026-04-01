@@ -176,32 +176,6 @@ def admin_bookmarklet_view(request: HttpRequest) -> HttpResponse:
     return render(request, "admin/bookmarklet_page.html", context)
 
 
-def admin_send_test_message_view(request: HttpRequest, device_id: str) -> HttpResponse:
-    if request.method != "POST":
-        return redirect("admin_connected_devices")
-
-    sender_device, _ = get_device_from_request(request)
-    if sender_device is None:
-        sender_device = get_system_device()
-
-    try:
-        recipient = Device.objects.get(id=device_id)
-    except Device.DoesNotExist:
-        messages.error(request, "Device not found.")
-        return redirect("admin_connected_devices")
-
-    try:
-        relay_message(
-            sender_device=sender_device,
-            recipient_device=recipient,
-            message_type=MessageType.TEXT,
-            body="test message",
-        )
-        messages.success(request, f"Test message sent to {recipient.name}.")
-    except Exception as exc:
-        messages.error(request, f"Failed to send to {recipient.name}: {exc}")
-    return redirect("admin_connected_devices")
-
 
 def admin_connected_devices_view(request: HttpRequest) -> HttpResponse:
     all_devices = Device.objects.exclude(name=_SYSTEM_DEVICE_NAME).order_by("name")
