@@ -499,10 +499,11 @@ def account_logout_view(request: HttpRequest) -> HttpResponse:
 @account_login_required
 def account_activate_device_view(request: HttpRequest) -> HttpResponse:
     """Register the current browser as a device for the logged-in account."""
-    # Already has a device cookie — skip activation.
+    # Already has a device cookie — tell the user instead of showing the form.
     device, _ = get_device_from_request(request)
     if device is not None:
-        return redirect("account_inbox")
+        messages.info(request, f'This device is already registered as "{device.name}".')
+        return redirect("account_connected_devices")
 
     redirect_to = _validated_next_url(request, request.GET.get("next", "") if request.method == "GET" else request.POST.get("next", ""))
 

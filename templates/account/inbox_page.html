@@ -2,12 +2,13 @@
 {% load static %}
 
 {% block content %}
+{% include "account/_dark_overrides.html" %}
 <div id="content-main">
   <div class="module">
     <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:1rem">
       <h2 style="margin:0">Inbox</h2>
       <div style="display:flex;align-items:baseline;gap:1rem">
-        <button id="btn-ext" onclick="connectExtension()" style="background:none;border:none;cursor:pointer;font-size:0.75rem;color:#aaa;padding:0" title="Connect browser extension">extension</button>
+        <button id="btn-ext" onclick="connectExtension()" style="background:none;border:none;cursor:pointer;font-size:0.75rem;color:var(--lh-quiet);padding:0" title="Connect browser extension">extension</button>
       </div>
     </div>
     <p id="ext-status" style="display:none;margin:-0.5rem 0 1rem;padding:0.4rem 0.75rem;border-radius:4px;font-size:0.875rem"></p>
@@ -24,30 +25,30 @@
       }, window.location.origin);
       var status = document.getElementById('ext-status');
       status.textContent = 'Extension connected! You can close the extension popup and reopen it.';
-      status.style.background = '#d4edda';
-      status.style.color = '#155724';
+      status.style.background = 'var(--lh-success-bg)';
+      status.style.color = 'var(--lh-success-fg)';
       status.style.display = 'block';
     }
     </script>
 
-    <div id="push-bar" style="display:none;margin-bottom:1.25rem;padding:0.6rem 0.875rem;background:#eef5ff;border:1px solid #c7dcff;border-radius:4px;font-size:0.875rem;gap:0.5rem;flex-direction:column">
+    <div id="push-bar" style="display:none;margin-bottom:1.25rem;padding:0.6rem 0.875rem;background:var(--lh-push-bar-bg);border:1px solid var(--lh-push-bar-border);border-radius:4px;font-size:0.875rem;gap:0.5rem;flex-direction:column">
       <div style="display:flex;align-items:center;gap:0.75rem;flex-wrap:wrap">
         <span id="push-copy">Enable push notifications for this device?</span>
         <button id="push-btn" style="padding:0.25rem 0.75rem;font-size:0.875rem;background:var(--button-bg,#417690);color:var(--button-fg,#fff);border:none;border-radius:4px;cursor:pointer;font-weight:600">Enable Push</button>
-        <button id="push-disable" style="display:none;background:none;border:none;cursor:pointer;color:#666;font-size:0.875rem;padding:0">Disable</button>
+        <button id="push-disable" style="display:none;background:none;border:none;cursor:pointer;color:var(--lh-quiet);font-size:0.875rem;padding:0">Disable</button>
       </div>
-      <div id="push-status" style="font-size:0.8rem;color:#4b5563;display:none"></div>
+      <div id="push-status" style="font-size:0.8rem;color:var(--lh-quiet);display:none"></div>
     </div>
 
     <div style="display:flex;gap:0.5rem;margin-bottom:1rem">
       <button id="filter-all" onclick="setFilter('all')" style="padding:0.25rem 0.75rem;font-size:0.8rem;background:var(--button-bg,#417690);color:var(--button-fg,#fff);border:none;border-radius:4px;cursor:pointer">All</button>
       <button id="filter-incoming" onclick="setFilter('incoming')" style="padding:0.25rem 0.75rem;font-size:0.8rem;background:var(--button-bg,#417690);color:var(--button-fg,#fff);border:none;border-radius:4px;cursor:pointer">Incoming</button>
       <button id="filter-sent" onclick="setFilter('sent')" style="padding:0.25rem 0.75rem;font-size:0.8rem;background:var(--button-bg,#417690);color:var(--button-fg,#fff);border:none;border-radius:4px;cursor:pointer">Sent</button>
-      <button id="btn-clear" onclick="clearAll()" style="margin-left:auto;background:none;border:none;cursor:pointer;font-size:0.75rem;color:#999;padding:0">Clear all</button>
+      <button id="btn-clear" onclick="clearAll()" style="margin-left:auto;background:none;border:none;cursor:pointer;font-size:0.75rem;color:var(--lh-quiet);padding:0">Clear all</button>
     </div>
 
     <div id="message-list"></div>
-    <p id="empty-state" style="color:var(--body-quiet-color,#666);display:none">No messages yet. Messages arrive via push notifications and are stored in this browser.</p>
+    <p id="empty-state" style="color:var(--lh-quiet);display:none">No messages yet. Messages arrive via push notifications and are stored in this browser.</p>
   </div>
 </div>
 
@@ -68,7 +69,7 @@
   function setPushStatusText(text, isError) {
     if (!text) { pushStatus.style.display = 'none'; pushStatus.textContent = ''; return; }
     pushStatus.style.display = '';
-    pushStatus.style.color = isError ? '#b91c1c' : '#4b5563';
+    pushStatus.style.color = isError ? 'var(--lh-error-fg)' : 'var(--lh-quiet)';
     pushStatus.textContent = text;
   }
 
@@ -153,17 +154,17 @@
       var isUrl = msg.type === 'url';
       var dirLabel = msg.direction === 'sent' ? 'to' : 'from';
       var peerName = msg.direction === 'sent' ? (msg.recipient_name || 'device') : (msg.sender || 'unknown');
-      var readStyle = msg.read ? 'opacity:0.6;' : '';
+      var readStyle = msg.read ? 'opacity:var(--lh-read-opacity);' : '';
       var bodyDisplay = isUrl
         ? '<a href="' + escapeHtml(msg.body) + '" target="_blank" rel="noopener">' + escapeHtml(truncate(msg.body, 80)) + '</a>'
         : escapeHtml(truncate(msg.body, 120));
       var dirIcon = msg.direction === 'sent' ? '\u2191' : '\u2193';
-      html += '<li style="background:var(--body-bg,#fff);border:1px solid var(--border-color,#ddd);border-radius:4px;padding:0.75rem 1rem;margin-bottom:0.75rem;' + readStyle + '">' +
+      html += '<li style="background:var(--lh-item-bg);border:1px solid var(--lh-border);border-radius:4px;padding:0.75rem 1rem;margin-bottom:0.75rem;' + readStyle + '">' +
         '<div style="display:flex;justify-content:space-between;align-items:baseline;gap:1rem;margin-bottom:0.375rem">' +
           '<span style="font-weight:600">' + dirIcon + ' ' + bodyDisplay + '</span>' +
-          '<button onclick="deleteMsg(\'' + msg.id + '\')" style="background:none;border:none;cursor:pointer;color:#999;font-size:0.75rem;padding:0" title="Delete">&times;</button>' +
+          '<button onclick="deleteMsg(\'' + msg.id + '\')" style="background:none;border:none;cursor:pointer;color:var(--lh-quiet);font-size:0.75rem;padding:0" title="Delete">&times;</button>' +
         '</div>' +
-        '<div style="font-size:0.8rem;color:var(--body-quiet-color,#666)">' +
+        '<div style="font-size:0.8rem;color:var(--lh-quiet)">' +
           dirLabel + ' <strong>' + escapeHtml(peerName) + '</strong> &mdash; ' + escapeHtml(formatDate(msg.created_at)) +
         '</div></li>';
     });

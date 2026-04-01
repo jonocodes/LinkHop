@@ -1,18 +1,19 @@
 {% extends "admin/base_site.html" %}
 
 {% block content %}
+{% include "account/_dark_overrides.html" %}
 <div id="content-main">
   <div class="module" style="max-width:32rem">
     <h2 style="margin:0 0 1rem">Send</h2>
 
     {% if success %}
-    <div style="padding:0.6rem 0.875rem;background:#f0fdf4;border:1px solid #bbf7d0;color:#166534;border-radius:4px;margin-bottom:1.25rem;font-size:0.875rem">
+    <div style="padding:0.6rem 0.875rem;background:var(--lh-success-bg);border:1px solid var(--lh-success-border);color:var(--lh-success-fg);border-radius:4px;margin-bottom:1.25rem;font-size:0.875rem">
       Sent successfully.
     </div>
     {% endif %}
 
     {% if errors.non_field %}
-    <div style="padding:0.6rem 0.875rem;background:#fef2f2;border:1px solid #fecaca;color:#991b1b;border-radius:4px;margin-bottom:1.25rem;font-size:0.875rem">
+    <div style="padding:0.6rem 0.875rem;background:var(--lh-error-bg);border:1px solid var(--lh-error-border);color:var(--lh-error-fg);border-radius:4px;margin-bottom:1.25rem;font-size:0.875rem">
       {{ errors.non_field }}
     </div>
     {% endif %}
@@ -22,7 +23,7 @@
 
       <div style="margin-bottom:1.25rem">
         <label for="id_recipient" style="display:block;font-weight:600;margin-bottom:0.25rem">To</label>
-        <select id="id_recipient" name="recipient_device_id" style="display:block;width:100%;padding:0.5rem 0.625rem;border:1px solid var(--border-color,#ccc);border-radius:4px;font-size:1rem;background:var(--body-bg,#fff)">
+        <select id="id_recipient" name="recipient_device_id" style="display:block;width:100%;padding:0.5rem 0.625rem;border:1px solid var(--lh-border-heavy);border-radius:4px;font-size:1rem;background:var(--lh-input-bg);color:var(--lh-fg)">
           <option value="">— choose a device —</option>
           {% for device in devices %}
           <option value="{{ device.id }}"{% if device.id == selected_recipient %} selected{% endif %}>
@@ -30,25 +31,25 @@
           </option>
           {% endfor %}
         </select>
-        {% if errors.recipient %}<p style="color:#991b1b;font-size:0.875rem;margin:0.25rem 0 0">{{ errors.recipient }}</p>{% endif %}
+        {% if errors.recipient %}<p style="color:var(--lh-error-fg);font-size:0.875rem;margin:0.25rem 0 0">{{ errors.recipient }}</p>{% endif %}
       </div>
 
       <div style="margin-bottom:1.25rem">
         <label for="id_type" style="display:block;font-weight:600;margin-bottom:0.25rem">Type</label>
-        <select id="id_type" name="type" style="display:block;width:100%;padding:0.5rem 0.625rem;border:1px solid var(--border-color,#ccc);border-radius:4px;font-size:1rem;background:var(--body-bg,#fff)">
+        <select id="id_type" name="type" style="display:block;width:100%;padding:0.5rem 0.625rem;border:1px solid var(--lh-border-heavy);border-radius:4px;font-size:1rem;background:var(--lh-input-bg);color:var(--lh-fg)">
           <option value="text" {% if type == "text" %}selected{% endif %}>Text</option>
           <option value="url" {% if type == "url" %}selected{% endif %}>URL</option>
         </select>
-        {% if errors.type %}<p style="color:#991b1b;font-size:0.875rem;margin:0.25rem 0 0">{{ errors.type }}</p>{% endif %}
+        {% if errors.type %}<p style="color:var(--lh-error-fg);font-size:0.875rem;margin:0.25rem 0 0">{{ errors.type }}</p>{% endif %}
       </div>
 
       <div style="margin-bottom:1.25rem">
         <label for="id_body_url" style="display:block;font-weight:600;margin-bottom:0.25rem">Message</label>
         <input type="url" id="id_body_url" name="body" value="{{ body|default:'' }}" placeholder="https://example.com" autocomplete="off"
-               style="display:{% if type != 'url' %}none{% else %}block{% endif %};width:100%;padding:0.5rem 0.625rem;border:1px solid var(--border-color,#ccc);border-radius:4px;font-size:1rem;background:var(--body-bg,#fff)">
+               style="display:{% if type != 'url' %}none{% else %}block{% endif %};width:100%;padding:0.5rem 0.625rem;border:1px solid var(--lh-border-heavy);border-radius:4px;font-size:1rem;background:var(--lh-input-bg);color:var(--lh-fg)">
         <textarea id="id_body_text" name="body" placeholder="Type your message…"
-                  style="display:{% if type == 'url' %}none{% else %}block{% endif %};width:100%;padding:0.5rem 0.625rem;border:1px solid var(--border-color,#ccc);border-radius:4px;font-size:1rem;background:var(--body-bg,#fff);resize:vertical;min-height:8rem;font-family:inherit">{% if type == "text" %}{{ body|default:'' }}{% endif %}</textarea>
-        {% if errors.body %}<p style="color:#991b1b;font-size:0.875rem;margin:0.25rem 0 0">{{ errors.body }}</p>{% endif %}
+                  style="display:{% if type == 'url' %}none{% else %}block{% endif %};width:100%;padding:0.5rem 0.625rem;border:1px solid var(--lh-border-heavy);border-radius:4px;font-size:1rem;background:var(--lh-input-bg);color:var(--lh-fg);resize:vertical;min-height:8rem;font-family:inherit">{% if type == "text" %}{{ body|default:'' }}{% endif %}</textarea>
+        {% if errors.body %}<p style="color:var(--lh-error-fg);font-size:0.875rem;margin:0.25rem 0 0">{{ errors.body }}</p>{% endif %}
       </div>
 
       <button type="submit" style="padding:0.5rem 1.25rem;background:var(--button-bg,#417690);color:var(--button-fg,#fff);border:none;border-radius:4px;font-size:1rem;font-weight:600;cursor:pointer">

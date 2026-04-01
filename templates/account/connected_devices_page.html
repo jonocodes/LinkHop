@@ -1,30 +1,39 @@
 {% extends "admin/base_site.html" %}
 
 {% block content %}
+{% include "account/_dark_overrides.html" %}
 <div id="content-main">
+  {% if messages %}
+  {% for message in messages %}
+  <div style="padding:0.6rem 0.875rem;background:var(--lh-info-bg);border:1px solid var(--lh-info-border);color:var(--lh-info-fg);border-radius:4px;margin-bottom:1rem;font-size:0.875rem">
+    {{ message }}
+  </div>
+  {% endfor %}
+  {% endif %}
+
   <div class="module">
     <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:1rem;margin-bottom:0.25rem">
       <h2 style="margin:0">Connected devices</h2>
       <a href="{% url 'account_activate_device' %}" style="display:inline-block;padding:0.4rem 0.9rem;background:var(--button-bg,#417690);color:var(--button-fg,#fff);border-radius:4px;font-size:0.875rem;font-weight:600;text-decoration:none;white-space:nowrap;flex-shrink:0">Register device</a>
     </div>
-    <p style="margin:0 0 1.25rem;color:var(--body-quiet-color,#666)">
+    <p style="margin:0 0 1.25rem;color:var(--lh-quiet)">
       {{ devices|length }} device{{ devices|length|pluralize }} registered
     </p>
 
     {% if devices %}
     <table style="width:100%;border-collapse:collapse">
       <thead>
-        <tr style="border-bottom:2px solid var(--border-color,#ddd)">
-          <th style="text-align:left;padding:0.5rem 0.75rem;font-size:0.75rem;font-weight:700;letter-spacing:0.06em;text-transform:uppercase;color:var(--body-quiet-color,#666)">Device</th>
-          <th style="text-align:left;padding:0.5rem 0.75rem;font-size:0.75rem;font-weight:700;letter-spacing:0.06em;text-transform:uppercase;color:var(--body-quiet-color,#666)">Status</th>
-          <th style="text-align:left;padding:0.5rem 0.75rem;font-size:0.75rem;font-weight:700;letter-spacing:0.06em;text-transform:uppercase;color:var(--body-quiet-color,#666)">Browser / OS</th>
-          <th style="text-align:left;padding:0.5rem 0.75rem;font-size:0.75rem;font-weight:700;letter-spacing:0.06em;text-transform:uppercase;color:var(--body-quiet-color,#666)">Last active</th>
+        <tr style="border-bottom:2px solid var(--lh-border)">
+          <th style="text-align:left;padding:0.5rem 0.75rem;font-size:0.75rem;font-weight:700;letter-spacing:0.06em;text-transform:uppercase;color:var(--lh-quiet)">Device</th>
+          <th style="text-align:left;padding:0.5rem 0.75rem;font-size:0.75rem;font-weight:700;letter-spacing:0.06em;text-transform:uppercase;color:var(--lh-quiet)">Status</th>
+          <th style="text-align:left;padding:0.5rem 0.75rem;font-size:0.75rem;font-weight:700;letter-spacing:0.06em;text-transform:uppercase;color:var(--lh-quiet)">Browser / OS</th>
+          <th style="text-align:left;padding:0.5rem 0.75rem;font-size:0.75rem;font-weight:700;letter-spacing:0.06em;text-transform:uppercase;color:var(--lh-quiet)">Last active</th>
           <th style="padding:0.5rem 0.75rem"></th>
         </tr>
       </thead>
       <tbody>
         {% for device in devices %}
-        <tr style="border-bottom:1px solid var(--border-color,#eee){% if device.revoked_at %};opacity:0.55{% endif %}">
+        <tr style="border-bottom:1px solid var(--lh-border-light){% if device.revoked_at %};opacity:0.55{% endif %}">
           <td style="padding:0.65rem 0.75rem">
             <div style="display:flex;align-items:center;gap:0.4rem;flex-wrap:wrap;margin-bottom:0.3rem">
               {% if device.device_type == "pwa" %}📱
@@ -35,43 +44,43 @@
               {% endif %}
               <span style="font-weight:600">{{ device.name }}</span>
               {% if device.revoked_at %}
-              <span style="font-size:0.7rem;font-weight:600;letter-spacing:0.06em;text-transform:uppercase;color:#856404;background:#fff3cd;padding:0.1rem 0.4rem;border-radius:3px">Revoked</span>
+              <span style="font-size:0.7rem;font-weight:600;letter-spacing:0.06em;text-transform:uppercase;color:var(--lh-tag-revoked-fg);background:var(--lh-tag-revoked-bg);padding:0.1rem 0.4rem;border-radius:3px">Revoked</span>
               {% elif not device.is_active %}
-              <span style="font-size:0.7rem;font-weight:600;letter-spacing:0.06em;text-transform:uppercase;color:#721c24;background:#f8d7da;padding:0.1rem 0.4rem;border-radius:3px">Inactive</span>
+              <span style="font-size:0.7rem;font-weight:600;letter-spacing:0.06em;text-transform:uppercase;color:var(--lh-tag-inactive-fg);background:var(--lh-tag-inactive-bg);padding:0.1rem 0.4rem;border-radius:3px">Inactive</span>
               {% endif %}
             </div>
             <form method="post" action="{% url 'account_rename_device' device.id %}" style="display:flex;gap:0.3rem;align-items:center">
               {% csrf_token %}
-              <input type="text" name="name" value="{{ device.name }}" maxlength="100" required style="padding:0.2rem 0.4rem;font-size:0.8rem;border:1px solid var(--border-color,#ccc);border-radius:3px;width:10rem">
-              <button type="submit" style="padding:0.2rem 0.5rem;background:transparent;color:var(--body-fg,#333);border:1px solid var(--border-color,#ccc);border-radius:3px;font-size:0.75rem;cursor:pointer">Rename</button>
+              <input type="text" name="name" value="{{ device.name }}" maxlength="100" required style="padding:0.2rem 0.4rem;font-size:0.8rem;border:1px solid var(--lh-border-heavy);border-radius:3px;width:10rem;background:var(--lh-input-bg);color:var(--lh-fg)">
+              <button type="submit" style="padding:0.2rem 0.5rem;background:transparent;color:var(--lh-fg);border:1px solid var(--lh-border-heavy);border-radius:3px;font-size:0.75rem;cursor:pointer">Rename</button>
             </form>
           </td>
           <td style="padding:0.65rem 0.75rem">
             {% if device.presence == "online" %}
-            <span style="display:inline-flex;align-items:center;gap:0.35rem;color:#155724">
+            <span style="display:inline-flex;align-items:center;gap:0.35rem;color:var(--lh-success-fg)">
               <span style="width:8px;height:8px;border-radius:50%;background:#28a745;display:inline-block;flex-shrink:0"></span>
               Connected
             </span>
             {% elif device.presence == "recent" %}
-            <span style="display:inline-flex;align-items:center;gap:0.35rem;color:#7a4f00">
+            <span style="display:inline-flex;align-items:center;gap:0.35rem;color:var(--lh-warn-fg)">
               <span style="width:8px;height:8px;border-radius:50%;background:#fd7e14;display:inline-block;flex-shrink:0"></span>
               Recently seen
             </span>
             {% else %}
-            <span style="display:inline-flex;align-items:center;gap:0.35rem;color:var(--body-quiet-color,#666)">
+            <span style="display:inline-flex;align-items:center;gap:0.35rem;color:var(--lh-quiet)">
               <span style="width:8px;height:8px;border-radius:50%;background:#adb5bd;display:inline-block;flex-shrink:0"></span>
               Offline
             </span>
             {% endif %}
           </td>
-          <td style="padding:0.65rem 0.75rem;color:var(--body-quiet-color,#666);font-size:0.85rem">
+          <td style="padding:0.65rem 0.75rem;color:var(--lh-quiet);font-size:0.85rem">
             {% if device.browser or device.os %}
             {{ device.browser }}{% if device.browser and device.os %} / {% endif %}{{ device.os }}
             {% else %}
-            <span style="color:var(--body-quiet-color,#999)">—</span>
+            <span style="color:var(--lh-quiet)">—</span>
             {% endif %}
           </td>
-          <td style="padding:0.65rem 0.75rem;color:var(--body-quiet-color,#666)">
+          <td style="padding:0.65rem 0.75rem;color:var(--lh-quiet)">
             {% if device.last_active_at %}
             <span title="{{ device.last_active_at|date:'Y-m-d H:i:s' }} UTC">{{ device.last_active_ago }}</span>
             {% else %}
@@ -81,11 +90,11 @@
           <td style="padding:0.65rem 0.75rem;text-align:right;white-space:nowrap">
             <form method="post" action="{% url 'account_send_test_message' device.id %}" style="display:inline">
               {% csrf_token %}
-              <button type="submit" style="padding:0.25rem 0.7rem;background:transparent;color:var(--body-fg,#333);border:1px solid var(--border-color,#ccc);border-radius:4px;font-size:0.8rem;font-weight:600;cursor:pointer">Send test</button>
+              <button type="submit" style="padding:0.25rem 0.7rem;background:transparent;color:var(--lh-fg);border:1px solid var(--lh-border-heavy);border-radius:4px;font-size:0.8rem;font-weight:600;cursor:pointer">Send test</button>
             </form>
             <form method="post" action="{% url 'account_remove_device' device.id %}" style="display:inline;margin-left:0.375rem" onsubmit="return confirm('Remove device {{ device.name }}? This cannot be undone.')">
               {% csrf_token %}
-              <button type="submit" style="padding:0.25rem 0.7rem;background:transparent;color:#dc3545;border:1px solid #dc3545;border-radius:4px;font-size:0.8rem;font-weight:600;cursor:pointer">Remove</button>
+              <button type="submit" style="padding:0.25rem 0.7rem;background:transparent;color:var(--lh-error-fg);border:1px solid var(--lh-error-fg);border-radius:4px;font-size:0.8rem;font-weight:600;cursor:pointer">Remove</button>
             </form>
           </td>
         </tr>
@@ -93,7 +102,7 @@
       </tbody>
     </table>
     {% else %}
-    <p style="color:var(--body-quiet-color,#666);padding:1rem 0">No devices registered yet. <a href="{% url 'account_activate_device' %}">Register a device</a> to get started.</p>
+    <p style="color:var(--lh-quiet);padding:1rem 0">No devices registered yet. <a href="{% url 'account_activate_device' %}">Register a device</a> to get started.</p>
     {% endif %}
   </div>
 </div>

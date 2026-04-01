@@ -1,36 +1,34 @@
 {% extends "admin/base_site.html" %}
 
 {% block content %}
+{% include "account/_dark_overrides.html" %}
 <div id="content-main">
   <style>
     .info-module { margin-bottom:1.25rem }
-    .info-row { display:flex; justify-content:space-between; align-items:baseline; padding:0.4rem 0.75rem; border-bottom:1px solid var(--border-color,#eee); font-size:0.875rem; gap:1rem }
+    .info-row { display:flex; justify-content:space-between; align-items:baseline; padding:0.4rem 0.75rem; border-bottom:1px solid var(--lh-border-light); font-size:0.875rem; gap:1rem }
     .info-row:last-child { border-bottom:none }
-    .info-label { color:var(--body-quiet-color,#666) }
+    .info-label { color:var(--lh-quiet) }
     .info-val { font-family:monospace; font-size:0.8rem; text-align:right; word-break:break-all }
-    .tag-ok { color:#155724; font-weight:600 }
-    .tag-err { color:#721c24; font-weight:600 }
-    .tag-warn { color:#7a4f00; font-weight:600 }
+    .tag-ok { color:var(--lh-success-fg); font-weight:600 }
+    .tag-err { color:var(--lh-error-fg); font-weight:600 }
+    .tag-warn { color:var(--lh-warn-fg); font-weight:600 }
   </style>
 
-  {# ── Runtime ── #}
   <div class="module info-module">
-    <h2 style="margin:0 0 0.5rem;padding:0.6rem 0.75rem;font-size:0.9rem;border-bottom:1px solid var(--border-color,#eee)">Runtime</h2>
+    <h2 style="margin:0 0 0.5rem;padding:0.6rem 0.75rem;font-size:0.9rem;border-bottom:1px solid var(--lh-border-light)">Runtime</h2>
     <div class="info-row"><span class="info-label">Process uptime</span><span class="info-val">{{ uptime }}</span></div>
     <div class="info-row"><span class="info-label">Python</span><span class="info-val">{{ python_version }}</span></div>
     <div class="info-row"><span class="info-label">Django</span><span class="info-val">{{ django_version }}</span></div>
   </div>
 
-  {# ── Devices & Messages ── #}
   <div class="module info-module">
-    <h2 style="margin:0 0 0.5rem;padding:0.6rem 0.75rem;font-size:0.9rem;border-bottom:1px solid var(--border-color,#eee)">Activity</h2>
+    <h2 style="margin:0 0 0.5rem;padding:0.6rem 0.75rem;font-size:0.9rem;border-bottom:1px solid var(--lh-border-light)">Activity</h2>
     <div class="info-row"><span class="info-label">Active devices</span><span class="info-val">{{ device_count }}</span></div>
     <div class="info-row"><span class="info-label">Messages</span><span class="info-val">Stored client-side (IndexedDB)</span></div>
   </div>
 
-  {# ── Push ── #}
   <div class="module info-module">
-    <h2 style="margin:0 0 0.5rem;padding:0.6rem 0.75rem;font-size:0.9rem;border-bottom:1px solid var(--border-color,#eee)">Push notifications</h2>
+    <h2 style="margin:0 0 0.5rem;padding:0.6rem 0.75rem;font-size:0.9rem;border-bottom:1px solid var(--lh-border-light)">Push notifications</h2>
     <div class="info-row">
       <span class="info-label">VAPID configured</span>
       <span class="info-val {% if push_config.supported %}tag-ok{% else %}tag-err{% endif %}">
@@ -54,24 +52,24 @@
     {% if push_subs %}
     <table style="width:100%;border-collapse:collapse;margin-top:0.5rem">
       <thead>
-        <tr style="border-bottom:2px solid var(--border-color,#ddd)">
-          <th style="text-align:left;padding:0.4rem 0.75rem;font-size:0.75rem;font-weight:700;text-transform:uppercase;color:var(--body-quiet-color,#666)">Device</th>
-          <th style="text-align:left;padding:0.4rem 0.75rem;font-size:0.75rem;font-weight:700;text-transform:uppercase;color:var(--body-quiet-color,#666)">Status</th>
-          <th style="text-align:left;padding:0.4rem 0.75rem;font-size:0.75rem;font-weight:700;text-transform:uppercase;color:var(--body-quiet-color,#666)">Last success</th>
-          <th style="text-align:left;padding:0.4rem 0.75rem;font-size:0.75rem;font-weight:700;text-transform:uppercase;color:var(--body-quiet-color,#666)">Last error</th>
+        <tr style="border-bottom:2px solid var(--lh-border)">
+          <th style="text-align:left;padding:0.4rem 0.75rem;font-size:0.75rem;font-weight:700;text-transform:uppercase;color:var(--lh-quiet)">Device</th>
+          <th style="text-align:left;padding:0.4rem 0.75rem;font-size:0.75rem;font-weight:700;text-transform:uppercase;color:var(--lh-quiet)">Status</th>
+          <th style="text-align:left;padding:0.4rem 0.75rem;font-size:0.75rem;font-weight:700;text-transform:uppercase;color:var(--lh-quiet)">Last success</th>
+          <th style="text-align:left;padding:0.4rem 0.75rem;font-size:0.75rem;font-weight:700;text-transform:uppercase;color:var(--lh-quiet)">Last error</th>
         </tr>
       </thead>
       <tbody>
         {% for sub in push_subs %}
-        <tr style="border-bottom:1px solid var(--border-color,#eee)">
+        <tr style="border-bottom:1px solid var(--lh-border-light)">
           <td style="padding:0.4rem 0.75rem;font-size:0.875rem">{{ sub.device.name }}</td>
           <td style="padding:0.4rem 0.75rem;font-size:0.875rem">
             {% if sub.is_active %}<span class="tag-ok">active</span>{% else %}<span class="tag-err">inactive</span>{% endif %}
           </td>
-          <td style="padding:0.4rem 0.75rem;font-size:0.8rem;color:var(--body-quiet-color,#666)">
+          <td style="padding:0.4rem 0.75rem;font-size:0.8rem;color:var(--lh-quiet)">
             {% if sub.last_success_at %}{{ sub.last_success_at|date:"d M H:i" }}{% else %}—{% endif %}
           </td>
-          <td style="padding:0.4rem 0.75rem;font-size:0.8rem;color:#721c24;word-break:break-all">
+          <td style="padding:0.4rem 0.75rem;font-size:0.8rem;color:var(--lh-error-fg);word-break:break-all">
             {{ sub.last_error|default:"—"|truncatechars:80 }}
           </td>
         </tr>

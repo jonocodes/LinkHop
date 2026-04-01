@@ -2,27 +2,28 @@
 {% load static %}
 
 {% block content %}
+{% include "account/_dark_overrides.html" %}
 <div id="content-main">
   <div class="module">
     <h2 style="margin:0 0 1.5rem">Debug</h2>
 
     <style>
-      .section { background:var(--body-bg,#fff); border:1px solid var(--border-color,#ddd); border-radius:6px; padding:1rem 1.25rem; margin-bottom:1.25rem }
+      .section { background:var(--lh-item-bg); border:1px solid var(--lh-border); border-radius:6px; padding:1rem 1.25rem; margin-bottom:1.25rem }
       .section h3 { font-size:1rem; font-weight:600; margin:0 0 0.75rem }
-      .row { display:flex; justify-content:space-between; align-items:baseline; padding:0.25rem 0; border-bottom:1px solid var(--border-color,#f0f0f0); font-size:0.875rem; gap:1rem }
+      .row { display:flex; justify-content:space-between; align-items:baseline; padding:0.25rem 0; border-bottom:1px solid var(--lh-border-light); font-size:0.875rem; gap:1rem }
       .row:last-child { border-bottom:none }
-      .label { color:var(--body-quiet-color,#555) }
+      .label { color:var(--lh-quiet) }
       .val { font-family:monospace; font-size:0.8rem; text-align:right; word-break:break-all }
-      .ok { color:#166534; font-weight:600 }
-      .warn { color:#92400e; font-weight:600 }
-      .err { color:#991b1b; font-weight:600 }
+      .ok { color:var(--lh-success-fg); font-weight:600 }
+      .warn { color:var(--lh-warn-fg); font-weight:600 }
+      .err { color:var(--lh-error-fg); font-weight:600 }
       .dbtn { display:inline-block; padding:0.4rem 1rem; background:var(--button-bg,#417690); color:var(--button-fg,#fff); border:none; border-radius:4px; cursor:pointer; font-size:0.875rem; margin-top:0.5rem }
-      .dbtn:disabled { background:#aaa; cursor:default }
+      .dbtn:disabled { background:var(--lh-border-heavy); cursor:default }
       .result { margin-top:0.75rem; padding:0.6rem 0.875rem; border-radius:4px; font-size:0.8rem; font-family:monospace; white-space:pre-wrap; display:none }
-      .result.ok { background:#f0fdf4; border:1px solid #bbf7d0; color:#166534 }
-      .result.err { background:#fef2f2; border:1px solid #fecaca; color:#991b1b }
-      .result.info { background:#eff6ff; border:1px solid #bfdbfe; color:#1e40af }
-      .sub-row { font-size:0.8rem; padding:0.5rem 0; border-bottom:1px solid var(--border-color,#f0f0f0) }
+      .result.ok { background:var(--lh-success-bg); border:1px solid var(--lh-success-border); color:var(--lh-success-fg) }
+      .result.err { background:var(--lh-error-bg); border:1px solid var(--lh-error-border); color:var(--lh-error-fg) }
+      .result.info { background:var(--lh-info-bg); border:1px solid var(--lh-info-border); color:var(--lh-info-fg) }
+      .sub-row { font-size:0.8rem; padding:0.5rem 0; border-bottom:1px solid var(--lh-border-light) }
       .sub-row:last-child { border-bottom:none }
     </style>
 
@@ -46,7 +47,7 @@
       <div class="row"><span class="label">Active subscriptions on server</span><span class="val">{{ subscriptions|length }}</span></div>
       {% for sub in subscriptions %}
       <div class="sub-row">
-        <span style="color:{% if sub.is_active %}#166534{% else %}#991b1b{% endif %}">{% if sub.is_active %}active{% else %}inactive{% endif %}</span>
+        <span style="color:{% if sub.is_active %}var(--lh-success-fg){% else %}var(--lh-error-fg){% endif %}">{% if sub.is_active %}active{% else %}inactive{% endif %}</span>
         &nbsp;&middot;&nbsp;<span>{{ sub.endpoint|truncatechars:60 }}</span>
         {% if sub.last_success_at %}&nbsp;&middot; last ok: {{ sub.last_success_at|date:"d M H:i" }}{% endif %}
         {% if sub.last_error %}&nbsp;&middot; <span class="err">error: {{ sub.last_error|truncatechars:80 }}</span>{% endif %}
@@ -68,7 +69,7 @@
 
     <div class="section">
       <h3>Push actions</h3>
-      <p style="font-size:0.875rem;color:var(--body-quiet-color,#555);margin-bottom:0.75rem">Run each step in order.</p>
+      <p style="font-size:0.875rem;color:var(--lh-quiet);margin-bottom:0.75rem">Run each step in order.</p>
       <button class="dbtn" onclick="stepUnsubscribe()" style="background:#dc2626">Unsubscribe existing subscription</button>
       <div class="result" id="r-unsubscribe"></div>
       <br><button class="dbtn" onclick="stepPermission()" style="margin-top:0.75rem">Request notification permission</button>
@@ -83,7 +84,7 @@
 
     <div class="section">
       <h3>Log</h3>
-      <div id="log" style="font-size:0.78rem;font-family:monospace;max-height:300px;overflow-y:auto;white-space:pre-wrap;color:var(--body-fg,#333)"></div>
+      <div id="log" style="font-size:0.78rem;font-family:monospace;max-height:300px;overflow-y:auto;white-space:pre-wrap;color:var(--lh-fg)"></div>
     </div>
   </div>
 </div>
