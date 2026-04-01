@@ -84,6 +84,9 @@ def manifest_view(request: HttpRequest) -> JsonResponse:
     return JsonResponse(manifest)
 
 
+from django.views.decorators.csrf import csrf_exempt
+
+@csrf_exempt
 def share_target_view(request: HttpRequest) -> HttpResponse:
     """Handle Web Share Target API requests from Android."""
     if request.method != "POST":
@@ -104,7 +107,7 @@ def share_target_view(request: HttpRequest) -> HttpResponse:
         request.session["pending_share"] = shared_content
         return redirect("/connect")
 
-    return redirect(f"/send?body={urlencode({'body': shared_content})}")
+    return redirect(f"/send?{urlencode({'body': shared_content})}")
 
 
 def service_worker_view(request: HttpRequest) -> HttpResponse:
@@ -355,7 +358,7 @@ def connect_view(request: HttpRequest) -> HttpResponse:
     if pending_share:
         del request.session["pending_share"]
         request.session.modified = True
-        response = redirect(f"/send?body={urlencode({'body': pending_share})}")
+        response = redirect(f"/send?{urlencode({'body': pending_share})}")
     else:
         response = redirect(redirect_to or "inbox")
 
