@@ -3,14 +3,6 @@
 {% block content %}
 {% include "account/_dark_overrides.html" %}
 <div id="content-main">
-  {% if messages %}
-  {% for message in messages %}
-  <div style="padding:0.6rem 0.875rem;background:var(--lh-info-bg);border:1px solid var(--lh-info-border);color:var(--lh-info-fg);border-radius:4px;margin-bottom:1rem;font-size:0.875rem">
-    {{ message }}
-  </div>
-  {% endfor %}
-  {% endif %}
-
   <div class="module">
     <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:1rem;margin-bottom:0.25rem">
       <h2 style="margin:0">Connected devices</h2>

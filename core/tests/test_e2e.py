@@ -351,6 +351,21 @@ class EndToEndTestCase(TestCase):
         self.assertIn(b"Device name is required", response.content)
         self.assertFalse(Device.objects.filter(owner=user).exists())
 
+    def test_activate_device_redirects_when_already_registered(self):
+        """Visiting activate-device with existing device redirects to connected devices with message."""
+        user, device = self._setup_account_and_device(
+            username="alreadyuser", password="alreadypass", device_name="Already Here"
+        )
+
+        response = self.client.get("/account/activate-device/")
+        self.assertEqual(response.status_code, 302)
+        self.assertIn("/account/connected-devices/", response.url)
+
+        # Follow the redirect and check for the message
+        response = self.client.get("/account/activate-device/", follow=True)
+        self.assertContains(response, "already registered")
+        self.assertContains(response, "Already Here")
+
     def test_hop_redirects_to_login_when_logged_out(self):
         response = self.client.get("/hop?type=url&body=https://example.com/story")
 
