@@ -8,9 +8,36 @@
   <h1 style="margin:0">Inbox</h1>
   <div style="display:flex;align-items:baseline;gap:1rem">
     <span id="live-indicator" style="font-size:0.8rem;color:#aaa;display:none">&#9679; Live</span>
+    <button id="btn-ext" onclick="connectExtension()" style="background:none;border:none;cursor:pointer;font-size:0.75rem;color:#aaa;padding:0" title="Connect browser extension">🧩 extension</button>
     <a href="{% url 'debug' %}" style="font-size:0.75rem;color:#aaa;text-decoration:none">debug</a>
   </div>
 </div>
+<p id="ext-status" style="display:none;margin:-0.5rem 0 1rem;padding:0.4rem 0.75rem;border-radius:4px;font-size:0.875rem"></p>
+<script>
+async function connectExtension() {
+  const btn = document.getElementById('btn-ext');
+  const status = document.getElementById('ext-status');
+  try {
+    await browser.runtime.sendMessage('linkhop@extension', {
+      type: 'session_link',
+      token: '{{ device_token|escapejs }}',
+      deviceId: '{{ device.id|escapejs }}',
+      deviceName: '{{ device.name|escapejs }}',
+      serverUrl: window.location.origin,
+    });
+    status.textContent = '✓ Extension connected!';
+    status.style.background = '#d4edda';
+    status.style.color = '#155724';
+  } catch (e) {
+    status.textContent = e.message.includes('Could not establish connection')
+      ? 'LinkHop extension not found — is it installed?'
+      : 'Error: ' + e.message;
+    status.style.background = '#f8d7da';
+    status.style.color = '#721c24';
+  }
+  status.style.display = 'block';
+}
+</script>
 
 <div id="notify-bar" style="display:none;margin-bottom:1.25rem;padding:0.6rem 0.875rem;background:#fff;border:1px solid #ddd;border-radius:4px;font-size:0.875rem;align-items:center;gap:0.75rem">
   <span>Enable browser notifications for new messages?</span>

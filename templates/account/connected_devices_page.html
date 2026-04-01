@@ -5,50 +5,8 @@
   <div class="module">
     <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:1rem;margin-bottom:0.25rem">
       <h2 style="margin:0">Connected devices</h2>
-      <div style="display:flex;gap:0.5rem;flex-shrink:0">
-        <button id="btn-connect-extension" onclick="connectExtension()" style="padding:0.4rem 0.9rem;background:transparent;color:var(--button-bg,#417690);border:1px solid var(--button-bg,#417690);border-radius:4px;font-size:0.875rem;font-weight:600;cursor:pointer;white-space:nowrap">🧩 Connect Extension</button>
-        <a href="{% url 'account_add_device' %}" style="display:inline-block;padding:0.4rem 0.9rem;background:var(--button-bg,#417690);color:var(--button-fg,#fff);border-radius:4px;font-size:0.875rem;font-weight:600;text-decoration:none;white-space:nowrap">Add device</a>
-      </div>
+      <a href="{% url 'account_add_device' %}" style="display:inline-block;padding:0.4rem 0.9rem;background:var(--button-bg,#417690);color:var(--button-fg,#fff);border-radius:4px;font-size:0.875rem;font-weight:600;text-decoration:none;white-space:nowrap;flex-shrink:0">Add device</a>
     </div>
-    <p id="extension-status" style="display:none;margin:0 0 0.75rem;padding:0.5rem 0.75rem;border-radius:4px;font-size:0.875rem"></p>
-    <script>
-    async function connectExtension() {
-      const btn = document.getElementById('btn-connect-extension');
-      const status = document.getElementById('extension-status');
-      btn.disabled = true;
-      btn.textContent = 'Connecting…';
-      try {
-        const resp = await fetch('/api/session/link', {
-          method: 'POST',
-          credentials: 'same-origin',
-          headers: {'Content-Type': 'application/json'},
-        });
-        if (!resp.ok) throw new Error('Server error ' + resp.status);
-        const data = await resp.json();
-        await browser.runtime.sendMessage('linkhop@extension', {
-          type: 'session_link',
-          token: data.token,
-          deviceId: data.device.id,
-          deviceName: data.device.name,
-          serverUrl: window.location.origin,
-        });
-        status.textContent = '✓ Extension connected!';
-        status.style.display = 'block';
-        status.style.background = '#d4edda';
-        status.style.color = '#155724';
-      } catch (e) {
-        status.textContent = e.message.includes('Could not establish connection')
-          ? 'Extension not found — make sure the LinkHop extension is installed.'
-          : 'Error: ' + e.message;
-        status.style.display = 'block';
-        status.style.background = '#f8d7da';
-        status.style.color = '#721c24';
-      } finally {
-        btn.disabled = false;
-        btn.textContent = '🧩 Connect Extension';
-      }
-    }
-    </script>
     <p style="margin:0 0 1.25rem;color:var(--body-quiet-color,#666)">
       {{ devices|length }} device{{ devices|length|pluralize }} registered
     </p>
