@@ -115,8 +115,8 @@ UNFOLD = {
 }
 
 UNFOLD_ACCOUNT = {
-    "SITE_TITLE": "LinkHop Account",
-    "SITE_HEADER": "LinkHop Account",
+    "SITE_TITLE": "LinkHop",
+    "SITE_HEADER": "LinkHop",
     "SITE_SYMBOL": "person",
     "SHOW_HISTORY": False,
     "SHOW_VIEW_ON_SITE": False,
