@@ -102,12 +102,15 @@ def share_target_view(request: HttpRequest) -> HttpResponse:
     elif title and (text or url):
         shared_content = f"{title}\n{text or url}"
 
+    msg_type = "url" if url else "text"
+
     device, _ = get_device_from_request(request)
     if device is None:
         request.session["pending_share"] = shared_content
+        request.session["pending_share_type"] = msg_type
         return redirect("/connect")
 
-    return redirect(f"/send?{urlencode({'body': shared_content})}")
+    return redirect(f"/send?{urlencode({'body': shared_content, 'type': msg_type})}")
 
 
 def service_worker_view(request: HttpRequest) -> HttpResponse:
@@ -356,9 +359,10 @@ def connect_view(request: HttpRequest) -> HttpResponse:
     # Check for pending share in session and redirect to send page if present
     pending_share = request.session.get("pending_share")
     if pending_share:
+        pending_type = request.session.pop("pending_share_type", "text")
         del request.session["pending_share"]
         request.session.modified = True
-        response = redirect(f"/send?{urlencode({'body': pending_share})}")
+        response = redirect(f"/send?{urlencode({'body': pending_share, 'type': pending_type})}")
     else:
         response = redirect(redirect_to or "inbox")
 
