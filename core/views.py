@@ -70,8 +70,41 @@ def manifest_view(request: HttpRequest) -> JsonResponse:
                 "purpose": "maskable",
             },
         ],
+        "share_target": {
+            "action": "/share",
+            "method": "POST",
+            "enctype": "multipart/form-data",
+            "params": {
+                "title": "title",
+                "text": "text",
+                "url": "url",
+            },
+        },
     }
     return JsonResponse(manifest)
+
+
+def share_target_view(request: HttpRequest) -> HttpResponse:
+    """Handle Web Share Target API requests from Android."""
+    if request.method != "POST":
+        return redirect("/send")
+
+    title = request.POST.get("title", "")
+    text = request.POST.get("text", "")
+    url = request.POST.get("url", "")
+
+    shared_content = url or text or title
+    if text and url and text != url:
+        shared_content = f"{text}\n{url}"
+    elif title and (text or url):
+        shared_content = f"{title}\n{text or url}"
+
+    device, _ = get_device_from_request(request)
+    if device is None:
+        request.session["pending_share"] = shared_content
+        return redirect("/connect")
+
+    return redirect(f"/send?body={urlencode({'body': shared_content})}")
 
 
 def service_worker_view(request: HttpRequest) -> HttpResponse:
@@ -317,7 +350,15 @@ def connect_view(request: HttpRequest) -> HttpResponse:
 
     _device, raw_token = registration
 
-    response = redirect(redirect_to or "inbox")
+    # Check for pending share in session and redirect to send page if present
+    pending_share = request.session.get("pending_share")
+    if pending_share:
+        del request.session["pending_share"]
+        request.session.modified = True
+        response = redirect(f"/send?body={urlencode({'body': pending_share})}")
+    else:
+        response = redirect(redirect_to or "inbox")
+
     response.set_cookie(
         COOKIE_NAME,
         raw_token,

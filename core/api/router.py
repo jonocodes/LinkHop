@@ -10,7 +10,7 @@ from django.http import HttpRequest, HttpResponse, JsonResponse
 from django.views.decorators.csrf import csrf_exempt
 
 from core.models import Device
-from core.services.auth import create_pairing_pin, get_device_for_token, register_device_with_pairing_pin
+from core.services.auth import create_pairing_pin, get_device_for_token, provision_extension_device, register_device_with_pairing_pin
 from core.services.messages import (
     create_message,
     list_incoming_messages,
@@ -82,6 +82,17 @@ def require_device_auth(view_func):
         return view_func(request, *args, **kwargs)
 
     return wrapped
+
+
+@csrf_exempt
+def session_link(request: HttpRequest) -> JsonResponse:
+    """Create or rotate an extension device for the currently logged-in web session."""
+    if request.method != "POST":
+        return HttpResponse(status=405)
+    if not request.user.is_authenticated:
+        return HttpResponse(status=401)
+    device, raw_token = provision_extension_device(user=request.user)
+    return JsonResponse({"device": serialize_device(device), "token": raw_token})
 
 
 @require_device_auth

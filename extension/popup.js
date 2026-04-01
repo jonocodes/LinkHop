@@ -44,12 +44,12 @@ async function apiFetch(config, path, options = {}) {
   return resp;
 }
 
-async function registerDevice(serverUrl, pin, deviceName) {
-  const url = `${serverUrl.replace(/\/$/, "")}/api/pairings/pin/register`;
+async function sessionLink(serverUrl) {
+  const url = `${serverUrl.replace(/\/$/, "")}/api/session/link`;
   const resp = await fetch(url, {
     method: "POST",
+    credentials: "include",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ pin, device_name: deviceName }),
   });
   return resp;
 }
@@ -90,23 +90,23 @@ async function initSetupScreen() {
 
   document.getElementById("btn-link").addEventListener("click", async () => {
     const serverUrl = document.getElementById("server-url").value.trim();
-    const deviceName = document.getElementById("device-name").value.trim() || "Firefox Extension";
-    const pin = document.getElementById("pin").value.trim();
 
     if (!serverUrl) return setError("setup-error", "Server URL is required.");
-    if (!pin) return setError("setup-error", "Pairing PIN is required.");
 
     setError("setup-error", "");
     const btn = document.getElementById("btn-link");
     btn.disabled = true;
-    btn.textContent = "Linking…";
+    btn.textContent = "Connecting…";
 
     try {
-      const resp = await registerDevice(serverUrl, pin, deviceName);
+      const resp = await sessionLink(serverUrl);
+      if (resp.status === 401) {
+        setError("setup-error", `Not logged in. Please log in at ${serverUrl} first.`);
+        return;
+      }
       if (!resp.ok) {
         const body = await resp.json().catch(() => ({}));
-        const msg = body?.error?.message || `Registration failed (${resp.status})`;
-        setError("setup-error", msg);
+        setError("setup-error", body?.error?.message || `Connection failed (${resp.status})`);
         return;
       }
       const data = await resp.json();
@@ -124,7 +124,7 @@ async function initSetupScreen() {
       setError("setup-error", `Error: ${err.message}`);
     } finally {
       btn.disabled = false;
-      btn.textContent = "Link device";
+      btn.textContent = "Connect";
     }
   });
 }

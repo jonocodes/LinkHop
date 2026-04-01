@@ -15,18 +15,12 @@
   <!-- Setup screen (shown when not linked) -->
   <section id="screen-setup" class="screen hidden">
     <h2>Connect to LinkHop</h2>
-    <p class="hint">Enter your server URL and a pairing PIN from an existing device.</p>
+    <p class="hint">Enter your server URL. You must be logged in to the web UI in this browser.</p>
 
     <label for="server-url">Server URL</label>
     <input id="server-url" type="url" placeholder="https://linkhop.example.com" autocomplete="off">
 
-    <label for="device-name">Device name</label>
-    <input id="device-name" type="text" placeholder="Firefox Extension" autocomplete="off">
-
-    <label for="pin">Pairing PIN</label>
-    <input id="pin" type="text" placeholder="123456" maxlength="6" autocomplete="off">
-
-    <button id="btn-link" class="btn-primary">Link device</button>
+    <button id="btn-link" class="btn-primary">Connect</button>
     <p id="setup-error" class="error hidden"></p>
   </section>
 

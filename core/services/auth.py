@@ -5,7 +5,7 @@ from datetime import timedelta
 from django.db import transaction
 from django.utils import timezone
 
-from core.models import Device, Message, PairingPin
+from core.models import Device, DeviceType, Message, PairingPin
 
 
 def hash_token(raw_token: str) -> str:
@@ -105,6 +105,29 @@ def get_system_device() -> Device:
         defaults={"token_hash": _SYSTEM_TOKEN_HASH},
     )
     return device
+
+
+@transaction.atomic
+def provision_extension_device(*, user) -> tuple[Device, str]:
+    """Get or create the extension device for a user, rotating its token."""
+    raw_token = generate_token("device")
+    device = Device.objects.filter(
+        owner=user,
+        device_type=DeviceType.EXTENSION,
+        is_active=True,
+        revoked_at__isnull=True,
+    ).first()
+    if device is not None:
+        device.token_hash = hash_token(raw_token)
+        device.save(update_fields=["token_hash", "updated_at"])
+    else:
+        device = Device.objects.create(
+            name="Browser Extension",
+            token_hash=hash_token(raw_token),
+            owner=user,
+            device_type=DeviceType.EXTENSION,
+        )
+    return device, raw_token
 
 
 def get_device_for_token(raw_token: str) -> Device | None:

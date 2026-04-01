@@ -29,6 +29,7 @@ from core.views import (
     service_worker_view,
     send_view,
     sent_view,
+    share_target_view,
 )
 
 urlpatterns = [
@@ -52,6 +53,7 @@ urlpatterns = [
     path("disconnect", disconnect_view, name="disconnect"),
     path("pair", pair_view, name="pair"),
     path("send", send_view, name="send"),
+    path("share", share_target_view, name="share_target"),
     path("hop", hop_view, name="hop"),
     path("inbox", inbox_view, name="inbox"),
     path("sent", sent_view, name="sent"),
