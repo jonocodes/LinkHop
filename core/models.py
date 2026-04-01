@@ -88,6 +88,33 @@ class MessageType(models.TextChoices):
     TEXT = "text", "Text"
 
 
+class MessageLog(models.Model):
+    """Metadata-only audit log. The message body is never stored."""
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    sender = models.ForeignKey(
+        Device,
+        on_delete=models.SET_NULL,
+        null=True,
+        related_name="+",
+    )
+    recipient = models.ForeignKey(
+        Device,
+        on_delete=models.SET_NULL,
+        null=True,
+        related_name="+",
+    )
+    message_type = models.CharField(max_length=10, choices=MessageType.choices)
+    push_subscriptions = models.PositiveSmallIntegerField(default=0)
+    push_delivered = models.PositiveSmallIntegerField(default=0)
+    created_at = models.DateTimeField(default=timezone.now, db_index=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+
+    def __str__(self) -> str:
+        return f"{self.sender} → {self.recipient} ({self.message_type})"
+
+
 class GlobalSettings(TimestampedModel):
     singleton_key = models.CharField(max_length=32, default="default", unique=True)
     api_sends_per_minute = models.PositiveIntegerField(

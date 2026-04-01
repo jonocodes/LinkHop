@@ -15,6 +15,7 @@ from unfold.forms import AdminPasswordChangeForm, UserChangeForm, UserCreationFo
 from core.models import (
     Device,
     GlobalSettings,
+    MessageLog,
     PushSubscription,
 )
 
@@ -80,6 +81,19 @@ class DeviceAdmin(ModelAdmin):
     def has_add_permission(self, request):
         return False
 
+
+
+@admin.register(MessageLog)
+class MessageLogAdmin(ModelAdmin):
+    list_display = ("created_at", "sender", "recipient", "message_type", "push_delivered", "push_subscriptions")
+    list_filter = ("message_type", "created_at")
+    readonly_fields = ("id", "sender", "recipient", "message_type", "push_subscriptions", "push_delivered", "created_at")
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
 
 
 @admin.register(PushSubscription)
