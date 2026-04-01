@@ -6,7 +6,7 @@ from core.admin_navigation import build_admin_sidebar_navigation
 
 class AccountAdminSite(UnfoldAdminSite):
     settings_name = "UNFOLD_ACCOUNT"
-    site_header = "LinkHop Account"
+    site_header = "LinkHop"
     site_title = "LinkHop"
     index_title = "My account"
 

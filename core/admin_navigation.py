@@ -14,15 +14,15 @@ def build_admin_sidebar_navigation(request: HttpRequest) -> list[dict]:
                 "title": "Messages",
                 "items": [
                     {
-                        "title": "Inbox",
-                        "icon": "inbox",
-                        "link": reverse("account_inbox"),
-                        "permission": lambda req: True,
-                    },
-                    {
                         "title": "Send",
                         "icon": "send",
                         "link": reverse("account_send"),
+                        "permission": lambda req: True,
+                    },
+                    {
+                        "title": "Inbox",
+                        "icon": "inbox",
+                        "link": reverse("account_inbox"),
                         "permission": lambda req: True,
                     },
                 ],
