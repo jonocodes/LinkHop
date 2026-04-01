@@ -118,7 +118,7 @@ Delivery is:
 
 Active development — core functionality is working.
 
-The app includes device registration and enrollment, a full JSON API, a browser-based send form and inbox, SSE real-time delivery, and browser notifications.
+The app includes device registration and enrollment, a full JSON API, a browser-based send form and inbox, SSE real-time delivery, browser notifications, Web Push support, and browser extensions for Firefox (MV2/SSE) and Chrome (MV3/Web Push).
 
 For more detail:
 
@@ -206,6 +206,7 @@ Actual push delivery requires VAPID keys to be configured on the server.
 
 | Route | Description |
 |---|---|
+| `POST /api/session/link` | Return the current device token for the browser session (used by browser extensions) |
 | `POST /api/pairings/pin` | Generate a 6-digit pairing PIN from an authenticated device |
 | `POST /api/pairings/pin/register` | Exchange a pairing PIN for a connected device session |
 | `GET /api/push/config` | Get push notification capability and VAPID public key |
@@ -319,11 +320,26 @@ curl -X POST http://127.0.0.1:8000/api/messages/MESSAGE_UUID/opened \
 
 ---
 
+## Browser extensions
+
+Two extensions are included:
+
+| | Firefox (`extension/`) | Chrome (`extension-mv3/`) |
+|---|---|---|
+| Manifest | V2 | V3 |
+| Real-time delivery | SSE (persistent connection) | Web Push |
+| Works on LAN / without internet | ✅ Yes | ❌ No |
+
+Both extensions share the same setup flow: enter the server URL in the popup, open `/inbox`, click **🧩 extension**. The extension reuses your existing browser device token — no separate device is created.
+
+See [`extension/README.md`](./extension/README.md) and [`extension-mv3/README.md`](./extension-mv3/README.md) for installation and setup details.
+
+---
+
 ## Future directions
 
 Planned areas of expansion include:
 
-* Browser extension for faster sending
 * Mobile-friendly experience and notifications
 * CLI for terminal-based usage
 * Exploration of **LinkHopMesh**, a decentralized peer-to-peer version where devices can relay messages for each other without requiring a central server
