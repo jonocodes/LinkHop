@@ -856,3 +856,48 @@ def account_change_password_view(request: HttpRequest) -> HttpResponse:
         "success": success,
     }
     return render(request, "account/change_password_page.html", context)
+
+
+@account_login_required
+def account_system_view(request: HttpRequest) -> HttpResponse:
+    import sys
+    import django
+    from core.models import PushSubscription
+    from core.services.push import get_public_push_config
+
+    uptime_str = "unavailable"
+    try:
+        with open("/proc/uptime") as f:
+            boot_seconds = float(f.read().split()[0])
+        proc_start_ticks = int(open("/proc/self/stat").read().split()[21])
+        clock_ticks = os.sysconf("SC_CLK_TCK")
+        proc_uptime_seconds = boot_seconds - (proc_start_ticks / clock_ticks)
+        uptime = datetime.timedelta(seconds=int(proc_uptime_seconds))
+        hours, remainder = divmod(int(uptime.total_seconds()), 3600)
+        minutes, seconds = divmod(remainder, 60)
+        uptime_str = f"{hours}h {minutes}m {seconds}s"
+    except Exception:
+        pass
+
+    message_counts = {
+        "total": Message.objects.count(),
+        "queued": Message.objects.filter(status=MessageStatus.QUEUED).count(),
+        "received": Message.objects.filter(status=MessageStatus.RECEIVED).count(),
+        "presented": Message.objects.filter(status=MessageStatus.PRESENTED).count(),
+        "opened": Message.objects.filter(status=MessageStatus.OPENED).count(),
+    }
+    device_count = Device.objects.filter(is_active=True).exclude(name=_SYSTEM_DEVICE_NAME).count()
+    push_subs = PushSubscription.objects.select_related("device").order_by("-updated_at")
+
+    context = {
+        **account_site.each_context(request),
+        "title": "System info",
+        "uptime": uptime_str,
+        "python_version": sys.version.split()[0],
+        "django_version": django.__version__,
+        "message_counts": message_counts,
+        "device_count": device_count,
+        "push_config": get_public_push_config(),
+        "push_subs": push_subs,
+    }
+    return render(request, "account/system_page.html", context)
