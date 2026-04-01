@@ -127,13 +127,13 @@ class AdminSettingsViewTests(TestCase):
         self.assertContains(response, "Management")
         self.assertNotContains(response, reverse("account_bookmarklet"))
 
-    def test_account_connected_devices_page_has_add_device_link(self):
+    def test_account_connected_devices_page_has_register_device_link(self):
         self._account_login()
         response = self.client.get(reverse("account_connected_devices"))
 
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, "Add device")
-        self.assertContains(response, "/connect")
+        self.assertContains(response, "Register device")
+        self.assertContains(response, reverse("account_activate_device"))
         self.assertContains(response, reverse("account_bookmarklet"))
 
     def test_account_bookmarklet_page_renders_drag_link(self):
@@ -168,7 +168,7 @@ class AccountNonAdminViewTests(TestCase):
     def test_connected_devices_page_renders_for_non_admin_account_user(self):
         response = self.client.get(reverse("account_connected_devices"))
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, "Add device")
+        self.assertContains(response, "Register device")
 
     def test_bookmarklet_page_renders_for_non_admin_account_user(self):
         response = self.client.get(reverse("account_bookmarklet"))

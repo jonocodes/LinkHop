@@ -16,9 +16,9 @@ from django.templatetags.static import static
 from django.utils.http import urlencode, url_has_allowed_host_and_scheme
 from django.utils import timezone
 
-from core.account_auth import account_login_required, account_session_login, account_session_logout, get_account_user
+from core.account_auth import account_and_device_required, account_login_required, account_session_login, account_session_logout, get_account_user
 from core.account_site import account_site
-from core.device_auth import COOKIE_NAME, device_login_required, get_device_from_request
+from core.device_auth import COOKIE_NAME, get_device_from_request
 from core.forms import GlobalSettingsForm
 from core.models import Device, GlobalSettings, MessageType
 from core.selectors import device_presence_status, format_time_ago, list_active_devices
@@ -27,6 +27,7 @@ from core.services.auth import (
     authenticate_and_register_device,
     forget_device,
     get_system_device,
+    register_device_for_user,
 )
 from core.services.messages import relay_message
 
@@ -37,8 +38,10 @@ def healthcheck(_request: HttpRequest) -> HttpResponse:
 
 def home_view(request: HttpRequest) -> HttpResponse:
     device, _ = get_device_from_request(request)
+    account_user = get_account_user(request)
     return render(request, "home.html", {
         "device": device,
+        "account_user": account_user,
         "github_url": "https://github.com/jonocodes/LinkHop",
     })
 
@@ -49,7 +52,7 @@ def manifest_view(request: HttpRequest) -> JsonResponse:
         "name": "LinkHop",
         "short_name": "LinkHop",
         "description": "Send links and text between your devices",
-        "start_url": "/inbox",
+        "start_url": "/account/inbox/",
         "scope": "/",
         "display": "standalone",
         "background_color": "#f5f5f5",
@@ -100,9 +103,12 @@ def share_target_view(request: HttpRequest) -> HttpResponse:
     if device is None:
         request.session["pending_share"] = shared_content
         request.session["pending_share_type"] = msg_type
-        return redirect("/connect")
+        user = get_account_user(request)
+        if user is not None:
+            return redirect("account_activate_device")
+        return redirect("account_login")
 
-    return redirect(f"/send?{urlencode({'body': shared_content, 'type': msg_type})}")
+    return redirect(f"/account/send/?{urlencode({'body': shared_content, 'type': msg_type})}")
 
 
 def service_worker_view(request: HttpRequest) -> HttpResponse:
@@ -252,78 +258,31 @@ def _validated_next_url(request: HttpRequest, candidate: str) -> str:
 
 
 def connect_view(request: HttpRequest) -> HttpResponse:
-    # Already connected — go straight to inbox.
+    """Legacy /connect — redirect to account activate-device or login."""
     device, _ = get_device_from_request(request)
     if device is not None:
-        return redirect("inbox")
+        return redirect("account_inbox")
 
-    if request.method == "GET":
-        return render(request, "connect.html", {
-            "redirect_to": _validated_next_url(request, request.GET.get("next", "")),
-        })
+    user = get_account_user(request)
+    if user is not None:
+        next_url = request.GET.get("next", "")
+        qs = urlencode({"next": next_url}) if next_url else ""
+        return redirect(f"{reverse('account_activate_device')}{'?' + qs if qs else ''}")
 
-    username = request.POST.get("username", "").strip()
-    password = request.POST.get("password", "")
-    device_name = request.POST.get("device_name", "").strip()
-    redirect_to = _validated_next_url(request, request.POST.get("next", ""))
-
-    if not username or not password or not device_name:
-        return render(request, "connect.html", {
-            "error": "All fields are required.",
-            "username": username,
-            "device_name": device_name,
-            "redirect_to": redirect_to,
-        })
-
-    try:
-        registration = authenticate_and_register_device(
-            username=username,
-            password=password,
-            device_name=device_name,
-        )
-    except IntegrityError:
-        return render(request, "connect.html", {
-            "error": "That device name is already in use for this account.",
-            "username": username,
-            "device_name": device_name,
-            "redirect_to": redirect_to,
-        })
-
-    if registration is None:
-        return render(request, "connect.html", {
-            "error": "Invalid username or password.",
-            "username": username,
-            "device_name": device_name,
-            "redirect_to": redirect_to,
-        })
-
-    _device, raw_token = registration
-
-    # Check for pending share in session and redirect to send page if present
-    pending_share = request.session.get("pending_share")
-    if pending_share:
-        pending_type = request.session.pop("pending_share_type", "text")
-        del request.session["pending_share"]
-        request.session.modified = True
-        response = redirect(f"/send?{urlencode({'body': pending_share, 'type': pending_type})}")
-    else:
-        response = redirect(redirect_to or "inbox")
-
-    response.set_cookie(
-        COOKIE_NAME,
-        raw_token,
-        max_age=60 * 60 * 24 * 365,
-        httponly=True,
-        samesite="Lax",
-    )
-    return response
+    # Not logged in — go to account login, preserving next
+    next_url = request.GET.get("next", "")
+    qs = urlencode({"next": next_url}) if next_url else ""
+    return redirect(f"{reverse('account_login')}{'?' + qs if qs else ''}")
 
 
 def hop_view(request: HttpRequest) -> HttpResponse:
     device, _raw_token = get_device_from_request(request)
     if device is None:
-        connect_url = "/connect?" + urlencode({"next": request.get_full_path()})
-        return redirect(connect_url)
+        # Check account session — if logged in but no device, go to activate
+        user = get_account_user(request)
+        if user is not None:
+            return redirect(f"{reverse('account_activate_device')}?{urlencode({'next': request.get_full_path()})}")
+        return redirect(f"{reverse('account_login')}?{urlencode({'next': request.get_full_path()})}")
 
     from core.models import GlobalSettings
     gs = GlobalSettings.objects.filter(singleton_key="default").first()
@@ -370,13 +329,13 @@ def disconnect_view(request: HttpRequest) -> HttpResponse:
     if device is not None:
         forget_device(device=device)
 
-    response = redirect("connect")
+    response = redirect("account_connected_devices")
     response.delete_cookie(COOKIE_NAME)
     return response
 
 
-@device_login_required
-def send_view(request: HttpRequest) -> HttpResponse:
+@account_and_device_required
+def account_send_view(request: HttpRequest) -> HttpResponse:
     from core.models import GlobalSettings
     gs = GlobalSettings.objects.filter(singleton_key="default").first()
     allow_self_send = gs.allow_self_send if gs is not None else False
@@ -386,14 +345,20 @@ def send_view(request: HttpRequest) -> HttpResponse:
         qs = qs.exclude(id=request.device.id)
     devices = _device_context(qs)
 
+    base_ctx = {
+        **account_site.each_context(request),
+        "title": "Send",
+        "device": request.device,
+        "device_token": request.device_token,
+    }
+
     if request.method == "GET":
-        return render(request, "send.html", {
+        return render(request, "account/send_page.html", {
+            **base_ctx,
             "devices": devices,
             "type": request.GET.get("type", "text"),
             "body": request.GET.get("body", ""),
             "selected_recipient": devices[0]["id"] if len(devices) == 1 else "",
-            "device": request.device,
-            "device_token": request.device_token,
         })
 
     msg_type = request.POST.get("type", "")
@@ -422,7 +387,8 @@ def send_view(request: HttpRequest) -> HttpResponse:
                 message_type=msg_type,
                 body=body,
             )
-            return render(request, "send.html", {
+            return render(request, "account/send_page.html", {
+                **base_ctx,
                 "devices": devices,
                 "type": msg_type,
                 "body": "",
@@ -430,34 +396,33 @@ def send_view(request: HttpRequest) -> HttpResponse:
                 "sent_body": body,
                 "sent_recipient_id": str(recipient.id),
                 "sent_recipient_name": recipient.name,
-                "device": request.device,
-                "device_token": request.device_token,
             })
         except ValidationError as exc:
             errors["body"] = "; ".join(exc.messages)
 
-    return render(request, "send.html", {
+    return render(request, "account/send_page.html", {
+        **base_ctx,
         "devices": devices,
         "type": msg_type,
         "body": body,
         "selected_recipient": recipient_id,
         "errors": errors,
-        "device": request.device,
-        "device_token": request.device_token,
     })
 
 
-@device_login_required
-def inbox_view(request: HttpRequest) -> HttpResponse:
+@account_and_device_required
+def account_inbox_view(request: HttpRequest) -> HttpResponse:
     """Client-side inbox — messages are stored in IndexedDB via the service worker."""
-    return render(request, "inbox.html", {
+    return render(request, "account/inbox_page.html", {
+        **account_site.each_context(request),
+        "title": "Inbox",
         "device": request.device,
         "device_token": request.device_token,
     })
 
 
-@device_login_required
-def debug_view(request: HttpRequest) -> HttpResponse:
+@account_and_device_required
+def account_debug_view(request: HttpRequest) -> HttpResponse:
     from core.models import PushSubscription
     from core.services.push import get_public_push_config
 
@@ -480,7 +445,9 @@ def debug_view(request: HttpRequest) -> HttpResponse:
 
     device_count = Device.objects.filter(is_active=True).exclude(name=_SYSTEM_DEVICE_NAME).count()
 
-    return render(request, "debug.html", {
+    return render(request, "account/debug_page.html", {
+        **account_site.each_context(request),
+        "title": "Debug",
         "device": request.device,
         "device_token": request.device_token,
         "push_config": get_public_push_config(),
@@ -496,6 +463,10 @@ def debug_view(request: HttpRequest) -> HttpResponse:
 
 def account_login_view(request: HttpRequest) -> HttpResponse:
     if get_account_user(request) is not None:
+        # Already logged in — if device cookie present go to inbox, else devices page
+        device, _ = get_device_from_request(request)
+        if device is not None:
+            return redirect("account_inbox")
         return redirect("account_connected_devices")
 
     error = None
@@ -507,7 +478,11 @@ def account_login_view(request: HttpRequest) -> HttpResponse:
         if user is not None and user.is_active:
             account_session_login(request, user)
             next_url = _validated_next_url(request, request.POST.get("next", ""))
-            return redirect(next_url or "account_connected_devices")
+            if not next_url:
+                # If browser already has a device cookie, go straight to inbox
+                device, _ = get_device_from_request(request)
+                next_url = reverse("account_inbox") if device else reverse("account_connected_devices")
+            return redirect(next_url)
         error = "Invalid username or password."
 
     return render(request, "account/login.html", {
@@ -519,6 +494,66 @@ def account_login_view(request: HttpRequest) -> HttpResponse:
 def account_logout_view(request: HttpRequest) -> HttpResponse:
     account_session_logout(request)
     return redirect("account_login")
+
+
+@account_login_required
+def account_activate_device_view(request: HttpRequest) -> HttpResponse:
+    """Register the current browser as a device for the logged-in account."""
+    # Already has a device cookie — skip activation.
+    device, _ = get_device_from_request(request)
+    if device is not None:
+        return redirect("account_inbox")
+
+    redirect_to = _validated_next_url(request, request.GET.get("next", "") if request.method == "GET" else request.POST.get("next", ""))
+
+    if request.method == "GET":
+        return render(request, "account/activate_device_page.html", {
+            **account_site.each_context(request),
+            "title": "Activate this browser",
+            "redirect_to": redirect_to,
+        })
+
+    device_name = request.POST.get("device_name", "").strip()
+    if not device_name:
+        return render(request, "account/activate_device_page.html", {
+            **account_site.each_context(request),
+            "title": "Activate this browser",
+            "error": "Device name is required.",
+            "redirect_to": redirect_to,
+        })
+
+    try:
+        _device, raw_token = register_device_for_user(
+            user=request.account_user,
+            device_name=device_name,
+        )
+    except IntegrityError:
+        return render(request, "account/activate_device_page.html", {
+            **account_site.each_context(request),
+            "title": "Activate this browser",
+            "error": "That device name is already in use for this account.",
+            "device_name": device_name,
+            "redirect_to": redirect_to,
+        })
+
+    # Check for pending share in session
+    pending_share = request.session.get("pending_share")
+    if pending_share:
+        pending_type = request.session.pop("pending_share_type", "text")
+        del request.session["pending_share"]
+        request.session.modified = True
+        response = redirect(f"/account/send/?{urlencode({'body': pending_share, 'type': pending_type})}")
+    else:
+        response = redirect(redirect_to or "account_inbox")
+
+    response.set_cookie(
+        COOKIE_NAME,
+        raw_token,
+        max_age=60 * 60 * 24 * 365,
+        httponly=True,
+        samesite="Lax",
+    )
+    return response
 
 
 @account_login_required

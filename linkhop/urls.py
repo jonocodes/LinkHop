@@ -1,17 +1,21 @@
 from django.contrib import admin
+from django.shortcuts import redirect
 from django.urls import include, path
 
 from core.account_site import account_site
 
 from core.views import (
-    debug_view,
+    account_activate_device_view,
     account_bookmarklet_view,
     account_change_password_view,
     account_connected_devices_view,
+    account_debug_view,
+    account_inbox_view,
     account_login_view,
     account_logout_view,
     account_remove_device_view,
     account_rename_device_view,
+    account_send_view,
     account_system_view,
     account_send_test_message_view,
     admin_settings_view,
@@ -20,10 +24,8 @@ from core.views import (
     healthcheck,
     home_view,
     hop_view,
-    inbox_view,
     manifest_view,
     service_worker_view,
-    send_view,
     share_target_view,
 )
 
@@ -39,6 +41,10 @@ urlpatterns = [
     path("account/connected-devices/<str:device_id>/test-message", account_send_test_message_view, name="account_send_test_message"),
     path("account/connected-devices/<str:device_id>/rename", account_rename_device_view, name="account_rename_device"),
     path("account/connected-devices/<str:device_id>/remove", account_remove_device_view, name="account_remove_device"),
+    path("account/activate-device/", account_activate_device_view, name="account_activate_device"),
+    path("account/inbox/", account_inbox_view, name="account_inbox"),
+    path("account/send/", account_send_view, name="account_send"),
+    path("account/debug/", account_debug_view, name="account_debug"),
     path("account/bookmarklet/", account_bookmarklet_view, name="account_bookmarklet"),
     path("account/password/", account_change_password_view, name="account_change_password"),
     path("account/system/", account_system_view, name="account_system"),
@@ -46,10 +52,11 @@ urlpatterns = [
     path("healthz", healthcheck, name="healthcheck"),
     path("connect", connect_view, name="connect"),
     path("disconnect", disconnect_view, name="disconnect"),
-    path("send", send_view, name="send"),
     path("share", share_target_view, name="share_target"),
     path("hop", hop_view, name="hop"),
-    path("inbox", inbox_view, name="inbox"),
-    path("debug", debug_view, name="debug"),
+    # Legacy redirects — old URLs redirect to account area
+    path("inbox", lambda r: redirect("/account/inbox/", permanent=True), name="inbox"),
+    path("send", lambda r: redirect(f"/account/send/?{r.GET.urlencode()}" if r.GET else "/account/send/", permanent=True), name="send"),
+    path("debug", lambda r: redirect("/account/debug/", permanent=True), name="debug"),
     path("api/", include("core.api.urls")),
 ]

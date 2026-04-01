@@ -368,7 +368,7 @@ self.addEventListener("push", (event) => {
         data: {
           messageId: incomingMessage.id,
           type: data.type,
-          url: isUrl ? data.body : "/inbox",
+          url: isUrl ? data.body : "/account/inbox/",
         },
       });
     })
@@ -378,7 +378,7 @@ self.addEventListener("push", (event) => {
 self.addEventListener("notificationclick", (event) => {
   event.notification.close();
   const notifData = event.notification.data || {};
-  const targetUrl = notifData.url || "/inbox";
+  const targetUrl = notifData.url || "/account/inbox/";
   const messageId = notifData.messageId;
 
   event.waitUntil(
@@ -393,11 +393,11 @@ self.addEventListener("notificationclick", (event) => {
       // For text messages, navigate to inbox
       for (const client of clients) {
         if ("focus" in client) {
-          client.navigate("/inbox");
+          client.navigate("/account/inbox/");
           return client.focus();
         }
       }
-      return self.clients.openWindow("/inbox");
+      return self.clients.openWindow("/account/inbox/");
     })
   );
 });

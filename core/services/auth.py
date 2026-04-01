@@ -15,6 +15,18 @@ def generate_token(prefix: str) -> str:
     return f"{prefix}_{secrets.token_urlsafe(32)}"
 
 
+def register_device_for_user(
+    *,
+    user,
+    device_name: str,
+) -> tuple[Device, str]:
+    """Create a new device for an already-authenticated user.
+
+    Returns (device, raw_token).
+    """
+    return create_device_token(name=device_name, owner=user)
+
+
 def authenticate_and_register_device(
     *,
     username: str,

@@ -1,0 +1,110 @@
+{% extends "admin/base_site.html" %}
+
+{% block content %}
+<div id="content-main">
+  <div class="module" style="max-width:32rem">
+    <h2 style="margin:0 0 1rem">Send</h2>
+
+    {% if success %}
+    <div style="padding:0.6rem 0.875rem;background:#f0fdf4;border:1px solid #bbf7d0;color:#166534;border-radius:4px;margin-bottom:1.25rem;font-size:0.875rem">
+      Sent successfully.
+    </div>
+    {% endif %}
+
+    {% if errors.non_field %}
+    <div style="padding:0.6rem 0.875rem;background:#fef2f2;border:1px solid #fecaca;color:#991b1b;border-radius:4px;margin-bottom:1.25rem;font-size:0.875rem">
+      {{ errors.non_field }}
+    </div>
+    {% endif %}
+
+    <form method="post" action="{% url 'account_send' %}" id="send-form" novalidate>
+      {% csrf_token %}
+
+      <div style="margin-bottom:1.25rem">
+        <label for="id_recipient" style="display:block;font-weight:600;margin-bottom:0.25rem">To</label>
+        <select id="id_recipient" name="recipient_device_id" style="display:block;width:100%;padding:0.5rem 0.625rem;border:1px solid var(--border-color,#ccc);border-radius:4px;font-size:1rem;background:var(--body-bg,#fff)">
+          <option value="">— choose a device —</option>
+          {% for device in devices %}
+          <option value="{{ device.id }}"{% if device.id == selected_recipient %} selected{% endif %}>
+            {{ device.name }} (seen {{ device.last_seen_ago }})
+          </option>
+          {% endfor %}
+        </select>
+        {% if errors.recipient %}<p style="color:#991b1b;font-size:0.875rem;margin:0.25rem 0 0">{{ errors.recipient }}</p>{% endif %}
+      </div>
+
+      <div style="margin-bottom:1.25rem">
+        <label for="id_type" style="display:block;font-weight:600;margin-bottom:0.25rem">Type</label>
+        <select id="id_type" name="type" style="display:block;width:100%;padding:0.5rem 0.625rem;border:1px solid var(--border-color,#ccc);border-radius:4px;font-size:1rem;background:var(--body-bg,#fff)">
+          <option value="text" {% if type == "text" %}selected{% endif %}>Text</option>
+          <option value="url" {% if type == "url" %}selected{% endif %}>URL</option>
+        </select>
+        {% if errors.type %}<p style="color:#991b1b;font-size:0.875rem;margin:0.25rem 0 0">{{ errors.type }}</p>{% endif %}
+      </div>
+
+      <div style="margin-bottom:1.25rem">
+        <label for="id_body_url" style="display:block;font-weight:600;margin-bottom:0.25rem">Message</label>
+        <input type="url" id="id_body_url" name="body" value="{{ body|default:'' }}" placeholder="https://example.com" autocomplete="off"
+               style="display:{% if type != 'url' %}none{% else %}block{% endif %};width:100%;padding:0.5rem 0.625rem;border:1px solid var(--border-color,#ccc);border-radius:4px;font-size:1rem;background:var(--body-bg,#fff)">
+        <textarea id="id_body_text" name="body" placeholder="Type your message…"
+                  style="display:{% if type == 'url' %}none{% else %}block{% endif %};width:100%;padding:0.5rem 0.625rem;border:1px solid var(--border-color,#ccc);border-radius:4px;font-size:1rem;background:var(--body-bg,#fff);resize:vertical;min-height:8rem;font-family:inherit">{% if type == "text" %}{{ body|default:'' }}{% endif %}</textarea>
+        {% if errors.body %}<p style="color:#991b1b;font-size:0.875rem;margin:0.25rem 0 0">{{ errors.body }}</p>{% endif %}
+      </div>
+
+      <button type="submit" style="padding:0.5rem 1.25rem;background:var(--button-bg,#417690);color:var(--button-fg,#fff);border:none;border-radius:4px;font-size:1rem;font-weight:600;cursor:pointer">
+        Send
+      </button>
+    </form>
+  </div>
+</div>
+
+<script>
+(function () {
+  var typeSelect = document.getElementById('id_type');
+  var urlInput = document.getElementById('id_body_url');
+  var textArea = document.getElementById('id_body_text');
+
+  function syncBody() {
+    if (typeSelect.value === 'url') {
+      if (textArea.style.display !== 'none') {
+        urlInput.value = textArea.value;
+        textArea.style.display = 'none';
+        textArea.removeAttribute('name');
+      }
+      urlInput.style.display = 'block';
+      urlInput.setAttribute('name', 'body');
+    } else {
+      if (urlInput.style.display !== 'none') {
+        textArea.value = urlInput.value;
+        urlInput.style.display = 'none';
+        urlInput.removeAttribute('name');
+      }
+      textArea.style.display = 'block';
+      textArea.setAttribute('name', 'body');
+    }
+  }
+
+  typeSelect.addEventListener('change', syncBody);
+  syncBody();
+
+  {% if success %}
+  if (navigator.serviceWorker && navigator.serviceWorker.controller) {
+    navigator.serviceWorker.controller.postMessage({
+      type: 'linkhop_store_sent',
+      message: {
+        id: crypto.randomUUID(),
+        type: '{{ type|escapejs }}',
+        body: '{{ sent_body|escapejs }}',
+        sender: '{{ device.name|escapejs }}',
+        recipient_name: '{{ sent_recipient_name|escapejs }}',
+        recipient_device_id: '{{ sent_recipient_id|escapejs }}',
+        created_at: new Date().toISOString(),
+        read: true,
+        direction: 'sent',
+      }
+    });
+  }
+  {% endif %}
+})();
+</script>
+{% endblock %}

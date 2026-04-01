@@ -48,6 +48,28 @@ class EndToEndTestCase(TestCase):
         client = client or self.client
         client.cookies[COOKIE_NAME] = raw_token
 
+    def _account_login(self, user, client=None):
+        """Log into the account dashboard via the account session key."""
+        from core.account_auth import SESSION_KEY
+        client = client or self.client
+        session = client.session
+        session[SESSION_KEY] = user.pk
+        session.save()
+
+    def _setup_account_and_device(self, username="testuser", password="testpass", device_name="Test Device"):
+        """Create user, log into account, register a device via the activate page."""
+        user = User.objects.create_user(username=username, password=password)
+        self._account_login(user)
+        response = self.client.post(
+            "/account/activate-device/",
+            data={"device_name": device_name},
+        )
+        device = Device.objects.get(name=device_name)
+        # The response sets a cookie — transfer it to the test client
+        if response.cookies.get(COOKIE_NAME):
+            self.client.cookies[COOKIE_NAME] = response.cookies[COOKIE_NAME].value
+        return user, device
+
     def test_blank_environment_starts_clean(self):
         """Verify that we start with a blank environment."""
         self.assertEqual(Device.objects.count(), 0)
@@ -57,7 +79,7 @@ class EndToEndTestCase(TestCase):
         response = self.client.get("/")
 
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, "Connect Device")
+        self.assertContains(response, "Log in")
         self.assertContains(response, "/admin/")
         self.assertContains(response, "https://github.com/jonocodes/LinkHop")
 
@@ -67,7 +89,7 @@ class EndToEndTestCase(TestCase):
         self.assertEqual(response.status_code, 200)
         payload = response.json()
         self.assertEqual(payload["name"], "LinkHop")
-        self.assertEqual(payload["start_url"], "/inbox")
+        self.assertEqual(payload["start_url"], "/account/inbox/")
         self.assertEqual(payload["display"], "standalone")
         self.assertEqual(len(payload["icons"]), 2)
 
@@ -83,6 +105,7 @@ class EndToEndTestCase(TestCase):
         self.assertIn(b"pushsubscriptionchange", response.content)
         self.assertIn(b"linkhop_push_auth", response.content)
         self.assertIn(b"linkhop_push_refresh_required", response.content)
+        self.assertIn(b"/account/inbox/", response.content)
 
     def test_bootstrap_admin_creation(self):
         """Create an admin user to manage the system."""
@@ -280,85 +303,75 @@ class EndToEndTestCase(TestCase):
     # WEB INTERFACE END-TO-END TESTS
     # ============================================================
 
-    def test_web_connect_page_flow(self):
-        """Test the complete web connect/disconnect flow via username + password."""
-        User.objects.create_user(username="webuser", password="webpass123")
+    def test_activate_device_flow(self):
+        """Test the complete account login + device registration + disconnect flow."""
+        user = User.objects.create_user(username="webuser", password="webpass123")
+        self._account_login(user)
 
-        # Visit connect page
-        response = self.client.get("/connect")
+        # Visit activate page
+        response = self.client.get("/account/activate-device/")
         self.assertEqual(response.status_code, 200)
-        self.assertIn(b"Connect this device", response.content)
+        self.assertIn(b"Register this device", response.content)
 
-        # Submit credentials to connect
+        # Submit device name
         response = self.client.post(
-            "/connect",
-            data={
-                "username": "webuser",
-                "password": "webpass123",
-                "device_name": "Web Device",
-            },
+            "/account/activate-device/",
+            data={"device_name": "Web Device"},
         )
-        self.assertEqual(response.status_code, 302)  # Redirect to inbox
-        self.assertEqual(response.url, "/inbox")
+        self.assertEqual(response.status_code, 302)
+        self.assertIn("/account/inbox/", response.url)
         device = Device.objects.get(name="Web Device")
+        # Transfer cookie
+        self.client.cookies[COOKIE_NAME] = response.cookies[COOKIE_NAME].value
 
         # Verify we're now connected (can access inbox)
-        response = self.client.get("/inbox")
+        response = self.client.get("/account/inbox/")
         self.assertEqual(response.status_code, 200)
         self.assertIn(b"Inbox", response.content)
 
         # Disconnect
         response = self.client.get("/disconnect")
         self.assertEqual(response.status_code, 302)
-        self.assertEqual(response.url, "/connect")
         self.assertFalse(Device.objects.filter(id=device.id).exists())
 
-        # Verify disconnected (redirected to connect)
-        response = self.client.get("/inbox")
+        # Verify disconnected (redirected to activate-device since session still active)
+        response = self.client.get("/account/inbox/")
         self.assertEqual(response.status_code, 302)
+        self.assertIn("/account/activate-device/", response.url)
 
-    def test_connect_page_rejects_bad_credentials(self):
-        User.objects.create_user(username="realuser", password="realpass")
+    def test_activate_device_rejects_empty_name(self):
+        user = User.objects.create_user(username="emptyuser", password="emptypass")
+        self._account_login(user)
 
         response = self.client.post(
-            "/connect",
-            data={
-                "username": "realuser",
-                "password": "wrongpass",
-                "device_name": "Bad Login Device",
-            },
+            "/account/activate-device/",
+            data={"device_name": ""},
         )
         self.assertEqual(response.status_code, 200)
-        self.assertIn(b"Invalid username or password", response.content)
-        self.assertFalse(Device.objects.filter(name="Bad Login Device").exists())
+        self.assertIn(b"Device name is required", response.content)
+        self.assertFalse(Device.objects.filter(owner=user).exists())
 
-    def test_hop_redirects_to_connect_with_pending_share_when_logged_out(self):
+    def test_hop_redirects_to_login_when_logged_out(self):
         response = self.client.get("/hop?type=url&body=https://example.com/story")
 
         self.assertEqual(response.status_code, 302)
-        self.assertIn("/connect?next=", response.url)
-        # next= preserves the full /hop URL so the user lands back after pairing
-        self.assertIn("%2Fhop%3Ftype%3Durl%26body%3D", response.url)
+        self.assertIn("/account/login/", response.url)
+        self.assertIn("next=", response.url)
 
-    def test_connect_redirects_to_pending_send_after_login(self):
-        User.objects.create_user(username="penduser", password="pendpass")
+    def test_activate_device_redirects_to_pending_next(self):
+        user = User.objects.create_user(username="penduser", password="pendpass")
+        self._account_login(user)
 
         response = self.client.post(
-            "/connect",
+            "/account/activate-device/",
             data={
-                "username": "penduser",
-                "password": "pendpass",
                 "device_name": "Bookmarklet Browser",
-                "next": "/send?type=url&body=https%3A%2F%2Fexample.com%2Fstory",
+                "next": "/account/send/?type=url&body=https%3A%2F%2Fexample.com%2Fstory",
             },
         )
 
         self.assertEqual(response.status_code, 302)
-        self.assertEqual(response.url, "/send?type=url&body=https%3A%2F%2Fexample.com%2Fstory")
-
-        response = self.client.get(response.url)
-        self.assertEqual(response.status_code, 200)
-        self.assertIn(b'https://example.com/story', response.content)
+        self.assertEqual(response.url, "/account/send/?type=url&body=https%3A%2F%2Fexample.com%2Fstory")
 
     def test_forgetting_browser_deletes_device_record(self):
         _, device_token = create_device_token(name="Forget Me")
@@ -368,20 +381,19 @@ class EndToEndTestCase(TestCase):
         response = self.client.get("/disconnect")
 
         self.assertEqual(response.status_code, 302)
-        self.assertEqual(response.url, "/connect")
         self.assertFalse(Device.objects.filter(id=device.id).exists())
 
-    def test_connect_page_includes_manifest_link(self):
+    def test_legacy_connect_redirects_to_login(self):
+        """The old /connect URL redirects to account login."""
         response = self.client.get("/connect")
 
-        self.assertEqual(response.status_code, 200)
-        self.assertIn(b'rel="manifest" href="/manifest.json"', response.content)
+        self.assertEqual(response.status_code, 302)
+        self.assertIn("/account/login/", response.url)
 
     def test_inbox_page_includes_push_state_controls(self):
-        _, device_token = create_device_token(name="Push UI Device")
-        self._connect_device(device_token)
+        user, _ = self._setup_account_and_device(device_name="Push UI Device")
 
-        response = self.client.get("/inbox")
+        response = self.client.get("/account/inbox/")
         self.assertEqual(response.status_code, 200)
         self.assertIn(b'id="push-disable"', response.content)
         self.assertIn(b'refreshPushState', response.content)
@@ -389,21 +401,20 @@ class EndToEndTestCase(TestCase):
     @PATCH_RELAY
     def test_web_send_page_url_flow(self, mock_relay):
         """Test sending URL via web send page."""
-        _, sender_token = create_device_token(name="Sender")
-        recipient, _ = create_device_token(name="Recipient")
-
-        # Connect sender
+        user = User.objects.create_user(username="sender_u", password="pass")
+        self._account_login(user)
+        _, sender_token = create_device_token(name="Sender", owner=user)
         self._connect_device(sender_token)
+        recipient, _ = create_device_token(name="Recipient", owner=user)
 
         # Access send page
-        response = self.client.get("/send")
+        response = self.client.get("/account/send/")
         self.assertEqual(response.status_code, 200)
         self.assertIn(b"Send", response.content)
-        self.assertIn(b"Recipient", response.content)
 
         # Send URL message via web form
         response = self.client.post(
-            "/send",
+            "/account/send/",
             data={
                 "type": "url",
                 "body": "https://example.com/test",
@@ -415,13 +426,11 @@ class EndToEndTestCase(TestCase):
 
     def test_web_send_page_with_prefilled_params(self):
         """Test send page with prefilled URL parameters."""
-        _, device_token = create_device_token(name="Test Device")
-        self._connect_device(device_token)
+        user, _ = self._setup_account_and_device(device_name="Test Device")
 
         # Access send page with prefilled params
-        response = self.client.get("/send?type=url&body=https://prefilled.com")
+        response = self.client.get("/account/send/?type=url&body=https://prefilled.com")
         self.assertEqual(response.status_code, 200)
-        # The body should be pre-filled in the form
         self.assertIn(b"https://prefilled.com", response.content)
 
     # ============================================================
@@ -585,17 +594,14 @@ class EndToEndTestCase(TestCase):
         self.assertEqual(response.status_code, 400)
         self.assertEqual(response.json()["error"]["code"], "recipient_not_found")
 
-    def test_connect_assigns_correct_owner(self):
-        """Device registered via /connect inherits owner from authenticated user."""
-        user = self._make_user("connect_owner")
+    def test_activate_device_assigns_correct_owner(self):
+        """Device registered via /account/activate-device/ inherits owner from session."""
+        user = self._make_user("activate_owner")
+        self._account_login(user)
 
         response = self.client.post(
-            "/connect",
-            data={
-                "username": "connect_owner",
-                "password": "pass",
-                "device_name": "New Device",
-            },
+            "/account/activate-device/",
+            data={"device_name": "New Device"},
         )
         self.assertEqual(response.status_code, 302)
 

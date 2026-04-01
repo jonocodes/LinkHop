@@ -1,0 +1,155 @@
+{% extends "admin/base_site.html" %}
+{% load static %}
+
+{% block content %}
+<div id="content-main">
+  <div class="module">
+    <h2 style="margin:0 0 1.5rem">Debug</h2>
+
+    <style>
+      .section { background:var(--body-bg,#fff); border:1px solid var(--border-color,#ddd); border-radius:6px; padding:1rem 1.25rem; margin-bottom:1.25rem }
+      .section h3 { font-size:1rem; font-weight:600; margin:0 0 0.75rem }
+      .row { display:flex; justify-content:space-between; align-items:baseline; padding:0.25rem 0; border-bottom:1px solid var(--border-color,#f0f0f0); font-size:0.875rem; gap:1rem }
+      .row:last-child { border-bottom:none }
+      .label { color:var(--body-quiet-color,#555) }
+      .val { font-family:monospace; font-size:0.8rem; text-align:right; word-break:break-all }
+      .ok { color:#166534; font-weight:600 }
+      .warn { color:#92400e; font-weight:600 }
+      .err { color:#991b1b; font-weight:600 }
+      .dbtn { display:inline-block; padding:0.4rem 1rem; background:var(--button-bg,#417690); color:var(--button-fg,#fff); border:none; border-radius:4px; cursor:pointer; font-size:0.875rem; margin-top:0.5rem }
+      .dbtn:disabled { background:#aaa; cursor:default }
+      .result { margin-top:0.75rem; padding:0.6rem 0.875rem; border-radius:4px; font-size:0.8rem; font-family:monospace; white-space:pre-wrap; display:none }
+      .result.ok { background:#f0fdf4; border:1px solid #bbf7d0; color:#166534 }
+      .result.err { background:#fef2f2; border:1px solid #fecaca; color:#991b1b }
+      .result.info { background:#eff6ff; border:1px solid #bfdbfe; color:#1e40af }
+      .sub-row { font-size:0.8rem; padding:0.5rem 0; border-bottom:1px solid var(--border-color,#f0f0f0) }
+      .sub-row:last-child { border-bottom:none }
+    </style>
+
+    <div class="section">
+      <h3>System</h3>
+      <div class="row"><span class="label">Process uptime</span><span class="val">{{ uptime }}</span></div>
+      <div class="row"><span class="label">Active devices</span><span class="val">{{ device_count }}</span></div>
+      <div class="row"><span class="label">Messages</span><span class="val">Stored client-side (IndexedDB)</span></div>
+    </div>
+
+    <div class="section">
+      <h3>Server push config</h3>
+      <div class="row"><span class="label">Device</span><span class="val">{{ device.name }}</span></div>
+      <div class="row">
+        <span class="label">Push supported</span>
+        <span class="val {% if push_config.supported %}ok{% else %}err{% endif %}">{{ push_config.supported|yesno:"YES,NO" }}</span>
+      </div>
+      {% if push_config.supported %}
+      <div class="row"><span class="label">VAPID public key</span><span class="val">{{ push_config.vapid_public_key|truncatechars:40 }}</span></div>
+      {% endif %}
+      <div class="row"><span class="label">Active subscriptions on server</span><span class="val">{{ subscriptions|length }}</span></div>
+      {% for sub in subscriptions %}
+      <div class="sub-row">
+        <span style="color:{% if sub.is_active %}#166534{% else %}#991b1b{% endif %}">{% if sub.is_active %}active{% else %}inactive{% endif %}</span>
+        &nbsp;&middot;&nbsp;<span>{{ sub.endpoint|truncatechars:60 }}</span>
+        {% if sub.last_success_at %}&nbsp;&middot; last ok: {{ sub.last_success_at|date:"d M H:i" }}{% endif %}
+        {% if sub.last_error %}&nbsp;&middot; <span class="err">error: {{ sub.last_error|truncatechars:80 }}</span>{% endif %}
+      </div>
+      {% endfor %}
+    </div>
+
+    <div class="section">
+      <h3>Browser &amp; service worker</h3>
+      <div class="row"><span class="label">serviceWorker</span><span class="val" id="b-sw">checking&hellip;</span></div>
+      <div class="row"><span class="label">PushManager</span><span class="val" id="b-push">checking&hellip;</span></div>
+      <div class="row"><span class="label">Notification API</span><span class="val" id="b-notif">checking&hellip;</span></div>
+      <div class="row"><span class="label">Notification permission</span><span class="val" id="b-perm">checking&hellip;</span></div>
+      <div class="row"><span class="label">Standalone (installed PWA)</span><span class="val" id="b-standalone">checking&hellip;</span></div>
+      <div class="row"><span class="label">SW registration state</span><span class="val" id="b-sw-state">checking&hellip;</span></div>
+      <div class="row"><span class="label">SW script URL</span><span class="val" id="b-sw-url">checking&hellip;</span></div>
+      <div class="row"><span class="label">Current push subscription</span><span class="val" id="b-sub">checking&hellip;</span></div>
+    </div>
+
+    <div class="section">
+      <h3>Push actions</h3>
+      <p style="font-size:0.875rem;color:var(--body-quiet-color,#555);margin-bottom:0.75rem">Run each step in order.</p>
+      <button class="dbtn" onclick="stepUnsubscribe()" style="background:#dc2626">Unsubscribe existing subscription</button>
+      <div class="result" id="r-unsubscribe"></div>
+      <br><button class="dbtn" onclick="stepPermission()" style="margin-top:0.75rem">Request notification permission</button>
+      <div class="result" id="r-permission"></div>
+      <br><button class="dbtn" onclick="stepSubscribe()" style="margin-top:0.75rem">Subscribe to push</button>
+      <div class="result" id="r-subscribe"></div>
+      <br><button class="dbtn" onclick="stepSaveSubscription()" style="margin-top:0.75rem">Save subscription to server</button>
+      <div class="result" id="r-save"></div>
+      <br><button class="dbtn" onclick="stepTestPush()" style="margin-top:0.75rem">Send test push from server</button>
+      <div class="result" id="r-testpush"></div>
+    </div>
+
+    <div class="section">
+      <h3>Log</h3>
+      <div id="log" style="font-size:0.78rem;font-family:monospace;max-height:300px;overflow-y:auto;white-space:pre-wrap;color:var(--body-fg,#333)"></div>
+    </div>
+  </div>
+</div>
+
+<script src="{% static 'linkhop/push.js' %}"></script>
+<script>
+(function () {
+  var TOKEN = "{{ device_token|escapejs }}";
+  var VAPID_KEY = "{{ push_config.vapid_public_key|escapejs }}";
+  var pendingSubscription = null;
+  var logEl = document.getElementById('log');
+  function log(msg) { var ts = new Date().toTimeString().slice(0, 8); logEl.textContent += '[' + ts + '] ' + msg + '\n'; logEl.scrollTop = logEl.scrollHeight; }
+  function result(id, text, type) { var el = document.getElementById(id); el.className = 'result ' + type; el.textContent = text; el.style.display = ''; log('[' + id + '] ' + type.toUpperCase() + ': ' + text); }
+  function set(id, text, cls) { var el = document.getElementById(id); el.textContent = text; if (cls) el.className = 'val ' + cls; }
+  function urlBase64ToUint8Array(base64String) { var padding = '='.repeat((4 - base64String.length % 4) % 4); var base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/'); var rawData = window.atob(base64); var a = new Uint8Array(rawData.length); for (var i = 0; i < rawData.length; i++) a[i] = rawData.charCodeAt(i); return a; }
+
+  set('b-sw', 'serviceWorker' in navigator ? 'yes' : 'NO', 'serviceWorker' in navigator ? 'ok' : 'err');
+  set('b-push', 'PushManager' in window ? 'yes' : 'NO', 'PushManager' in window ? 'ok' : 'err');
+  set('b-notif', 'Notification' in window ? 'yes' : 'NO', 'Notification' in window ? 'ok' : 'err');
+  set('b-perm', typeof Notification !== 'undefined' ? Notification.permission : 'unavailable', Notification && Notification.permission === 'granted' ? 'ok' : Notification && Notification.permission === 'denied' ? 'err' : 'warn');
+  set('b-standalone', window.matchMedia && window.matchMedia('(display-mode: standalone)').matches ? 'yes' : 'no (browser tab)', window.matchMedia && window.matchMedia('(display-mode: standalone)').matches ? 'ok' : 'warn');
+
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.getRegistration().then(function (reg) {
+      if (!reg) { set('b-sw-state', 'not registered', 'err'); set('b-sw-url', '\u2014'); return; }
+      var state = reg.active ? 'active' : reg.waiting ? 'waiting' : reg.installing ? 'installing' : 'registered';
+      set('b-sw-state', state, state === 'active' ? 'ok' : 'warn');
+      set('b-sw-url', (reg.active || reg.installing || reg.waiting || {scriptURL: '?'}).scriptURL || '?');
+      reg.pushManager.getSubscription().then(function (sub) {
+        if (!sub) { set('b-sub', 'none', 'warn'); return; }
+        set('b-sub', sub.endpoint.length > 60 ? sub.endpoint.slice(0, 30) + '\u2026' + sub.endpoint.slice(-20) : sub.endpoint, 'ok');
+        pendingSubscription = sub;
+      }).catch(function (e) { set('b-sub', 'error: ' + e.message, 'err'); });
+    }).catch(function (e) { set('b-sw-state', 'error: ' + e.message, 'err'); });
+  } else { set('b-sw-state', 'not supported', 'err'); set('b-sw-url', '\u2014'); set('b-sub', '\u2014'); }
+
+  window.stepUnsubscribe = function () {
+    if (!('serviceWorker' in navigator)) { result('r-unsubscribe', 'Service workers not supported.', 'err'); return; }
+    navigator.serviceWorker.ready.then(function (reg) { return reg.pushManager.getSubscription(); }).then(function (sub) {
+      if (!sub) { result('r-unsubscribe', 'No existing subscription found.', 'info'); return; }
+      return sub.unsubscribe().then(function (ok) { if (ok) { result('r-unsubscribe', 'Unsubscribed.', 'ok'); set('b-sub', 'none', 'warn'); pendingSubscription = null; } else { result('r-unsubscribe', 'Unsubscribe returned false.', 'err'); } });
+    }).catch(function (e) { result('r-unsubscribe', 'Error: ' + e.message, 'err'); });
+  };
+  window.stepPermission = function () {
+    if (!('Notification' in window)) { result('r-permission', 'Notification API not available.', 'err'); return; }
+    if (Notification.permission === 'granted') { result('r-permission', 'Already granted.', 'ok'); return; }
+    if (Notification.permission === 'denied') { result('r-permission', 'Blocked. Allow in browser settings.', 'err'); return; }
+    Notification.requestPermission().then(function (p) { if (p === 'granted') { result('r-permission', 'Granted!', 'ok'); set('b-perm', 'granted', 'ok'); } else { result('r-permission', 'Not granted: ' + p, 'err'); set('b-perm', p, 'err'); } });
+  };
+  window.stepSubscribe = function () {
+    if (!('serviceWorker' in navigator)) { result('r-subscribe', 'Service workers not supported.', 'err'); return; }
+    if (!VAPID_KEY) { result('r-subscribe', 'Server has no VAPID public key configured.', 'err'); return; }
+    navigator.serviceWorker.ready.then(function (reg) { log('SW ready, subscribing...'); var key; try { key = urlBase64ToUint8Array(VAPID_KEY); } catch (e) { result('r-subscribe', 'VAPID key decode error: ' + e.message, 'err'); return; } return reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: key }); }).then(function (sub) { if (!sub) return; pendingSubscription = sub; var j = sub.toJSON(); result('r-subscribe', 'Subscribed!\nendpoint: ' + sub.endpoint + '\np256dh: ' + (j.keys && j.keys.p256dh ? j.keys.p256dh.slice(0, 20) + '\u2026' : 'missing') + '\nauth: ' + (j.keys && j.keys.auth ? j.keys.auth : 'missing'), 'ok'); set('b-sub', sub.endpoint.slice(0, 30) + '\u2026', 'ok'); }).catch(function (e) { result('r-subscribe', 'Subscribe failed: ' + e.name + ': ' + e.message, 'err'); });
+  };
+  window.stepSaveSubscription = function () {
+    if (!pendingSubscription) { result('r-save', 'No subscription. Run "Subscribe to push" first.', 'err'); return; }
+    log('Saving subscription to server...');
+    fetch('/api/push/subscriptions', { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + TOKEN }, body: JSON.stringify(pendingSubscription.toJSON()) }).then(function (resp) { if (resp.status === 204) { result('r-save', 'Saved.', 'ok'); } else { resp.text().then(function (t) { result('r-save', 'Server returned ' + resp.status + ':\n' + t, 'err'); }); } }).catch(function (e) { result('r-save', 'Network error: ' + e.message, 'err'); });
+  };
+  window.stepTestPush = function () {
+    log('Asking server to send test push...');
+    fetch('/api/push/test', { method: 'POST', headers: { 'Authorization': 'Bearer ' + TOKEN } }).then(function (resp) { return resp.json().then(function (data) { if (resp.ok) { result('r-testpush', 'Server sent push to ' + data.subscriptions + ' subscription(s).', 'ok'); } else { result('r-testpush', 'Server error ' + resp.status + ':\n' + JSON.stringify(data, null, 2), 'err'); } }); }).catch(function (e) { result('r-testpush', 'Network error: ' + e.message, 'err'); });
+  };
+
+  log('Page loaded. Device: {{ device.name|escapejs }}');
+  log('Server push supported: {{ push_config.supported|yesno:"true,false" }}');
+})();
+</script>
+{% endblock %}

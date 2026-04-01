@@ -11,6 +11,23 @@ def build_admin_sidebar_navigation(request: HttpRequest) -> list[dict]:
     if request.path.startswith("/account/"):
         return [
             {
+                "title": "Messages",
+                "items": [
+                    {
+                        "title": "Inbox",
+                        "icon": "inbox",
+                        "link": reverse("account_inbox"),
+                        "permission": lambda req: True,
+                    },
+                    {
+                        "title": "Send",
+                        "icon": "send",
+                        "link": reverse("account_send"),
+                        "permission": lambda req: True,
+                    },
+                ],
+            },
+            {
                 "title": "Devices",
                 "items": [
                     {
@@ -20,11 +37,22 @@ def build_admin_sidebar_navigation(request: HttpRequest) -> list[dict]:
                         "permission": lambda req: True,
                     },
                     {
+                        "title": "Register device",
+                        "icon": "add_circle",
+                        "link": reverse("account_activate_device"),
+                        "permission": lambda req: True,
+                    },
+                    {
                         "title": "Bookmarklet",
                         "icon": "bookmarks",
                         "link": reverse("account_bookmarklet"),
                         "permission": lambda req: True,
                     },
+                ],
+            },
+            {
+                "title": "Account",
+                "items": [
                     {
                         "title": "Change password",
                         "icon": "lock",
@@ -35,6 +63,12 @@ def build_admin_sidebar_navigation(request: HttpRequest) -> list[dict]:
                         "title": "System info",
                         "icon": "info",
                         "link": reverse("account_system"),
+                        "permission": lambda req: True,
+                    },
+                    {
+                        "title": "Debug",
+                        "icon": "bug_report",
+                        "link": reverse("account_debug"),
                         "permission": lambda req: True,
                     },
                 ],
