@@ -176,6 +176,33 @@ def admin_bookmarklet_view(request: HttpRequest) -> HttpResponse:
     return render(request, "admin/bookmarklet_page.html", context)
 
 
+def admin_message_log_view(request: HttpRequest) -> HttpResponse:
+    log_path = settings.LOGGING["handlers"]["file"]["filename"]
+    lines_param = request.GET.get("lines", "200")
+    try:
+        num_lines = min(int(lines_param), 2000)
+    except (ValueError, TypeError):
+        num_lines = 200
+
+    try:
+        with open(log_path, "r") as f:
+            all_lines = f.readlines()
+        log_text = "".join(all_lines[-num_lines:])
+    except FileNotFoundError:
+        log_text = "(log file not found)"
+    except PermissionError:
+        log_text = "(permission denied reading log file)"
+
+    context = {
+        **admin.site.each_context(request),
+        "title": "Message log",
+        "log_text": log_text,
+        "num_lines": num_lines,
+        "log_path": str(log_path),
+    }
+    return render(request, "admin/message_log_page.html", context)
+
+
 
 def admin_connected_devices_view(request: HttpRequest) -> HttpResponse:
     all_devices = Device.objects.exclude(name=_SYSTEM_DEVICE_NAME).order_by("name")

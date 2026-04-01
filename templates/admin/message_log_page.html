@@ -1,0 +1,20 @@
+{% extends "admin/base_site.html" %}
+
+{% block content %}
+{% include "account/_dark_overrides.html" %}
+<div id="content-main">
+  <div class="module">
+    <div style="display:flex;align-items:baseline;justify-content:space-between;margin-bottom:1rem">
+      <h2 style="margin:0">Message log</h2>
+      <div style="display:flex;align-items:baseline;gap:1rem;font-size:0.85rem">
+        <span style="color:var(--lh-quiet)">{{ log_path }}</span>
+        <span style="color:var(--lh-quiet)">Last {{ num_lines }} lines</span>
+        <a href="?lines=50" style="color:var(--link-fg,#447e9b)">50</a>
+        <a href="?lines=200" style="color:var(--link-fg,#447e9b)">200</a>
+        <a href="?lines=1000" style="color:var(--link-fg,#447e9b)">1000</a>
+      </div>
+    </div>
+    <pre style="background:var(--lh-item-bg);color:var(--lh-fg);border:1px solid var(--lh-border);border-radius:4px;padding:1rem;font-size:0.78rem;line-height:1.5;overflow-x:auto;max-height:70vh;overflow-y:auto;white-space:pre-wrap;word-break:break-all;margin:0">{{ log_text }}</pre>
+  </div>
+</div>
+{% endblock %}

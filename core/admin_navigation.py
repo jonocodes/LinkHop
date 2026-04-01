@@ -108,6 +108,12 @@ def build_admin_sidebar_navigation(request: HttpRequest) -> list[dict]:
                     "permission": lambda req: req.user.has_perm("core.view_device"),
                 },
                 {
+                    "title": "Message log",
+                    "icon": "history",
+                    "link": reverse("admin_message_log"),
+                    "permission": lambda req: req.user.is_superuser,
+                },
+                {
                     "title": "Push subscriptions",
                     "icon": "notifications",
                     "link": reverse("admin:core_pushsubscription_changelist"),
