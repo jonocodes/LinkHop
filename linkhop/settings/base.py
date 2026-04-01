@@ -21,7 +21,7 @@ if _csrf_origins:
 
 # SameSite=None is required so the browser extension (cross-origin) can send the session cookie.
 # SameSite=None requires Secure=True; default to True when not in DEBUG mode.
-SESSION_COOKIE_SAMESITE = "None"
+SESSION_COOKIE_SAMESITE = "None" if not DEBUG else "Lax"
 SESSION_COOKIE_SECURE = not DEBUG
 
 INSTALLED_APPS = [
