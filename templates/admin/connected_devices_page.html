@@ -85,7 +85,7 @@
       </tbody>
     </table>
     {% else %}
-    <p style="color:var(--body-quiet-color,#666);padding:1rem 0">No devices registered yet. <a href="/connect">Add a device</a> to get started.</p>
+    <p style="color:var(--body-quiet-color,#666);padding:1rem 0">No devices registered yet. <a href="{% url 'account_activate_device' %}">Register a device</a> to get started.</p>
     {% endif %}
   </div>
 </div>

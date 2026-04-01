@@ -74,7 +74,7 @@ async function initSetupScreen() {
   document.getElementById("btn-link").addEventListener("click", () => {
     const serverUrl = document.getElementById("server-url").value.trim();
     if (!serverUrl) return setError("setup-error", "Server URL is required.");
-    const url = `${serverUrl.replace(/\/$/, "")}/inbox`;
+    const url = `${serverUrl.replace(/\/$/, "")}/account/inbox/`;
     chrome.tabs.create({ url });
     window.close();
   });
