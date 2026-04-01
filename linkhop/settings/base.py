@@ -19,6 +19,11 @@ _csrf_origins = os.getenv("CSRF_TRUSTED_ORIGINS", "").strip()
 if _csrf_origins:
     CSRF_TRUSTED_ORIGINS = [o.strip() for o in _csrf_origins.split(",")]
 
+# SameSite=None is required so the browser extension (cross-origin) can send the session cookie.
+# SameSite=None requires Secure=True; default to True when not in DEBUG mode.
+SESSION_COOKIE_SAMESITE = "None"
+SESSION_COOKIE_SECURE = not DEBUG
+
 INSTALLED_APPS = [
     "unfold",
     "django.contrib.admin",
