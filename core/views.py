@@ -20,8 +20,8 @@ from core.account_auth import account_login_required, account_session_login, acc
 from core.account_site import account_site
 from core.device_auth import COOKIE_NAME, device_login_required, get_device_from_request
 from core.forms import GlobalSettingsForm
-from core.models import Device, GlobalSettings, Message, MessageStatus, MessageType
-from core.selectors import device_presence_status, format_time_ago, is_device_online, list_active_devices
+from core.models import Device, GlobalSettings, MessageType
+from core.selectors import device_presence_status, format_time_ago, list_active_devices
 from core.services.auth import (
     _SYSTEM_DEVICE_NAME,
     create_pairing_pin,
@@ -29,7 +29,7 @@ from core.services.auth import (
     get_system_device,
     register_device_with_pairing_pin,
 )
-from core.services.messages import create_message, mark_message_opened
+from core.services.messages import relay_message
 
 
 def healthcheck(_request: HttpRequest) -> HttpResponse:
@@ -111,14 +111,12 @@ def service_worker_view(request: HttpRequest) -> HttpResponse:
         static("linkhop/pwa-register.js"),
         static("linkhop/icons/icon-any.svg"),
         static("linkhop/icons/icon-maskable.svg"),
-        static("linkhop/notifications.js"),
         static("linkhop/push.js"),
-        static("linkhop/sse-client.js"),
         "/manifest.json",
     ]
     static_prefix = settings.STATIC_URL if settings.STATIC_URL.startswith("/") else "/" + settings.STATIC_URL
     return render(request, "service-worker.js", {
-        "cache_name": "linkhop-shell-v2",
+        "cache_name": "linkhop-shell-v3",
         "shell_assets": shell_assets,
         "static_prefix": static_prefix,
         "icon_url": static("linkhop/icons/icon-any.svg"),
@@ -232,7 +230,7 @@ def admin_send_test_message_view(request: HttpRequest, device_id: str) -> HttpRe
         return redirect("admin_connected_devices")
 
     try:
-        create_message(
+        relay_message(
             sender_device=get_system_device(),
             recipient_device=recipient,
             message_type=MessageType.TEXT,
@@ -246,7 +244,7 @@ def admin_send_test_message_view(request: HttpRequest, device_id: str) -> HttpRe
 
 def admin_connected_devices_view(request: HttpRequest) -> HttpResponse:
     all_devices = Device.objects.exclude(name=_SYSTEM_DEVICE_NAME).order_by("name")
-    status_order = {"online": 0, "recent": 1, "offline": 2}
+    status_order = {"recent": 0, "offline": 1}
     device_list = []
     for d in all_devices:
         status = device_presence_status(d)
@@ -266,7 +264,7 @@ def admin_connected_devices_view(request: HttpRequest) -> HttpResponse:
             "os": d.os,
             "created_at": d.created_at,
         })
-    device_list.sort(key=lambda d: (status_order[d["presence"]], d["last_active_at"] is None, -(d["last_active_at"].timestamp() if d["last_active_at"] else 0)))
+    device_list.sort(key=lambda d: (status_order.get(d["presence"], 2), d["last_active_at"] is None, -(d["last_active_at"].timestamp() if d["last_active_at"] else 0)))
 
     context = {
         **admin.site.each_context(request),
@@ -277,7 +275,7 @@ def admin_connected_devices_view(request: HttpRequest) -> HttpResponse:
 
 
 def _device_context(devices):
-    status_order = {"online": 0, "recent": 1, "offline": 2}
+    status_order = {"recent": 0, "offline": 1}
     items = [
         {
             "id": str(d.id),
@@ -288,7 +286,7 @@ def _device_context(devices):
         }
         for d in devices
     ]
-    items.sort(key=lambda d: status_order[d["presence"]])
+    items.sort(key=lambda d: status_order.get(d["presence"], 2))
     return items
 
 
@@ -391,7 +389,7 @@ def hop_view(request: HttpRequest) -> HttpResponse:
         error = None
         try:
             recipient = Device.objects.get(id=recipient_id, is_active=True, revoked_at__isnull=True)
-            create_message(
+            relay_message(
                 sender_device=device,
                 recipient_device=recipient,
                 message_type=msg_type,
@@ -484,7 +482,7 @@ def send_view(request: HttpRequest) -> HttpResponse:
 
     if not errors:
         try:
-            create_message(
+            relay_message(
                 sender_device=request.device,
                 recipient_device=recipient,
                 message_type=msg_type,
@@ -495,6 +493,9 @@ def send_view(request: HttpRequest) -> HttpResponse:
                 "type": msg_type,
                 "body": "",
                 "success": True,
+                "sent_body": body,
+                "sent_recipient_id": str(recipient.id),
+                "sent_recipient_name": recipient.name,
                 "device": request.device,
                 "device_token": request.device_token,
             })
@@ -513,59 +514,9 @@ def send_view(request: HttpRequest) -> HttpResponse:
 
 
 @device_login_required
-def sent_view(request: HttpRequest) -> HttpResponse:
-    messages = (
-        Message.objects.filter(
-            sender_device=request.device,
-            expires_at__gt=timezone.now(),
-        )
-        .select_related("sender_device", "recipient_device")
-        .order_by("-created_at")
-    )
-    return render(request, "sent.html", {
-        "messages": messages,
-        "device": request.device,
-        "device_token": request.device_token,
-    })
-
-
-@device_login_required
 def inbox_view(request: HttpRequest) -> HttpResponse:
-    messages = (
-        Message.objects.filter(
-            recipient_device=request.device,
-            expires_at__gt=timezone.now(),
-        )
-        .exclude(status=MessageStatus.OPENED)
-        .select_related("sender_device", "recipient_device")
-        .order_by("created_at")
-    )
+    """Client-side inbox — messages are stored in IndexedDB via the service worker."""
     return render(request, "inbox.html", {
-        "messages": messages,
-        "device": request.device,
-        "device_token": request.device_token,
-    })
-
-
-@device_login_required
-def message_open_view(request: HttpRequest, message_id: str) -> HttpResponse:
-    message = get_object_or_404(
-        Message, id=message_id, type=MessageType.URL,
-        recipient_device=request.device,
-    )
-    mark_message_opened(device=request.device, message_id=message.id)
-    return redirect(message.body)
-
-
-@device_login_required
-def message_detail_view(request: HttpRequest, message_id: str) -> HttpResponse:
-    message = get_object_or_404(
-        Message, id=message_id, type=MessageType.TEXT,
-        recipient_device=request.device,
-    )
-    mark_message_opened(device=request.device, message_id=message.id)
-    return render(request, "message_detail.html", {
-        "message": message,
         "device": request.device,
         "device_token": request.device_token,
     })
@@ -593,13 +544,6 @@ def debug_view(request: HttpRequest) -> HttpResponse:
     except Exception:
         pass
 
-    message_counts = {
-        "total": Message.objects.count(),
-        "queued": Message.objects.filter(status=MessageStatus.QUEUED).count(),
-        "received": Message.objects.filter(status=MessageStatus.RECEIVED).count(),
-        "presented": Message.objects.filter(status=MessageStatus.PRESENTED).count(),
-        "opened": Message.objects.filter(status=MessageStatus.OPENED).count(),
-    }
     device_count = Device.objects.filter(is_active=True).exclude(name=_SYSTEM_DEVICE_NAME).count()
 
     return render(request, "debug.html", {
@@ -608,7 +552,6 @@ def debug_view(request: HttpRequest) -> HttpResponse:
         "push_config": get_public_push_config(),
         "subscriptions": subs,
         "uptime": uptime_str,
-        "message_counts": message_counts,
         "device_count": device_count,
     })
 
@@ -650,7 +593,7 @@ def account_connected_devices_view(request: HttpRequest) -> HttpResponse:
         owner=request.account_user,
     ).exclude(name=_SYSTEM_DEVICE_NAME).order_by("name")
 
-    status_order = {"online": 0, "recent": 1, "offline": 2}
+    status_order = {"recent": 0, "offline": 1}
     device_list = []
     for d in all_devices:
         status = device_presence_status(d)
@@ -671,7 +614,7 @@ def account_connected_devices_view(request: HttpRequest) -> HttpResponse:
             "created_at": d.created_at,
         })
     device_list.sort(key=lambda d: (
-        status_order[d["presence"]],
+        status_order.get(d["presence"], 2),
         d["last_active_at"] is None,
         -(d["last_active_at"].timestamp() if d["last_active_at"] else 0),
     ))
@@ -695,7 +638,7 @@ def account_send_test_message_view(request: HttpRequest, device_id: str) -> Http
         return redirect("account_connected_devices")
 
     try:
-        create_message(
+        relay_message(
             sender_device=get_system_device(),
             recipient_device=recipient,
             message_type=MessageType.TEXT,
@@ -872,13 +815,6 @@ def account_system_view(request: HttpRequest) -> HttpResponse:
     except Exception:
         pass
 
-    message_counts = {
-        "total": Message.objects.count(),
-        "queued": Message.objects.filter(status=MessageStatus.QUEUED).count(),
-        "received": Message.objects.filter(status=MessageStatus.RECEIVED).count(),
-        "presented": Message.objects.filter(status=MessageStatus.PRESENTED).count(),
-        "opened": Message.objects.filter(status=MessageStatus.OPENED).count(),
-    }
     device_count = Device.objects.filter(is_active=True).exclude(name=_SYSTEM_DEVICE_NAME).count()
     push_subs = PushSubscription.objects.select_related("device").order_by("-updated_at")
 
@@ -888,7 +824,6 @@ def account_system_view(request: HttpRequest) -> HttpResponse:
         "uptime": uptime_str,
         "python_version": sys.version.split()[0],
         "django_version": django.__version__,
-        "message_counts": message_counts,
         "device_count": device_count,
         "push_config": get_public_push_config(),
         "push_subs": push_subs,

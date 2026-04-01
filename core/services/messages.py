@@ -1,10 +1,11 @@
+import uuid
+
 from django.conf import settings
-from django.core.exceptions import PermissionDenied, ValidationError
-from django.db import transaction
+from django.core.exceptions import ValidationError
 from django.utils import timezone
 
-from core.models import Device, Message, MessageStatus, MessageType
-from core.services.push import notify_device_push_subscriptions
+from core.models import Device, MessageType
+from core.services.push import relay_push_message
 
 
 def _get_global_settings():
@@ -12,130 +13,76 @@ def _get_global_settings():
     return GlobalSettings.objects.filter(singleton_key="default").first()
 
 
-@transaction.atomic
-def create_message(
+def _validate_message(*, message_type: str, body: str):
+    """Validate message type and body without touching the database."""
+    if message_type not in (MessageType.URL, MessageType.TEXT):
+        raise ValidationError("Message type must be 'url' or 'text'.")
+
+    if message_type == MessageType.URL:
+        from django.core.validators import URLValidator
+        max_len = getattr(settings, "LINKHOP_MESSAGE_URL_MAX_LENGTH", 2048)
+        if len(body) > max_len:
+            raise ValidationError(f"URL must be at most {max_len} characters.")
+        validator = URLValidator(schemes=["http", "https"])
+        try:
+            validator(body)
+        except ValidationError:
+            raise ValidationError("body must be a valid absolute http or https URL")
+
+    if message_type == MessageType.TEXT:
+        max_len = getattr(settings, "LINKHOP_MESSAGE_TEXT_MAX_LENGTH", 3500)
+        if len(body) > max_len:
+            raise ValidationError(f"Text body must be at most {max_len} characters.")
+        if not body or not body.strip():
+            raise ValidationError("Text body cannot be empty.")
+
+
+def relay_message(
     *,
     sender_device: Device,
     recipient_device: Device,
     message_type: str,
     body: str,
     _skip_self_send_check: bool = False,
-) -> Message:
+) -> dict:
+    """Validate and relay a message via Web Push. No server-side storage."""
     if not _skip_self_send_check and sender_device.id == recipient_device.id:
         gs = _get_global_settings()
         allow = gs.allow_self_send if gs is not None else False
         if not allow:
             raise ValidationError("Sending a message to yourself is not allowed.")
 
-    pending_count = Message.objects.filter(
-        recipient_device=recipient_device,
-        status__in=[MessageStatus.QUEUED, MessageStatus.RECEIVED, MessageStatus.PRESENTED],
-        expires_at__gt=timezone.now(),
-    ).count()
-    if pending_count >= settings.LINKHOP_MAX_PENDING_MESSAGES:
-        raise ValidationError("Recipient has too many pending messages.")
+    _validate_message(message_type=message_type, body=body)
 
-    message = Message(
-        sender_device=sender_device,
-        recipient_device=recipient_device,
-        type=message_type,
+    message_id = str(uuid.uuid4())
+    created_at = timezone.now().isoformat()
+
+    push_result = relay_push_message(
+        device=recipient_device,
+        message_id=message_id,
+        message_type=message_type,
         body=body,
-        expires_at=Message.default_expiry(),
-    )
-    message.full_clean()
-    message.save()
-    transaction.on_commit(
-        lambda: notify_device_push_subscriptions(device=recipient_device, message=message)
+        sender_name=sender_device.name,
+        recipient_device_id=str(recipient_device.id),
+        created_at=created_at,
     )
 
+    # "ping server" auto-reply
     if message_type == MessageType.TEXT and body.strip().lower() == "ping server":
-        _sender = sender_device
-        _recipient = recipient_device
-        transaction.on_commit(lambda: create_message(
-            sender_device=_recipient,
-            recipient_device=_sender,
+        relay_message(
+            sender_device=recipient_device,
+            recipient_device=sender_device,
             message_type=MessageType.TEXT,
             body="pong (server)",
-        ))
+        )
 
-    return message
-
-
-def list_incoming_messages(*, device: Device):
-    return Message.objects.filter(
-        recipient_device=device,
-        expires_at__gt=timezone.now(),
-    ).order_by("created_at")
-
-
-def _get_owned_message(*, device: Device, message_id) -> Message:
-    try:
-        message = Message.objects.get(id=message_id)
-    except Message.DoesNotExist as exc:
-        raise ValidationError("Message not found.") from exc
-
-    if message.recipient_device_id != device.id:
-        raise PermissionDenied("Message does not belong to this device.")
-    return message
-
-
-@transaction.atomic
-def mark_message_received(*, device: Device, message_id) -> Message:
-    message = _get_owned_message(device=device, message_id=message_id)
-    dirty_fields = set()
-
-    if message.received_at is None:
-        message.received_at = timezone.now()
-        dirty_fields.add("received_at")
-    if message.status == MessageStatus.QUEUED:
-        message.status = MessageStatus.RECEIVED
-        dirty_fields.add("status")
-
-    if dirty_fields:
-        message.save(update_fields=[*dirty_fields, "updated_at"])
-    return message
-
-
-@transaction.atomic
-def mark_message_presented(*, device: Device, message_id) -> Message:
-    message = _get_owned_message(device=device, message_id=message_id)
-    dirty_fields = set()
-
-    if message.received_at is None:
-        message.received_at = timezone.now()
-        dirty_fields.add("received_at")
-
-    if message.presented_at is None:
-        message.presented_at = timezone.now()
-        dirty_fields.add("presented_at")
-
-    if message.status in [MessageStatus.QUEUED, MessageStatus.RECEIVED]:
-        message.status = MessageStatus.PRESENTED
-        dirty_fields.add("status")
-
-    if dirty_fields:
-        message.save(update_fields=[*dirty_fields, "updated_at"])
-    return message
-
-
-@transaction.atomic
-def mark_message_opened(*, device: Device, message_id) -> Message:
-    message = _get_owned_message(device=device, message_id=message_id)
-    dirty_fields = set()
-
-    if message.received_at is None:
-        message.received_at = timezone.now()
-        dirty_fields.add("received_at")
-    if message.presented_at is None:
-        message.presented_at = timezone.now()
-        dirty_fields.add("presented_at")
-    if message.opened_at is None:
-        message.opened_at = timezone.now()
-        dirty_fields.add("opened_at")
-    if message.status != MessageStatus.OPENED:
-        message.status = MessageStatus.OPENED
-        dirty_fields.add("status")
-
-    if dirty_fields:
-        message.save(update_fields=[*dirty_fields, "updated_at"])
-    return message
+    return {
+        "id": message_id,
+        "type": message_type,
+        "body": body,
+        "sender_device_id": str(sender_device.id),
+        "recipient_device_id": str(recipient_device.id),
+        "created_at": created_at,
+        "push_delivered": push_result["delivered"] > 0,
+        "push_subscriptions": push_result["total"],
+    }

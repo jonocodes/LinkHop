@@ -7,7 +7,7 @@ from django.utils import timezone
 
 from core.models import Device, GlobalSettings, Message, MessageType, PairingPin, PushSubscription
 from core.services.auth import create_pairing_pin, register_device_with_pairing_pin
-from core.services.push import notify_device_push_subscriptions, upsert_push_subscription
+from core.services.push import relay_push_message, upsert_push_subscription
 
 
 class DeviceModelTests(TestCase):
@@ -113,14 +113,6 @@ class PushSubscriptionModelTests(TestCase):
         LINKHOP_WEBPUSH_VAPID_SUBJECT="mailto:admin@example.com",
     )
     def test_notify_push_subscription_records_success(self):
-        sender = Device.objects.create(name="Sender", token_hash="sender-hash")
-        message = Message.objects.create(
-            sender_device=sender,
-            recipient_device=self.device,
-            type=MessageType.TEXT,
-            body="hello push",
-            expires_at=Message.default_expiry(),
-        )
         subscription = PushSubscription.objects.create(
             device=self.device,
             endpoint="https://push.example.test/sub/success",
@@ -129,7 +121,15 @@ class PushSubscriptionModelTests(TestCase):
         )
 
         with patch("core.services.push.webpush") as mock_webpush:
-            notify_device_push_subscriptions(device=self.device, message=message)
+            relay_push_message(
+                device=self.device,
+                message_id="test-msg-id",
+                message_type="text",
+                body="hello push",
+                sender_name="Sender",
+                recipient_device_id=str(self.device.id),
+                created_at="2026-01-01T00:00:00Z",
+            )
 
         subscription.refresh_from_db()
         self.assertIsNotNone(subscription.last_success_at)
@@ -143,14 +143,6 @@ class PushSubscriptionModelTests(TestCase):
         LINKHOP_WEBPUSH_VAPID_SUBJECT="mailto:admin@example.com",
     )
     def test_notify_push_subscription_deactivates_gone_endpoint(self):
-        sender = Device.objects.create(name="Sender", token_hash="sender-two-hash")
-        message = Message.objects.create(
-            sender_device=sender,
-            recipient_device=self.device,
-            type=MessageType.TEXT,
-            body="hello push",
-            expires_at=Message.default_expiry(),
-        )
         subscription = PushSubscription.objects.create(
             device=self.device,
             endpoint="https://push.example.test/sub/gone",
@@ -168,7 +160,15 @@ class PushSubscriptionModelTests(TestCase):
                 "core.services.push.webpush",
                 side_effect=FakeWebPushException("subscription gone"),
             ):
-                notify_device_push_subscriptions(device=self.device, message=message)
+                relay_push_message(
+                    device=self.device,
+                    message_id="test-msg-id",
+                    message_type="text",
+                    body="hello push",
+                    sender_name="Sender",
+                    recipient_device_id=str(self.device.id),
+                    created_at="2026-01-01T00:00:00Z",
+                )
 
         subscription.refresh_from_db()
         self.assertFalse(subscription.is_active)

@@ -1,10 +1,12 @@
 """
 End-to-End Tests for LinkHop
 
-These tests verify the complete user flow from blank environment to message delivery.
+These tests verify the complete user flow from blank environment to message relay.
+Messages are no longer stored in the database; the server is a stateless relay via Web Push.
 """
 import json
-import time
+
+from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
 from django.core.cache import cache
@@ -12,23 +14,27 @@ from django.test import TestCase, override_settings
 from django.utils import timezone
 
 from core.device_auth import COOKIE_NAME
-from core.models import Device, Message, MessageStatus
+from core.models import Device
 from core.services.auth import create_device_token, create_pairing_pin
 
 User = get_user_model()
+
+PATCH_RELAY = patch(
+    "core.services.push.relay_push_message",
+    return_value={"delivered": 0, "total": 0},
+)
 
 
 @override_settings(ALLOWED_HOSTS=["localhost", "127.0.0.1", "testserver"])
 class EndToEndTestCase(TestCase):
     """
     End-to-end tests using Django test client.
-    
+
     Tests the complete flow:
     - Start blank environment
     - Bootstrap admin
     - Register devices
-    - Send message
-    - Verify events
+    - Relay messages via Web Push
     """
 
     def setUp(self):
@@ -46,7 +52,6 @@ class EndToEndTestCase(TestCase):
         """Verify that we start with a blank environment."""
         self.assertEqual(Device.objects.count(), 0)
         self.assertEqual(User.objects.count(), 0)
-        self.assertEqual(Message.objects.count(), 0)
 
     def test_home_page_exposes_primary_links(self):
         response = self.client.get("/")
@@ -104,158 +109,6 @@ class EndToEndTestCase(TestCase):
         self.assertTrue(device_a_token.startswith("device_"))
         self.assertTrue(device_b_token.startswith("device_"))
 
-    def test_complete_message_flow(self):
-        """
-        Complete end-to-end test:
-        - Bootstrap admin
-        - Register two devices
-        - Send message from A to B
-        - Verify B receives it
-        - Verify events are logged
-        """
-        # Bootstrap admin
-        admin = User.objects.create_superuser(
-            username="admin",
-            email="admin@example.com",
-            password="adminpass123",
-        )
-
-        # Register two devices
-        device_a, device_a_token = create_device_token(name="Device A")
-        device_a_id = str(device_a.id)
-
-        device_b, device_b_token = create_device_token(name="Device B")
-        device_b_id = str(device_b.id)
-
-        # Send message from A to B
-        response = self.client.post(
-            "/api/messages",
-            data=json.dumps({
-                "recipient_device_id": device_b_id,
-                "type": "url",
-                "body": "https://example.com",
-            }),
-            content_type="application/json",
-            headers={"Authorization": f"Bearer {device_a_token}"},
-        )
-        self.assertEqual(response.status_code, 201)
-        message_id = response.json()["id"]
-
-        # Verify message exists
-        message = Message.objects.get(id=message_id)
-        self.assertEqual(str(message.sender_device_id), device_a_id)
-        self.assertEqual(str(message.recipient_device_id), device_b_id)
-        self.assertEqual(message.status, MessageStatus.QUEUED)
-
-        # Verify B can receive it
-        response = self.client.get(
-            "/api/messages/incoming",
-            headers={"Authorization": f"Bearer {device_b_token}"},
-        )
-        self.assertEqual(response.status_code, 200)
-        messages = response.json()
-        self.assertEqual(len(messages), 1)
-        self.assertEqual(messages[0]["id"], message_id)
-
-        # B opens the message
-        response = self.client.post(
-            f"/api/messages/{message_id}/opened",
-            content_type="application/json",
-            headers={"Authorization": f"Bearer {device_b_token}"},
-        )
-        self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.json()["status"], MessageStatus.OPENED)
-
-        # Verify message is marked as opened
-        message.refresh_from_db()
-        self.assertEqual(message.status, MessageStatus.OPENED)
-        self.assertIsNotNone(message.opened_at)
-
-    def test_text_message_complete_flow(self):
-        """Test complete flow with text message."""
-        # Setup
-        device_a, device_a_token = create_device_token(name="Device A")
-        device_a_id = str(device_a.id)
-
-        device_b, device_b_token = create_device_token(name="Device B")
-        device_b_id = str(device_b.id)
-
-        # Send text message
-        response = self.client.post(
-            "/api/messages",
-            data=json.dumps({
-                "recipient_device_id": device_b_id,
-                "type": "text",
-                "body": "Hello from Device A!\nThis is a test message.",
-            }),
-            content_type="application/json",
-            headers={"Authorization": f"Bearer {device_a_token}"},
-        )
-        self.assertEqual(response.status_code, 201)
-        message_id = response.json()["id"]
-
-        # B marks as received
-        response = self.client.post(
-            f"/api/messages/{message_id}/received",
-            content_type="application/json",
-            headers={"Authorization": f"Bearer {device_b_token}"},
-        )
-        self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.json()["status"], MessageStatus.RECEIVED)
-
-        # B marks as presented
-        response = self.client.post(
-            f"/api/messages/{message_id}/presented",
-            content_type="application/json",
-            headers={"Authorization": f"Bearer {device_b_token}"},
-        )
-        self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.json()["status"], MessageStatus.PRESENTED)
-
-        # B opens it
-        response = self.client.post(
-            f"/api/messages/{message_id}/opened",
-            content_type="application/json",
-            headers={"Authorization": f"Bearer {device_b_token}"},
-        )
-        self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.json()["status"], MessageStatus.OPENED)
-
-    def test_message_expiration_behavior(self):
-        """Test that expired messages behave correctly."""
-        device_a, device_a_token = create_device_token(name="Device A")
-        device_a_id = str(device_a.id)
-
-        device_b, device_b_token = create_device_token(name="Device B")
-        device_b_id = str(device_b.id)
-
-        # Send message
-        response = self.client.post(
-            "/api/messages",
-            data=json.dumps({
-                "recipient_device_id": device_b_id,
-                "type": "text",
-                "body": "This will expire",
-            }),
-            content_type="application/json",
-            headers={"Authorization": f"Bearer {device_a_token}"},
-        )
-        message_id = response.json()["id"]
-
-        # Expire the message manually
-        message = Message.objects.get(id=message_id)
-        message.expires_at = timezone.now() - timezone.timedelta(minutes=1)
-        message.save()
-
-        # Verify it's not in incoming messages
-        response = self.client.get(
-            "/api/messages/incoming",
-            headers={"Authorization": f"Bearer {device_b_token}"},
-        )
-        self.assertEqual(response.status_code, 200)
-        messages = response.json()
-        self.assertEqual(len(messages), 0)
-
     def test_device_can_list_other_active_devices(self):
         """Test that devices can list active devices as send targets."""
         device_a, device_a_token = create_device_token(name="Device A")
@@ -276,7 +129,8 @@ class EndToEndTestCase(TestCase):
         device_ids = [str(d["id"]) for d in devices]
         self.assertIn(device_b_id, device_ids)
 
-    def test_self_send_prevented_by_default(self):
+    @PATCH_RELAY
+    def test_self_send_prevented_by_default(self, mock_relay):
         """Test that devices cannot send messages to themselves by default."""
         device_a, device_a_token = create_device_token(name="Device A")
         device_a_id = str(device_a.id)
@@ -295,7 +149,8 @@ class EndToEndTestCase(TestCase):
         self.assertEqual(response.status_code, 400)
         self.assertIn("validation_error", response.json()["error"]["code"])
 
-    def test_self_send_allowed_when_enabled(self):
+    @PATCH_RELAY
+    def test_self_send_allowed_when_enabled(self, mock_relay):
         """Test that self-send works when enabled in global settings."""
         from core.models import GlobalSettings
 
@@ -318,42 +173,6 @@ class EndToEndTestCase(TestCase):
         )
         self.assertEqual(response.status_code, 201)
 
-    def test_multiple_messages_to_same_recipient(self):
-        """Test sending multiple messages to the same device."""
-        device_a, device_a_token = create_device_token(name="Device A")
-
-        device_b, device_b_token = create_device_token(name="Device B")
-        device_b_id = str(device_b.id)
-
-        # Send 3 messages
-        message_ids = []
-        for i in range(3):
-            response = self.client.post(
-                "/api/messages",
-                data=json.dumps({
-                    "recipient_device_id": device_b_id,
-                    "type": "text",
-                    "body": f"Message {i+1}",
-                }),
-                content_type="application/json",
-                headers={"Authorization": f"Bearer {device_a_token}"},
-            )
-            self.assertEqual(response.status_code, 201)
-            message_ids.append(response.json()["id"])
-
-        # Verify all 3 are in B's inbox
-        response = self.client.get(
-            "/api/messages/incoming",
-            headers={"Authorization": f"Bearer {device_b_token}"},
-        )
-        self.assertEqual(response.status_code, 200)
-        messages = response.json()
-        self.assertEqual(len(messages), 3)
-
-        received_ids = [m["id"] for m in messages]
-        for msg_id in message_ids:
-            self.assertIn(msg_id, received_ids)
-
     def test_device_self_identification(self):
         """Test that a device can identify itself via API."""
         device, device_token = create_device_token(name="My Test Device")
@@ -370,7 +189,8 @@ class EndToEndTestCase(TestCase):
         self.assertEqual(str(data["id"]), device_id)
         self.assertTrue(data["is_active"])
 
-    def test_revoked_device_cannot_authenticate(self):
+    @PATCH_RELAY
+    def test_revoked_device_cannot_authenticate(self, mock_relay):
         """Test that a revoked device cannot send or receive messages."""
         device_a, device_a_token = create_device_token(name="Device A")
 
@@ -402,8 +222,9 @@ class EndToEndTestCase(TestCase):
         )
         self.assertEqual(response.status_code, 401)
 
-    def test_admin_can_view_all_data(self):
-        """Test that admin can view all devices, messages, and events."""
+    @PATCH_RELAY
+    def test_admin_can_view_all_data(self, mock_relay):
+        """Test that admin can view all devices."""
         # Create admin
         admin = User.objects.create_superuser(
             username="admin",
@@ -418,7 +239,7 @@ class EndToEndTestCase(TestCase):
         device_b, device_b_token = create_device_token(name="Device B")
         device_b_id = str(device_b.id)
 
-        # Send message
+        # Send message (relayed, not stored)
         response = self.client.post(
             "/api/messages",
             data=json.dumps({
@@ -429,7 +250,7 @@ class EndToEndTestCase(TestCase):
             content_type="application/json",
             headers={"Authorization": f"Bearer {device_a_token}"},
         )
-        message_id = response.json()["id"]
+        self.assertEqual(response.status_code, 201)
 
         # Verify admin can login and view data
         login_response = self.client.post(
@@ -442,9 +263,8 @@ class EndToEndTestCase(TestCase):
         # Admin login should work (even if it redirects)
         self.assertIn(login_response.status_code, [200, 302])
 
-        # Verify data exists in database
+        # Verify devices exist in database
         self.assertEqual(Device.objects.count(), 2)
-        self.assertEqual(Message.objects.count(), 1)
 
     def test_duplicate_device_name_rejected(self):
         """Test that duplicate device names are rejected within the same owner."""
@@ -592,8 +412,8 @@ class EndToEndTestCase(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertIn(b"Pinned Browser", response.content)
 
-
-    def test_web_send_page_url_flow(self):
+    @PATCH_RELAY
+    def test_web_send_page_url_flow(self, mock_relay):
         """Test sending URL via web send page."""
         _, sender_token = create_device_token(name="Sender")
         recipient, _ = create_device_token(name="Recipient")
@@ -619,12 +439,6 @@ class EndToEndTestCase(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertIn(b"success", response.content.lower())
 
-        # Verify message was created
-        self.assertEqual(Message.objects.count(), 1)
-        message = Message.objects.first()
-        self.assertEqual(message.type, "url")
-        self.assertEqual(message.body, "https://example.com/test")
-
     def test_web_send_page_with_prefilled_params(self):
         """Test send page with prefilled URL parameters."""
         _, device_token = create_device_token(name="Test Device")
@@ -636,96 +450,12 @@ class EndToEndTestCase(TestCase):
         # The body should be pre-filled in the form
         self.assertIn(b"https://prefilled.com", response.content)
 
-    def test_web_inbox_displays_messages(self):
-        """Test that inbox displays incoming messages."""
-        sender, sender_token = create_device_token(name="Sender")
-        recipient, recipient_token = create_device_token(name="Recipient")
-
-        # Send message to recipient via API
-        self.client.post(
-            "/api/messages",
-            data=json.dumps({
-                "recipient_device_id": str(recipient.id),
-                "type": "text",
-                "body": "Test message for inbox",
-            }),
-            content_type="application/json",
-            headers={"Authorization": f"Bearer {sender_token}"},
-        )
-
-        # Connect recipient and view inbox
-        self._connect_device(recipient_token)
-        response = self.client.get("/inbox")
-        self.assertEqual(response.status_code, 200)
-        self.assertIn(b"Test message for inbox", response.content)
-        self.assertIn(b'class="js-local-datetime"', response.content)
-        self.assertIn(b"toLocaleString", response.content)
-
-    def test_web_url_open_redirects_and_tracks(self):
-        """Test that opening URL via web tracks the open event."""
-        sender, sender_token = create_device_token(name="Sender")
-        recipient, recipient_token = create_device_token(name="Recipient")
-
-        # Send URL message
-        response = self.client.post(
-            "/api/messages",
-            data=json.dumps({
-                "recipient_device_id": str(recipient.id),
-                "type": "url",
-                "body": "https://example.com/redirect",
-            }),
-            content_type="application/json",
-            headers={"Authorization": f"Bearer {sender_token}"},
-        )
-        message_id = response.json()["id"]
-
-        # Connect recipient
-        self._connect_device(recipient_token)
-
-        # Open the URL (should redirect and track)
-        response = self.client.get(f"/messages/{message_id}/open")
-        self.assertEqual(response.status_code, 302)
-        self.assertEqual(response.url, "https://example.com/redirect")
-
-        # Verify message is marked as opened
-        message = Message.objects.get(id=message_id)
-        self.assertEqual(message.status, MessageStatus.OPENED)
-
-    def test_web_text_message_detail_view(self):
-        """Test viewing text message detail page."""
-        sender, sender_token = create_device_token(name="Sender")
-        recipient, recipient_token = create_device_token(name="Recipient")
-
-        # Send text message
-        response = self.client.post(
-            "/api/messages",
-            data=json.dumps({
-                "recipient_device_id": str(recipient.id),
-                "type": "text",
-                "body": "Multi-line\ntext\nmessage",
-            }),
-            content_type="application/json",
-            headers={"Authorization": f"Bearer {sender_token}"},
-        )
-        message_id = response.json()["id"]
-
-        # Connect recipient
-        self._connect_device(recipient_token)
-
-        # View message detail
-        response = self.client.get(f"/messages/{message_id}")
-        self.assertEqual(response.status_code, 200)
-        self.assertIn(b"Multi-line", response.content)
-
-        # Verify message is marked as opened
-        message = Message.objects.get(id=message_id)
-        self.assertEqual(message.status, MessageStatus.OPENED)
-
     # ============================================================
     # CONCURRENT OPERATIONS END-TO-END TESTS
     # ============================================================
 
-    def test_multiple_devices_can_send_concurrently(self):
+    @PATCH_RELAY
+    def test_multiple_devices_can_send_concurrently(self, mock_relay):
         """Test that multiple devices can send messages simultaneously."""
         # Create 3 devices
         devices = []
@@ -735,7 +465,7 @@ class EndToEndTestCase(TestCase):
                 "id": str(device.id),
                 "token": token,
             })
-        
+
         # Each device sends a message to the others
         for i, sender in enumerate(devices):
             for j, recipient in enumerate(devices):
@@ -751,94 +481,19 @@ class EndToEndTestCase(TestCase):
                         headers={"Authorization": f"Bearer {sender['token']}"},
                     )
                     self.assertEqual(response.status_code, 201)
-        
-        # Verify all messages were created
-        # 3 devices * 2 recipients each = 6 messages
-        self.assertEqual(Message.objects.count(), 6)
-
-    def test_message_delivery_order_preserved(self):
-        """Test that messages are delivered in order they were sent."""
-        sender, sender_token = create_device_token(name="Sender")
-
-        recipient, recipient_token = create_device_token(name="Recipient")
-        recipient_id = str(recipient.id)
-        
-        # Send 5 messages in order
-        message_bodies = ["First", "Second", "Third", "Fourth", "Fifth"]
-        for body in message_bodies:
-            response = self.client.post(
-                "/api/messages",
-                data=json.dumps({
-                    "recipient_device_id": recipient_id,
-                    "type": "text",
-                    "body": body,
-                }),
-                content_type="application/json",
-                headers={"Authorization": f"Bearer {sender_token}"},
-            )
-            self.assertEqual(response.status_code, 201)
-        
-        # Retrieve messages and verify order
-        response = self.client.get(
-            "/api/messages/incoming",
-            headers={"Authorization": f"Bearer {recipient_token}"},
-        )
-        messages = response.json()
-        
-        # Messages should be in creation order (oldest first by default)
-        received_bodies = [m["body"] for m in messages]
-        self.assertEqual(received_bodies, message_bodies)
 
     # ============================================================
     # ERROR HANDLING END-TO-END TESTS
     # ============================================================
 
-    def test_cannot_access_other_device_messages(self):
-        """Test that devices cannot access messages not addressed to them."""
-        # Create 3 devices: A, B, C
-        devices = []
-        for name in ["A", "B", "C"]:
-            device, token = create_device_token(name=f"Device {name}")
-            devices.append({
-                "id": str(device.id),
-                "token": token,
-            })
-        
-        # Device A sends message to Device B
-        response = self.client.post(
-            "/api/messages",
-            data=json.dumps({
-                "recipient_device_id": devices[1]["id"],  # B
-                "type": "text",
-                "body": "Private message for B",
-            }),
-            content_type="application/json",
-            headers={"Authorization": f"Bearer {devices[0]['token']}"},  # A
-        )
-        message_id = response.json()["id"]
-        
-        # Device C tries to mark as opened (should fail)
-        response = self.client.post(
-            f"/api/messages/{message_id}/opened",
-            content_type="application/json",
-            headers={"Authorization": f"Bearer {devices[2]['token']}"},  # C
-        )
-        self.assertEqual(response.status_code, 403)
-        
-        # Device C's inbox should be empty
-        response = self.client.get(
-            "/api/messages/incoming",
-            headers={"Authorization": f"Bearer {devices[2]['token']}"},
-        )
-        self.assertEqual(len(response.json()), 0)
-
-    def test_invalid_message_types_rejected(self):
+    @PATCH_RELAY
+    def test_invalid_message_types_rejected(self, mock_relay):
         """Test that invalid message types are rejected."""
         sender, sender_token = create_device_token(name="Sender")
 
         recipient, recipient_token = create_device_token(name="Recipient")
         recipient_id = str(recipient.id)
-        
+
         # Try to send with invalid type
         response = self.client.post(
             "/api/messages",
@@ -862,7 +517,8 @@ class EndToEndTestCase(TestCase):
     # ADMIN OPERATIONS END-TO-END TESTS
     # ============================================================
 
-    def test_admin_can_send_test_message_via_action(self):
+    @PATCH_RELAY
+    def test_admin_can_send_test_message_via_action(self, mock_relay):
         """Test that admin can send test message to device via admin action."""
         User.objects.create_superuser(
             username="admin",
@@ -884,10 +540,6 @@ class EndToEndTestCase(TestCase):
         )
         self.assertIn(response.status_code, [200, 302])
 
-        messages = Message.objects.filter(recipient_device_id=device.id)
-        self.assertTrue(messages.exists())
-        self.assertEqual(messages.first().type, "text")
-
     def test_admin_can_filter_and_search_devices(self):
         """Test admin device list filtering and search."""
         User.objects.create_superuser(
@@ -907,255 +559,6 @@ class EndToEndTestCase(TestCase):
         # Search for specific device
         response = self.client.get("/admin/core/device/?q=TestDevice1")
         self.assertEqual(response.status_code, 200)
-
-    # ============================================================
-    # AUTO-RESPOND TESTS
-    # ============================================================
-
-    def test_ping_server_auto_replies_with_pong(self):
-        """Sending 'ping server' triggers an immediate server-side pong reply."""
-        sender, sender_token = create_device_token(name="Sender")
-        recipient, recipient_token = create_device_token(name="Recipient")
-
-        with self.captureOnCommitCallbacks(execute=True):
-            response = self.client.post(
-                "/api/messages",
-                data=json.dumps({
-                    "recipient_device_id": str(recipient.id),
-                    "type": "text",
-                    "body": "ping server",
-                }),
-                content_type="application/json",
-                headers={"Authorization": f"Bearer {sender_token}"},
-            )
-        self.assertEqual(response.status_code, 201)
-
-        # Original ping message to recipient
-        self.assertTrue(Message.objects.filter(
-            sender_device=sender, recipient_device=recipient, body="ping server"
-        ).exists())
-
-        # Auto-reply from recipient back to sender
-        pong = Message.objects.filter(
-            sender_device=recipient, recipient_device=sender, body="pong (server)"
-        ).first()
-        self.assertIsNotNone(pong)
-        self.assertEqual(pong.type, "text")
-
-    def test_ping_server_case_insensitive(self):
-        """'ping server' matching is case-insensitive."""
-        sender, sender_token = create_device_token(name="Sender")
-        recipient, _ = create_device_token(name="Recipient")
-
-        with self.captureOnCommitCallbacks(execute=True):
-            self.client.post(
-                "/api/messages",
-                data=json.dumps({
-                    "recipient_device_id": str(recipient.id),
-                    "type": "text",
-                    "body": "PING SERVER",
-                }),
-                content_type="application/json",
-                headers={"Authorization": f"Bearer {sender_token}"},
-            )
-
-        self.assertTrue(Message.objects.filter(
-            sender_device=recipient, recipient_device=sender, body="pong (server)"
-        ).exists())
-
-    def test_ping_server_does_not_trigger_on_url_type(self):
-        """'ping server' in a URL-type message does not trigger a reply."""
-        sender, sender_token = create_device_token(name="Sender")
-        recipient, _ = create_device_token(name="Recipient")
-
-        with self.captureOnCommitCallbacks(execute=True):
-            self.client.post(
-                "/api/messages",
-                data=json.dumps({
-                    "recipient_device_id": str(recipient.id),
-                    "type": "url",
-                    "body": "ping server",
-                }),
-                content_type="application/json",
-                headers={"Authorization": f"Bearer {sender_token}"},
-            )
-
-        self.assertFalse(Message.objects.filter(body="pong (server)").exists())
-
-    def test_ping_server_does_not_trigger_on_partial_match(self):
-        """A message body containing 'ping server' as a substring doesn't trigger."""
-        sender, sender_token = create_device_token(name="Sender")
-        recipient, _ = create_device_token(name="Recipient")
-
-        with self.captureOnCommitCallbacks(execute=True):
-            self.client.post(
-                "/api/messages",
-                data=json.dumps({
-                    "recipient_device_id": str(recipient.id),
-                    "type": "text",
-                    "body": "please ping server now",
-                }),
-                content_type="application/json",
-                headers={"Authorization": f"Bearer {sender_token}"},
-            )
-
-        self.assertFalse(Message.objects.filter(body="pong (server)").exists())
-
-    def test_ping_server_pong_appears_in_senders_inbox(self):
-        """The pong reply from 'ping server' is retrievable by the original sender."""
-        sender, sender_token = create_device_token(name="Sender")
-        recipient, _ = create_device_token(name="Recipient")
-
-        with self.captureOnCommitCallbacks(execute=True):
-            self.client.post(
-                "/api/messages",
-                data=json.dumps({
-                    "recipient_device_id": str(recipient.id),
-                    "type": "text",
-                    "body": "ping server",
-                }),
-                content_type="application/json",
-                headers={"Authorization": f"Bearer {sender_token}"},
-            )
-
-        response = self.client.get(
-            "/api/messages/incoming",
-            headers={"Authorization": f"Bearer {sender_token}"},
-        )
-        bodies = [m["body"] for m in response.json()]
-        self.assertIn("pong (server)", bodies)
-
-    def test_message_get_endpoint_returns_message(self):
-        """GET /api/messages/<id> returns the message for its recipient."""
-        sender, sender_token = create_device_token(name="Sender")
-        recipient, recipient_token = create_device_token(name="Recipient")
-
-        response = self.client.post(
-            "/api/messages",
-            data=json.dumps({
-                "recipient_device_id": str(recipient.id),
-                "type": "text",
-                "body": "ping client",
-            }),
-            content_type="application/json",
-            headers={"Authorization": f"Bearer {sender_token}"},
-        )
-        message_id = response.json()["id"]
-
-        response = self.client.get(
-            f"/api/messages/{message_id}",
-            headers={"Authorization": f"Bearer {recipient_token}"},
-        )
-        self.assertEqual(response.status_code, 200)
-        data = response.json()
-        self.assertEqual(data["id"], message_id)
-        self.assertEqual(data["body"], "ping client")
-        self.assertEqual(data["type"], "text")
-        self.assertEqual(data["sender_device_id"], str(sender.id))
-
-    def test_message_get_endpoint_forbidden_for_wrong_device(self):
-        """GET /api/messages/<id> returns 403 for a device that didn't receive it."""
-        sender, sender_token = create_device_token(name="Sender")
-        recipient, _ = create_device_token(name="Recipient")
-        other, other_token = create_device_token(name="Other")
-
-        response = self.client.post(
-            "/api/messages",
-            data=json.dumps({
-                "recipient_device_id": str(recipient.id),
-                "type": "text",
-                "body": "private",
-            }),
-            content_type="application/json",
-            headers={"Authorization": f"Bearer {sender_token}"},
-        )
-        message_id = response.json()["id"]
-
-        response = self.client.get(
-            f"/api/messages/{message_id}",
-            headers={"Authorization": f"Bearer {other_token}"},
-        )
-        self.assertEqual(response.status_code, 403)
-
-    def test_ping_client_manual_simulation(self):
-        """Simulates the client-side ping/pong exchange the SSE JS would perform:
-        fetch the message, verify it's a ping client, then POST the pong reply."""
-        sender, sender_token = create_device_token(name="Sender")
-        recipient, recipient_token = create_device_token(name="Recipient")
-
-        # Sender sends "ping client" to recipient
-        response = self.client.post(
-            "/api/messages",
-            data=json.dumps({
-                "recipient_device_id": str(recipient.id),
-                "type": "text",
-                "body": "ping client",
-            }),
-            content_type="application/json",
-            headers={"Authorization": f"Bearer {sender_token}"},
-        )
-        self.assertEqual(response.status_code, 201)
-        message_id = response.json()["id"]
-
-        # Recipient's SSE client fetches the message to inspect it
-        response = self.client.get(
-            f"/api/messages/{message_id}",
-            headers={"Authorization": f"Bearer {recipient_token}"},
-        )
-        self.assertEqual(response.status_code, 200)
-        msg = response.json()
-        self.assertEqual(msg["body"].strip().lower(), "ping client")
-
-        # Recipient JS sends the pong back
-        response = self.client.post(
-            "/api/messages",
-            data=json.dumps({
-                "recipient_device_id": msg["sender_device_id"],
-                "type": "text",
-                "body": "pong (client)",
-            }),
-            content_type="application/json",
-            headers={"Authorization": f"Bearer {recipient_token}"},
-        )
-        self.assertEqual(response.status_code, 201)
-
-        # Pong appears in sender's inbox
-        response = self.client.get(
-            "/api/messages/incoming",
-            headers={"Authorization": f"Bearer {sender_token}"},
-        )
-        bodies = [m["body"] for m in response.json()]
-        self.assertIn("pong (client)", bodies)
-
-    def test_admin_can_view_message_details(self):
-        """Test that admin can view message details in admin interface."""
-        User.objects.create_superuser(
-            username="admin",
-            email="admin@example.com",
-            password="adminpass123",
-        )
-        self.client.login(username="admin", password="adminpass123")
-
-        sender, sender_token = create_device_token(name="Sender")
-        recipient, _ = create_device_token(name="Recipient")
-
-        self.client.post(
-            "/api/messages",
-            data=json.dumps({
-                "recipient_device_id": str(recipient.id),
-                "type": "text",
-                "body": "Test message for admin",
-            }),
-            content_type="application/json",
-            headers={"Authorization": f"Bearer {sender_token}"},
-        )
-
-        message = Message.objects.first()
-
-        # Access message in admin
-        response = self.client.get(f"/admin/core/message/{message.id}/change/")
-        self.assertEqual(response.status_code, 200)
-        self.assertIn(b"Test message for admin", response.content)
 
     # ============================================================
     # MULTI-USER ISOLATION TESTS
@@ -1187,7 +590,8 @@ class EndToEndTestCase(TestCase):
         self.assertIn("A Phone", names)
         self.assertNotIn("B Phone", names)
 
-    def test_api_cannot_send_to_different_owner_device(self):
+    @PATCH_RELAY
+    def test_api_cannot_send_to_different_owner_device(self, mock_relay):
         """A device cannot send a message to a device owned by a different user."""
         user_a = self._make_user("send_a")
         user_b = self._make_user("send_b")

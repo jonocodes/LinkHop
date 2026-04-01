@@ -13,9 +13,4 @@ urlpatterns = [
     path("push/subscriptions", router.push_subscriptions),
     path("push/test", router.push_test),
     path("messages", router.messages_create),
-    path("messages/incoming", router.messages_incoming),
-    path("messages/<str:message_id>", router.message_get),
-    path("messages/<str:message_id>/received", router.message_received),
-    path("messages/<str:message_id>/presented", router.message_presented),
-    path("messages/<str:message_id>/opened", router.message_opened),
 ]

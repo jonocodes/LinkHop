@@ -4,7 +4,14 @@ const STATIC_PREFIX = "{{ static_prefix }}";
 const AUTH_DB_NAME = "linkhop-pwa";
 const AUTH_STORE_NAME = "kv";
 const AUTH_TOKEN_KEY = "deviceToken";
+const MSG_DB_NAME = "linkhop-messages";
+const MSG_STORE_NAME = "messages";
+const MSG_DB_VERSION = 1;
 let linkhopDeviceToken = null;
+
+// ---------------------------------------------------------------------------
+// Auth IndexedDB (existing)
+// ---------------------------------------------------------------------------
 
 function openAuthDb() {
   return new Promise((resolve, reject) => {
@@ -65,12 +72,161 @@ function loadAuthToken() {
   }).catch(() => null);
 }
 
+// ---------------------------------------------------------------------------
+// Messages IndexedDB
+// ---------------------------------------------------------------------------
+
+function openMessagesDb() {
+  return new Promise((resolve, reject) => {
+    if (!("indexedDB" in self)) {
+      resolve(null);
+      return;
+    }
+
+    const request = indexedDB.open(MSG_DB_NAME, MSG_DB_VERSION);
+    request.onupgradeneeded = (event) => {
+      const db = request.result;
+      if (!db.objectStoreNames.contains(MSG_STORE_NAME)) {
+        const store = db.createObjectStore(MSG_STORE_NAME, { keyPath: "id" });
+        store.createIndex("by_created", "created_at", { unique: false });
+        store.createIndex("by_read", "read", { unique: false });
+        store.createIndex("by_direction", "direction", { unique: false });
+      }
+    };
+    request.onsuccess = () => resolve(request.result);
+    request.onerror = () => reject(request.error);
+  });
+}
+
+function storeMessage(msg) {
+  return openMessagesDb().then((db) => {
+    if (!db) return undefined;
+
+    return new Promise((resolve) => {
+      const tx = db.transaction(MSG_STORE_NAME, "readwrite");
+      tx.objectStore(MSG_STORE_NAME).put(msg);
+      tx.oncomplete = () => {
+        db.close();
+        resolve(undefined);
+      };
+      tx.onerror = () => {
+        db.close();
+        resolve(undefined);
+      };
+    });
+  });
+}
+
+function getAllMessages() {
+  return openMessagesDb().then((db) => {
+    if (!db) return [];
+
+    return new Promise((resolve) => {
+      const tx = db.transaction(MSG_STORE_NAME, "readonly");
+      const store = tx.objectStore(MSG_STORE_NAME);
+      const index = store.index("by_created");
+      const request = index.openCursor(null, "prev");
+      const results = [];
+
+      request.onsuccess = () => {
+        const cursor = request.result;
+        if (cursor) {
+          results.push(cursor.value);
+          cursor.continue();
+        }
+      };
+
+      tx.oncomplete = () => {
+        db.close();
+        resolve(results);
+      };
+      tx.onerror = () => {
+        db.close();
+        resolve([]);
+      };
+    });
+  });
+}
+
+function markMessageRead(id) {
+  return openMessagesDb().then((db) => {
+    if (!db) return undefined;
+
+    return new Promise((resolve) => {
+      const tx = db.transaction(MSG_STORE_NAME, "readwrite");
+      const store = tx.objectStore(MSG_STORE_NAME);
+      const getReq = store.get(id);
+      getReq.onsuccess = () => {
+        const msg = getReq.result;
+        if (msg) {
+          msg.read = true;
+          store.put(msg);
+        }
+      };
+      tx.oncomplete = () => {
+        db.close();
+        resolve(undefined);
+      };
+      tx.onerror = () => {
+        db.close();
+        resolve(undefined);
+      };
+    });
+  });
+}
+
+function deleteMessage(id) {
+  return openMessagesDb().then((db) => {
+    if (!db) return undefined;
+
+    return new Promise((resolve) => {
+      const tx = db.transaction(MSG_STORE_NAME, "readwrite");
+      tx.objectStore(MSG_STORE_NAME).delete(id);
+      tx.oncomplete = () => {
+        db.close();
+        resolve(undefined);
+      };
+      tx.onerror = () => {
+        db.close();
+        resolve(undefined);
+      };
+    });
+  });
+}
+
+function clearAllMessages() {
+  return openMessagesDb().then((db) => {
+    if (!db) return undefined;
+
+    return new Promise((resolve) => {
+      const tx = db.transaction(MSG_STORE_NAME, "readwrite");
+      tx.objectStore(MSG_STORE_NAME).clear();
+      tx.oncomplete = () => {
+        db.close();
+        resolve(undefined);
+      };
+      tx.onerror = () => {
+        db.close();
+        resolve(undefined);
+      };
+    });
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
 function urlBase64ToUint8Array(base64String) {
   const padding = "=".repeat((4 - base64String.length % 4) % 4);
   const base64 = (base64String + padding).replace(/-/g, "+").replace(/_/g, "/");
   const rawData = atob(base64);
   return Uint8Array.from(rawData, (char) => char.charCodeAt(0));
 }
+
+// ---------------------------------------------------------------------------
+// Service Worker Lifecycle
+// ---------------------------------------------------------------------------
 
 self.addEventListener("install", (event) => {
   event.waitUntil(
@@ -114,12 +270,53 @@ self.addEventListener("fetch", (event) => {
   );
 });
 
+// ---------------------------------------------------------------------------
+// Message handling from pages
+// ---------------------------------------------------------------------------
+
 self.addEventListener("message", (event) => {
   if (!event.data) return;
+
   if (event.data.type === "linkhop_push_auth" && event.data.token) {
     event.waitUntil(storeAuthToken(event.data.token));
+    return;
+  }
+
+  // Store an outgoing message from the send page
+  if (event.data.type === "linkhop_store_sent" && event.data.message) {
+    event.waitUntil(storeMessage(event.data.message));
+    return;
+  }
+
+  // Inbox page requests
+  if (event.data.type === "linkhop_get_messages" && event.ports && event.ports[0]) {
+    event.waitUntil(
+      getAllMessages().then((messages) => {
+        event.ports[0].postMessage({ messages: messages });
+      })
+    );
+    return;
+  }
+
+  if (event.data.type === "linkhop_mark_read" && event.data.id) {
+    event.waitUntil(markMessageRead(event.data.id));
+    return;
+  }
+
+  if (event.data.type === "linkhop_delete_message" && event.data.id) {
+    event.waitUntil(deleteMessage(event.data.id));
+    return;
+  }
+
+  if (event.data.type === "linkhop_clear_messages") {
+    event.waitUntil(clearAllMessages());
+    return;
   }
 });
+
+// ---------------------------------------------------------------------------
+// Push notification handling
+// ---------------------------------------------------------------------------
 
 self.addEventListener("push", (event) => {
   let data = {};
@@ -131,14 +328,29 @@ self.addEventListener("push", (event) => {
 
   const isUrl = data.type === "url";
   const body = (data.body || "").length > 100 ? data.body.slice(0, 97) + "..." : (data.body || "");
-  const targetUrl = isUrl ? `/messages/${data.message_id}/open` : `/messages/${data.message_id}`;
-  const payload = {
-    type: "linkhop_push_notified",
-    messageId: data.message_id || null,
+
+  // Store incoming message in IndexedDB
+  const incomingMessage = {
+    id: data.message_id || crypto.randomUUID(),
+    type: data.type || "text",
+    body: data.body || "",
+    sender: data.sender || "unknown",
+    recipient_device_id: data.recipient_device_id || "",
+    created_at: data.created_at || new Date().toISOString(),
+    read: false,
+    direction: "incoming",
+    test: !!data.test,
   };
 
   event.waitUntil(
-    self.clients.matchAll({ type: "window", includeUncontrolled: true }).then((clients) => {
+    storeMessage(incomingMessage).then(() => {
+      // Notify open clients so the inbox can refresh
+      return self.clients.matchAll({ type: "window", includeUncontrolled: true });
+    }).then((clients) => {
+      const payload = {
+        type: "linkhop_push_notified",
+        messageId: incomingMessage.id,
+      };
       clients.forEach((client) => client.postMessage(payload));
 
       const hasVisibleClient = clients.some(
@@ -152,9 +364,11 @@ self.addEventListener("push", (event) => {
         body: body || "New message received",
         icon: "{{ icon_url }}",
         badge: "{{ icon_url }}",
-        tag: `linkhop-${data.message_id || "message"}`,
+        tag: `linkhop-${incomingMessage.id}`,
         data: {
-          url: targetUrl,
+          messageId: incomingMessage.id,
+          type: data.type,
+          url: isUrl ? data.body : "/inbox",
         },
       });
     })
@@ -163,19 +377,34 @@ self.addEventListener("push", (event) => {
 
 self.addEventListener("notificationclick", (event) => {
   event.notification.close();
-  const targetUrl = (event.notification.data && event.notification.data.url) || "/inbox";
+  const notifData = event.notification.data || {};
+  const targetUrl = notifData.url || "/inbox";
+  const messageId = notifData.messageId;
+
   event.waitUntil(
-    self.clients.matchAll({ type: "window", includeUncontrolled: true }).then((clients) => {
+    Promise.resolve(messageId ? markMessageRead(messageId) : undefined).then(() => {
+      return self.clients.matchAll({ type: "window", includeUncontrolled: true });
+    }).then((clients) => {
+      // For URL messages, open the URL directly
+      if (notifData.type === "url") {
+        return self.clients.openWindow(targetUrl);
+      }
+
+      // For text messages, navigate to inbox
       for (const client of clients) {
         if ("focus" in client) {
-          client.navigate(targetUrl);
+          client.navigate("/inbox");
           return client.focus();
         }
       }
-      return self.clients.openWindow(targetUrl);
+      return self.clients.openWindow("/inbox");
     })
   );
 });
+
+// ---------------------------------------------------------------------------
+// Push subscription change
+// ---------------------------------------------------------------------------
 
 self.addEventListener("pushsubscriptionchange", (event) => {
   event.waitUntil(

@@ -3,7 +3,6 @@ from django.urls import include, path
 
 from core.account_site import account_site
 
-from core.sse import sse_view
 from core.views import (
     debug_view,
     account_add_device_view,
@@ -24,12 +23,9 @@ from core.views import (
     hop_view,
     inbox_view,
     manifest_view,
-    message_detail_view,
-    message_open_view,
     pair_view,
     service_worker_view,
     send_view,
-    sent_view,
     share_target_view,
 )
 
@@ -58,10 +54,6 @@ urlpatterns = [
     path("share", share_target_view, name="share_target"),
     path("hop", hop_view, name="hop"),
     path("inbox", inbox_view, name="inbox"),
-    path("sent", sent_view, name="sent"),
-    path("messages/<str:message_id>/open", message_open_view, name="message_open"),
-    path("messages/<str:message_id>", message_detail_view, name="message_detail"),
     path("debug", debug_view, name="debug"),
-    path("api/events/stream", sse_view, name="sse_stream"),
     path("api/", include("core.api.urls")),
 ]

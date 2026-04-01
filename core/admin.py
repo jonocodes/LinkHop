@@ -21,7 +21,7 @@ from core.models import (
     PushSubscription,
 )
 from core.services.auth import get_system_device
-from core.services.messages import create_message
+from core.services.messages import relay_message
 
 admin.site.unregister(User)
 admin.site.unregister(Group)
@@ -81,7 +81,7 @@ def send_test_message(modeladmin, request, queryset):
     sender = get_system_device()
     for recipient in queryset:
         try:
-            create_message(
+            relay_message(
                 sender_device=sender,
                 recipient_device=recipient,
                 message_type=MessageType.TEXT,

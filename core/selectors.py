@@ -14,48 +14,31 @@ def list_active_devices(user=None):
     return qs.order_by("name")
 
 
-def is_device_online(device: Device) -> bool:
-    from core.sse import active_stream_count
-    return active_stream_count(str(device.id)) > 0
-
-
-ONLINE_THRESHOLD_SECONDS = 25
+RECENT_THRESHOLD_SECONDS = 300  # 5 minutes
 
 
 def device_presence_status(device: Device) -> str:
-    """Return 'online', 'recent', or 'offline'.
+    """Return 'recent' or 'offline'.
 
-    'online'  — active SSE stream right now
-    'recent'  — no active stream but seen within ONLINE_THRESHOLD_SECONDS
+    'recent'  — last activity within RECENT_THRESHOLD_SECONDS
     'offline' — not seen within threshold (or never)
     """
-    from core.sse import active_stream_count
-    if active_stream_count(str(device.id)) > 0:
-        return "online"
-    if device.last_seen_at is not None:
-        age = (timezone.now() - device.last_seen_at).total_seconds()
-        if age <= ONLINE_THRESHOLD_SECONDS:
+    last_active = device.last_active_at
+    if last_active is not None:
+        age = (timezone.now() - last_active).total_seconds()
+        if age <= RECENT_THRESHOLD_SECONDS:
             return "recent"
     return "offline"
 
 
 def format_time_ago(dt: Optional[datetime]) -> str:
-    """Format a datetime as a human-readable 'time ago' string.
-    
-    Examples:
-        - Just now (< 1 min)
-        - 2 minutes ago
-        - 1 hour ago
-        - 3 days ago
-        - 2 weeks ago
-        - Never (if dt is None)
-    """
+    """Format a datetime as a human-readable 'time ago' string."""
     if dt is None:
         return "Never"
-    
+
     now = timezone.now()
     diff = now - dt
-    
+
     if diff < timedelta(minutes=1):
         return "Just now"
     elif diff < timedelta(hours=1):
