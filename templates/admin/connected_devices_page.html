@@ -5,7 +5,7 @@
   <div class="module">
     <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:1rem;margin-bottom:0.25rem">
       <h2 style="margin:0">Connected devices</h2>
-      <a href="{% url 'admin_add_device' %}" style="display:inline-block;padding:0.4rem 0.9rem;background:var(--button-bg,#417690);color:var(--button-fg,#fff);border-radius:4px;font-size:0.875rem;font-weight:600;text-decoration:none;white-space:nowrap;flex-shrink:0">Add device</a>
+      <a href="/connect" style="display:inline-block;padding:0.4rem 0.9rem;background:var(--button-bg,#417690);color:var(--button-fg,#fff);border-radius:4px;font-size:0.875rem;font-weight:600;text-decoration:none;white-space:nowrap;flex-shrink:0">Add device</a>
     </div>
     <p style="margin:0 0 1.25rem;color:var(--body-quiet-color,#666)">
       {{ devices|length }} device{{ devices|length|pluralize }} registered
@@ -85,7 +85,7 @@
       </tbody>
     </table>
     {% else %}
-    <p style="color:var(--body-quiet-color,#666);padding:1rem 0">No devices registered yet. <a href="{% url 'admin_add_device' %}">Add a device</a> to get started.</p>
+    <p style="color:var(--body-quiet-color,#666);padding:1rem 0">No devices registered yet. <a href="/connect">Add a device</a> to get started.</p>
     {% endif %}
   </div>
 </div>

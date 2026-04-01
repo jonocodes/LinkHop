@@ -60,37 +60,6 @@ class Device(TimestampedModel):
 
 
 
-class PairingPin(TimestampedModel):
-    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    code_hash = models.CharField(max_length=128, unique=True)
-    owner = models.ForeignKey(
-        settings.AUTH_USER_MODEL,
-        null=True,
-        blank=True,
-        on_delete=models.CASCADE,
-        related_name="pairing_pins",
-    )
-    created_by_device = models.ForeignKey(
-        Device,
-        null=True,
-        blank=True,
-        on_delete=models.SET_NULL,
-        related_name="created_pairing_pins",
-    )
-    expires_at = models.DateTimeField()
-    used_at = models.DateTimeField(null=True, blank=True)
-
-    class Meta:
-        ordering = ["-created_at"]
-
-    def __str__(self) -> str:
-        return f"pairing-pin:{self.id}"
-
-    @property
-    def is_usable(self) -> bool:
-        return self.used_at is None and self.expires_at > timezone.now()
-
-
 class PushSubscription(TimestampedModel):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     device = models.ForeignKey(

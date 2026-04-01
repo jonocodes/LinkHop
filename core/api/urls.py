@@ -5,8 +5,6 @@ from core.api import router
 
 urlpatterns = [
     path("session/link", router.session_link),
-    path("pairings/pin", router.pairing_pin_create),
-    path("pairings/pin/register", router.register_device_with_pin),
     path("device/me", router.device_me),
     path("devices", router.devices_list),
     path("push/config", router.push_config),

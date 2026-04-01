@@ -20,12 +20,6 @@ def build_admin_sidebar_navigation(request: HttpRequest) -> list[dict]:
                         "permission": lambda req: True,
                     },
                     {
-                        "title": "Add device",
-                        "icon": "add_circle",
-                        "link": reverse("account_add_device"),
-                        "permission": lambda req: True,
-                    },
-                    {
                         "title": "Bookmarklet",
                         "icon": "bookmarks",
                         "link": reverse("account_bookmarklet"),
@@ -78,12 +72,6 @@ def build_admin_sidebar_navigation(request: HttpRequest) -> list[dict]:
                     "icon": "devices",
                     "link": reverse("admin:core_device_changelist"),
                     "permission": lambda req: req.user.has_perm("core.view_device"),
-                },
-                {
-                    "title": "Pairing PINs",
-                    "icon": "pin",
-                    "link": reverse("admin:core_pairingpin_changelist"),
-                    "permission": lambda req: req.user.has_perm("core.view_pairingpin"),
                 },
                 {
                     "title": "Push subscriptions",

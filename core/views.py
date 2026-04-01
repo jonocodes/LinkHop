@@ -24,10 +24,9 @@ from core.models import Device, GlobalSettings, MessageType
 from core.selectors import device_presence_status, format_time_ago, list_active_devices
 from core.services.auth import (
     _SYSTEM_DEVICE_NAME,
-    create_pairing_pin,
+    authenticate_and_register_device,
     forget_device,
     get_system_device,
-    register_device_with_pairing_pin,
 )
 from core.services.messages import relay_message
 
@@ -171,55 +170,6 @@ def admin_bookmarklet_view(request: HttpRequest) -> HttpResponse:
     return render(request, "admin/bookmarklet_page.html", context)
 
 
-def admin_add_device_view(request: HttpRequest) -> HttpResponse:
-    from core.models import PairingPin
-
-    SESSION_KEY = "admin_pending_pin"
-
-    if request.method == "POST":
-        action = request.POST.get("action", "create")
-
-        if action == "cancel":
-            pending = request.session.pop(SESSION_KEY, None)
-            if pending:
-                PairingPin.objects.filter(id=pending["id"], used_at__isnull=True).delete()
-            return redirect("admin_connected_devices")
-
-        # action == "create"
-        pairing_pin, raw_pin = create_pairing_pin()
-        request.session[SESSION_KEY] = {
-            "id": str(pairing_pin.id),
-            "raw_pin": raw_pin,
-            "expires_at_iso": pairing_pin.expires_at.isoformat(),
-        }
-        return redirect("admin_add_device")
-
-    # GET — restore active PIN from session if still usable
-    pin = None
-    expires_at_iso = ""
-    pending = request.session.get(SESSION_KEY)
-    if pending:
-        try:
-            pp = PairingPin.objects.get(id=pending["id"])
-            if pp.is_usable:
-                pin = pending["raw_pin"]
-                expires_at_iso = pending["expires_at_iso"]
-            else:
-                del request.session[SESSION_KEY]
-        except PairingPin.DoesNotExist:
-            del request.session[SESSION_KEY]
-
-    connect_url = request.build_absolute_uri(reverse("connect"))
-    context = {
-        **admin.site.each_context(request),
-        "title": "Add device",
-        "pin": pin,
-        "expires_at_iso": expires_at_iso,
-        "connect_base_url": connect_url,
-    }
-    return render(request, "admin/add_device_page.html", context)
-
-
 def admin_send_test_message_view(request: HttpRequest, device_id: str) -> HttpResponse:
     if request.method != "POST":
         return redirect("admin_connected_devices")
@@ -309,38 +259,40 @@ def connect_view(request: HttpRequest) -> HttpResponse:
 
     if request.method == "GET":
         return render(request, "connect.html", {
-            "pin": request.GET.get("pin", "").strip(),
             "redirect_to": _validated_next_url(request, request.GET.get("next", "")),
         })
 
-    raw_pin = request.POST.get("pin", "").strip()
+    username = request.POST.get("username", "").strip()
+    password = request.POST.get("password", "")
     device_name = request.POST.get("device_name", "").strip()
     redirect_to = _validated_next_url(request, request.POST.get("next", ""))
-    if not raw_pin or not device_name:
+
+    if not username or not password or not device_name:
         return render(request, "connect.html", {
-            "pin_error": "Enter both the 6-digit PIN and a device name.",
-            "pin": raw_pin,
+            "error": "All fields are required.",
+            "username": username,
             "device_name": device_name,
             "redirect_to": redirect_to,
         })
 
     try:
-        registration = register_device_with_pairing_pin(
-            raw_pin=raw_pin,
-            name=device_name,
+        registration = authenticate_and_register_device(
+            username=username,
+            password=password,
+            device_name=device_name,
         )
     except IntegrityError:
         return render(request, "connect.html", {
-            "pin_error": "That device name is already in use.",
-            "pin": raw_pin,
+            "error": "That device name is already in use for this account.",
+            "username": username,
             "device_name": device_name,
             "redirect_to": redirect_to,
         })
 
     if registration is None:
         return render(request, "connect.html", {
-            "pin_error": "PIN not recognised or expired. Generate a new one and try again.",
-            "pin": raw_pin,
+            "error": "Invalid username or password.",
+            "username": username,
             "device_name": device_name,
             "redirect_to": redirect_to,
         })
@@ -410,24 +362,6 @@ def hop_view(request: HttpRequest) -> HttpResponse:
         "msg_type": request.GET.get("type", "url"),
         "body": request.GET.get("body", ""),
         "device": device,
-    })
-
-
-@device_login_required
-def pair_view(request: HttpRequest) -> HttpResponse:
-    pin = None
-    expires_at = None
-
-    if request.method == "POST":
-        pairing_pin, raw_pin = create_pairing_pin(device=request.device)
-        pin = raw_pin
-        expires_at = pairing_pin.expires_at
-
-    return render(request, "pair.html", {
-        "device": request.device,
-        "pin": pin,
-        "expires_at": expires_at,
-        "expires_at_iso": expires_at.isoformat() if expires_at else "",
     })
 
 
@@ -687,54 +621,6 @@ def account_remove_device_view(request: HttpRequest, device_id: str) -> HttpResp
     forget_device(device=device)
     messages.success(request, "Device removed.")
     return redirect("account_connected_devices")
-
-
-@account_login_required
-def account_add_device_view(request: HttpRequest) -> HttpResponse:
-    from core.models import PairingPin
-
-    SESSION_KEY = "account_pending_pin"
-
-    if request.method == "POST":
-        action = request.POST.get("action", "create")
-
-        if action == "cancel":
-            pending = request.session.pop(SESSION_KEY, None)
-            if pending:
-                PairingPin.objects.filter(id=pending["id"], used_at__isnull=True).delete()
-            return redirect("account_connected_devices")
-
-        pairing_pin, raw_pin = create_pairing_pin(owner=request.account_user)
-        request.session[SESSION_KEY] = {
-            "id": str(pairing_pin.id),
-            "raw_pin": raw_pin,
-            "expires_at_iso": pairing_pin.expires_at.isoformat(),
-        }
-        return redirect("account_add_device")
-
-    pin = None
-    expires_at_iso = ""
-    pending = request.session.get(SESSION_KEY)
-    if pending:
-        try:
-            pp = PairingPin.objects.get(id=pending["id"])
-            if pp.is_usable:
-                pin = pending["raw_pin"]
-                expires_at_iso = pending["expires_at_iso"]
-            else:
-                del request.session[SESSION_KEY]
-        except PairingPin.DoesNotExist:
-            del request.session[SESSION_KEY]
-
-    connect_url = request.build_absolute_uri(reverse("connect"))
-    context = {
-        **account_site.each_context(request),
-        "title": "Add device",
-        "pin": pin,
-        "expires_at_iso": expires_at_iso,
-        "connect_base_url": connect_url,
-    }
-    return render(request, "account/add_device_page.html", context)
 
 
 @account_login_required

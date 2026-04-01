@@ -16,7 +16,6 @@ from core.models import (
     Device,
     GlobalSettings,
     MessageType,
-    PairingPin,
     PushSubscription,
 )
 from core.services.auth import get_system_device
@@ -106,17 +105,6 @@ class DeviceAdmin(ModelAdmin):
     def has_add_permission(self, request):
         return False
 
-
-
-@admin.register(PairingPin)
-class PairingPinAdmin(ModelAdmin):
-    list_display = ("id", "created_by_device", "used_at", "expires_at", "created_at")
-    list_filter = ("used_at", "expires_at", "created_at")
-    search_fields = ("id", "created_by_device__name")
-    readonly_fields = ("created_at", "updated_at", "used_at", "code_hash")
-
-    def has_add_permission(self, request):
-        return False
 
 
 @admin.register(PushSubscription)

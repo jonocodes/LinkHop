@@ -5,8 +5,7 @@ from django.core.exceptions import ValidationError
 from django.test import TestCase, override_settings
 from django.utils import timezone
 
-from core.models import Device, GlobalSettings, PairingPin, PushSubscription
-from core.services.auth import create_pairing_pin, register_device_with_pairing_pin
+from core.models import Device, GlobalSettings, PushSubscription
 from core.services.push import relay_push_message, upsert_push_subscription
 
 
@@ -57,26 +56,6 @@ class DeviceModelTests(TestCase):
         device = Device.objects.create(name="Timestamp Device", token_hash="hash-ts")
         self.assertIsNotNone(device.created_at)
         self.assertIsNotNone(device.updated_at)
-
-
-class PairingPinModelTests(TestCase):
-    def test_pairing_pin_is_single_use(self):
-        device = Device.objects.create(name="Issuer", token_hash="issuer-hash")
-        _, raw_pin = create_pairing_pin(device=device)
-
-        first = register_device_with_pairing_pin(raw_pin=raw_pin, name="First Device")
-        second = register_device_with_pairing_pin(raw_pin=raw_pin, name="Second Device")
-
-        self.assertIsNotNone(first)
-        self.assertIsNone(second)
-
-    def test_creating_new_pin_deletes_previous_unused_pin(self):
-        device = Device.objects.create(name="Issuer", token_hash="issuer-hash")
-        first_pin, _ = create_pairing_pin(device=device)
-        _second_pin, _ = create_pairing_pin(device=device)
-
-        self.assertFalse(PairingPin.objects.filter(id=first_pin.id).exists())
-        self.assertEqual(PairingPin.objects.filter(created_by_device=device).count(), 1)
 
 
 class PushSubscriptionModelTests(TestCase):

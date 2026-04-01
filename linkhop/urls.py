@@ -5,7 +5,6 @@ from core.account_site import account_site
 
 from core.views import (
     debug_view,
-    account_add_device_view,
     account_bookmarklet_view,
     account_change_password_view,
     account_connected_devices_view,
@@ -23,7 +22,6 @@ from core.views import (
     hop_view,
     inbox_view,
     manifest_view,
-    pair_view,
     service_worker_view,
     send_view,
     share_target_view,
@@ -41,7 +39,6 @@ urlpatterns = [
     path("account/connected-devices/<str:device_id>/test-message", account_send_test_message_view, name="account_send_test_message"),
     path("account/connected-devices/<str:device_id>/rename", account_rename_device_view, name="account_rename_device"),
     path("account/connected-devices/<str:device_id>/remove", account_remove_device_view, name="account_remove_device"),
-    path("account/add-device/", account_add_device_view, name="account_add_device"),
     path("account/bookmarklet/", account_bookmarklet_view, name="account_bookmarklet"),
     path("account/password/", account_change_password_view, name="account_change_password"),
     path("account/system/", account_system_view, name="account_system"),
@@ -49,7 +46,6 @@ urlpatterns = [
     path("healthz", healthcheck, name="healthcheck"),
     path("connect", connect_view, name="connect"),
     path("disconnect", disconnect_view, name="disconnect"),
-    path("pair", pair_view, name="pair"),
     path("send", send_view, name="send"),
     path("share", share_target_view, name="share_target"),
     path("hop", hop_view, name="hop"),

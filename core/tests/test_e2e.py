@@ -15,7 +15,7 @@ from django.utils import timezone
 
 from core.device_auth import COOKIE_NAME
 from core.models import Device
-from core.services.auth import create_device_token, create_pairing_pin
+from core.services.auth import create_device_token
 
 User = get_user_model()
 
@@ -281,21 +281,20 @@ class EndToEndTestCase(TestCase):
     # ============================================================
 
     def test_web_connect_page_flow(self):
-        """Test the complete web connect/disconnect flow via PIN."""
-        # Generate a PIN (no device required)
-        _, raw_pin = create_pairing_pin()
+        """Test the complete web connect/disconnect flow via username + password."""
+        User.objects.create_user(username="webuser", password="webpass123")
 
         # Visit connect page
         response = self.client.get("/connect")
         self.assertEqual(response.status_code, 200)
         self.assertIn(b"Connect this device", response.content)
 
-        # Submit PIN to connect
+        # Submit credentials to connect
         response = self.client.post(
             "/connect",
             data={
-                "mode": "pin",
-                "pin": raw_pin,
+                "username": "webuser",
+                "password": "webpass123",
                 "device_name": "Web Device",
             },
         )
@@ -318,11 +317,20 @@ class EndToEndTestCase(TestCase):
         response = self.client.get("/inbox")
         self.assertEqual(response.status_code, 302)
 
-    def test_connect_page_prefills_pin_from_query_string(self):
-        response = self.client.get("/connect?pin=123456")
+    def test_connect_page_rejects_bad_credentials(self):
+        User.objects.create_user(username="realuser", password="realpass")
 
+        response = self.client.post(
+            "/connect",
+            data={
+                "username": "realuser",
+                "password": "wrongpass",
+                "device_name": "Bad Login Device",
+            },
+        )
         self.assertEqual(response.status_code, 200)
-        self.assertIn(b'value="123456"', response.content)
+        self.assertIn(b"Invalid username or password", response.content)
+        self.assertFalse(Device.objects.filter(name="Bad Login Device").exists())
 
     def test_hop_redirects_to_connect_with_pending_share_when_logged_out(self):
         response = self.client.get("/hop?type=url&body=https://example.com/story")
@@ -332,14 +340,14 @@ class EndToEndTestCase(TestCase):
         # next= preserves the full /hop URL so the user lands back after pairing
         self.assertIn("%2Fhop%3Ftype%3Durl%26body%3D", response.url)
 
-    def test_connect_redirects_to_pending_send_after_pairing(self):
-        _, raw_pin = create_pairing_pin()
+    def test_connect_redirects_to_pending_send_after_login(self):
+        User.objects.create_user(username="penduser", password="pendpass")
 
         response = self.client.post(
             "/connect",
             data={
-                "mode": "pin",
-                "pin": raw_pin,
+                "username": "penduser",
+                "password": "pendpass",
                 "device_name": "Bookmarklet Browser",
                 "next": "/send?type=url&body=https%3A%2F%2Fexample.com%2Fstory",
             },
@@ -377,40 +385,6 @@ class EndToEndTestCase(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertIn(b'id="push-disable"', response.content)
         self.assertIn(b'refreshPushState', response.content)
-
-    def test_web_pairing_pin_flow(self):
-        """Generate a PIN on one device and use it to pair a second browser."""
-        _, issuer_token = create_device_token(name="PIN Issuer")
-        self._connect_device(issuer_token)
-
-        response = self.client.post("/pair")
-        self.assertEqual(response.status_code, 200)
-        self.assertIn(b"Add device", response.content)
-        self.assertIn(b"Create another PIN", response.content)
-        self.assertIn(b'id="pairing-countdown"', response.content)
-
-        import re
-
-        match = re.search(rb'data-pairing-pin="([0-9]{6})"', response.content)
-        self.assertIsNotNone(match)
-        pin = match.group(1).decode("ascii")
-        self.assertIn(f'/connect?pin={pin}'.encode("ascii"), response.content)
-
-        new_client = self.client_class()
-        response = new_client.post(
-            "/connect",
-            data={
-                "mode": "pin",
-                "pin": pin,
-                "device_name": "Pinned Browser",
-            },
-        )
-        self.assertEqual(response.status_code, 302)
-        self.assertEqual(response.url, "/inbox")
-
-        response = new_client.get("/inbox")
-        self.assertEqual(response.status_code, 200)
-        self.assertIn(b"Pinned Browser", response.content)
 
     @PATCH_RELAY
     def test_web_send_page_url_flow(self, mock_relay):
@@ -611,24 +585,19 @@ class EndToEndTestCase(TestCase):
         self.assertEqual(response.status_code, 400)
         self.assertEqual(response.json()["error"]["code"], "recipient_not_found")
 
-    def test_pairing_pin_from_device_assigns_correct_owner(self):
-        """Device registered via PIN inherits owner from the PIN-creating device."""
-        user = self._make_user("pin_owner")
-        _, issuer_token = create_device_token(name="Issuer", owner=user)
+    def test_connect_assigns_correct_owner(self):
+        """Device registered via /connect inherits owner from authenticated user."""
+        user = self._make_user("connect_owner")
 
-        pin_response = self.client.post(
-            "/api/pairings/pin",
-            content_type="application/json",
-            headers={"Authorization": f"Bearer {issuer_token}"},
+        response = self.client.post(
+            "/connect",
+            data={
+                "username": "connect_owner",
+                "password": "pass",
+                "device_name": "New Device",
+            },
         )
-        pin = pin_response.json()["pin"]
-
-        register_response = self.client.post(
-            "/api/pairings/pin/register",
-            data=json.dumps({"pin": pin, "device_name": "New Device"}),
-            content_type="application/json",
-        )
-        self.assertEqual(register_response.status_code, 201)
+        self.assertEqual(response.status_code, 302)
 
         new_device = Device.objects.get(name="New Device")
         self.assertEqual(new_device.owner, user)
@@ -645,18 +614,6 @@ class EndToEndTestCase(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "Alice Phone")
         self.assertNotContains(response, "Bob Phone")
-
-    def test_account_add_device_pin_assigns_correct_owner(self):
-        """PIN generated from account dashboard is owned by the logged-in user."""
-        user = self._make_user("dash_pin_owner")
-        self._account_login(user)
-
-        response = self.client.post("/account/add-device/", {"action": "create"}, follow=True)
-        self.assertEqual(response.status_code, 200)
-
-        from core.models import PairingPin
-        pin_obj = PairingPin.objects.filter(owner=user, used_at__isnull=True).first()
-        self.assertIsNotNone(pin_obj)
 
     def test_account_remove_device_only_removes_own_device(self):
         """A user cannot remove another user's device via the account dashboard."""

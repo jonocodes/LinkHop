@@ -4,12 +4,11 @@ from functools import wraps
 
 from django.utils import timezone
 from django.core.exceptions import ValidationError as DjangoValidationError
-from django.db import IntegrityError
 from django.http import HttpRequest, HttpResponse, JsonResponse
 from django.views.decorators.csrf import csrf_exempt
 
 from core.models import Device
-from core.services.auth import create_pairing_pin, get_device_for_token, provision_extension_device, register_device_with_pairing_pin
+from core.services.auth import get_device_for_token, provision_extension_device
 from core.services.messages import relay_message
 from core.services.push import (
     deactivate_push_subscription,
@@ -81,61 +80,6 @@ def session_link(request: HttpRequest) -> JsonResponse:
         return HttpResponse(status=401)
     device, raw_token = provision_extension_device(user=request.user)
     return JsonResponse({"device": serialize_device(device), "token": raw_token})
-
-
-@require_device_auth
-def pairing_pin_create(request: HttpRequest) -> JsonResponse:
-    if request.method != "POST":
-        return HttpResponse(status=405)
-    pairing_pin, raw_pin = create_pairing_pin(device=request.auth)
-    return JsonResponse(
-        {
-            "pin": raw_pin,
-            "expires_at": pairing_pin.expires_at.isoformat(),
-        }
-    )
-
-
-@csrf_exempt
-def register_device_with_pin(request: HttpRequest) -> JsonResponse:
-    if request.method != "POST":
-        return HttpResponse(status=405)
-
-    try:
-        payload = parse_json_body(request)
-    except DjangoValidationError as exc:
-        return json_error("validation_error", "; ".join(exc.messages))
-
-    raw_pin = str(payload.get("pin", "")).strip()
-    device_name = str(payload.get("device_name", "")).strip()
-    if not raw_pin or not device_name:
-        return json_error("validation_error", "Both pin and device_name are required.")
-
-    ip_address = get_client_ip(request)
-    allowed, limit = check_registration_rate_limit(ip_address=ip_address)
-    if not allowed:
-        return json_error(
-            "rate_limit_exceeded",
-            f"Too many registration attempts. Maximum {limit} per hour.",
-            status=429,
-        )
-
-    try:
-        registration = register_device_with_pairing_pin(raw_pin=raw_pin, name=device_name)
-    except IntegrityError:
-        return json_error("device_name_conflict", "A device with that name already exists.")
-
-    if registration is None:
-        return json_error("invalid_pairing_pin", "Pairing PIN is invalid or expired.")
-
-    device, raw_token = registration
-    return JsonResponse(
-        {
-            "device": serialize_device(device),
-            "token": raw_token,
-        },
-        status=201,
-    )
 
 
 @require_device_auth

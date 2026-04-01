@@ -13,27 +13,6 @@ class ApiFlowTests(TestCase):
         device, token = create_device_token(name=name)
         return device, token
 
-    def test_register_device_via_pairing_pin(self):
-        from core.services.auth import create_pairing_pin
-
-        _, raw_pin = create_pairing_pin()
-
-        response = self.client.post(
-            "/api/pairings/pin/register",
-            data=json.dumps(
-                {
-                    "pin": raw_pin,
-                    "device_name": "Desktop Firefox",
-                }
-            ),
-            content_type="application/json",
-        )
-
-        self.assertEqual(response.status_code, 201)
-        payload = response.json()
-        self.assertEqual(payload["device"]["name"], "Desktop Firefox")
-        self.assertTrue(payload["token"].startswith("device_"))
-
     @patch("core.services.push.relay_push_message", return_value={"delivered": 0, "total": 0})
     def test_message_relay_returns_push_status(self, mock_push):
         sender, sender_token = self.register_device("Sender")
@@ -67,108 +46,6 @@ class ApiFlowTests(TestCase):
         )
 
         self.assertEqual(response.status_code, 401)
-
-    def test_pairing_pin_registers_device(self):
-        _, issuer_token = self.register_device("Issuer Device")
-
-        pin_response = self.client.post(
-            "/api/pairings/pin",
-            content_type="application/json",
-            headers={"Authorization": f"Bearer {issuer_token}"},
-        )
-        self.assertEqual(pin_response.status_code, 200)
-        pin = pin_response.json()["pin"]
-        self.assertEqual(len(pin), 6)
-
-        register_response = self.client.post(
-            "/api/pairings/pin/register",
-            data=json.dumps(
-                {
-                    "pin": pin,
-                    "device_name": "Pinned Device",
-                }
-            ),
-            content_type="application/json",
-        )
-
-        self.assertEqual(register_response.status_code, 201)
-        self.assertEqual(register_response.json()["device"]["name"], "Pinned Device")
-        self.assertTrue(register_response.json()["token"].startswith("device_"))
-
-    def test_pairing_pin_is_single_use_over_api(self):
-        _, issuer_token = self.register_device("Issuer Again")
-
-        pin_response = self.client.post(
-            "/api/pairings/pin",
-            content_type="application/json",
-            headers={"Authorization": f"Bearer {issuer_token}"},
-        )
-        pin = pin_response.json()["pin"]
-
-        first_response = self.client.post(
-            "/api/pairings/pin/register",
-            data=json.dumps(
-                {
-                    "pin": pin,
-                    "device_name": "PIN First",
-                }
-            ),
-            content_type="application/json",
-        )
-        self.assertEqual(first_response.status_code, 201)
-
-        second_response = self.client.post(
-            "/api/pairings/pin/register",
-            data=json.dumps(
-                {
-                    "pin": pin,
-                    "device_name": "PIN Second",
-                }
-            ),
-            content_type="application/json",
-        )
-        self.assertEqual(second_response.status_code, 400)
-        self.assertEqual(second_response.json()["error"]["code"], "invalid_pairing_pin")
-
-    def test_pairing_pin_survives_device_name_conflict(self):
-        from django.contrib.auth import get_user_model
-        User = get_user_model()
-        owner = User.objects.create_user(username="conflict_owner", password="pass")
-
-        issuer, issuer_token = create_device_token(name="Issuer Conflict", owner=owner)
-        create_device_token(name="Existing Device", owner=owner)
-
-        pin_response = self.client.post(
-            "/api/pairings/pin",
-            content_type="application/json",
-            headers={"Authorization": f"Bearer {issuer_token}"},
-        )
-        pin = pin_response.json()["pin"]
-
-        conflict_response = self.client.post(
-            "/api/pairings/pin/register",
-            data=json.dumps(
-                {
-                    "pin": pin,
-                    "device_name": "Existing Device",
-                }
-            ),
-            content_type="application/json",
-        )
-        self.assertEqual(conflict_response.status_code, 400)
-        self.assertEqual(conflict_response.json()["error"]["code"], "device_name_conflict")
-
-        success_response = self.client.post(
-            "/api/pairings/pin/register",
-            data=json.dumps(
-                {
-                    "pin": pin,
-                    "device_name": "Fresh Device",
-                }
-            ),
-            content_type="application/json",
-        )
-        self.assertEqual(success_response.status_code, 201)
 
     @override_settings(
         LINKHOP_WEBPUSH_VAPID_PUBLIC_KEY="public-key",
