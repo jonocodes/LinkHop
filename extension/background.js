@@ -274,6 +274,26 @@ browser.runtime.onMessage.addListener(async (msg) => {
 });
 
 // ---------------------------------------------------------------------------
+// External messages (from the web UI)
+// ---------------------------------------------------------------------------
+
+browser.runtime.onMessageExternal.addListener(async (msg) => {
+  if (msg.type === "session_link" && msg.token && msg.serverUrl) {
+    const config = {
+      serverUrl: msg.serverUrl,
+      token: msg.token,
+      deviceId: msg.deviceId,
+      deviceName: msg.deviceName,
+      defaultDeviceId: null,
+    };
+    await saveConfig(config);
+    reconnectAttempts = 0;
+    await startSSE();
+    return { ok: true };
+  }
+});
+
+// ---------------------------------------------------------------------------
 // Startup
 // ---------------------------------------------------------------------------
 

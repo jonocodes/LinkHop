@@ -44,15 +44,6 @@ async function apiFetch(config, path, options = {}) {
   return resp;
 }
 
-async function sessionLink(serverUrl) {
-  const url = `${serverUrl.replace(/\/$/, "")}/api/session/link`;
-  const resp = await fetch(url, {
-    method: "POST",
-    credentials: "include",
-    headers: { "Content-Type": "application/json" },
-  });
-  return resp;
-}
 
 async function fetchDevices(config) {
   const resp = await apiFetch(config, "/api/devices");
@@ -88,44 +79,12 @@ async function initSetupScreen() {
   show("screen-setup");
   hide("screen-main");
 
-  document.getElementById("btn-link").addEventListener("click", async () => {
+  document.getElementById("btn-link").addEventListener("click", () => {
     const serverUrl = document.getElementById("server-url").value.trim();
-
     if (!serverUrl) return setError("setup-error", "Server URL is required.");
-
-    setError("setup-error", "");
-    const btn = document.getElementById("btn-link");
-    btn.disabled = true;
-    btn.textContent = "Connecting…";
-
-    try {
-      const resp = await sessionLink(serverUrl);
-      if (resp.status === 401) {
-        setError("setup-error", `Not logged in. Please log in at ${serverUrl} first.`);
-        return;
-      }
-      if (!resp.ok) {
-        const body = await resp.json().catch(() => ({}));
-        setError("setup-error", body?.error?.message || `Connection failed (${resp.status})`);
-        return;
-      }
-      const data = await resp.json();
-      const config = {
-        serverUrl,
-        token: data.token,
-        deviceId: data.device.id,
-        deviceName: data.device.name,
-        defaultDeviceId: null,
-      };
-      await saveConfig(config);
-      browser.runtime.sendMessage({ type: "linked" });
-      initMainScreen(config);
-    } catch (err) {
-      setError("setup-error", `Error: ${err.message}`);
-    } finally {
-      btn.disabled = false;
-      btn.textContent = "Connect";
-    }
+    const url = `${serverUrl.replace(/\/$/, "")}/account/connected-devices/`;
+    browser.tabs.create({ url });
+    window.close();
   });
 }
 
