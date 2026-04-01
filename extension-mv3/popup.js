@@ -96,15 +96,10 @@ async function initMainScreen(config) {
     updatePushUI(false);
   }
 
-  // Enable push button
-  document.getElementById("btn-enable-push").addEventListener("click", async () => {
-    const permission = await Notification.requestPermission();
-    if (permission === "granted") {
-      await chrome.runtime.sendMessage({ type: "register_push" });
-      updatePushUI(true);
-    } else {
-      updatePushUI(false);
-    }
+  // Enable push button — opens a dedicated page to avoid popup-closes-on-focus-loss
+  document.getElementById("btn-enable-push").addEventListener("click", () => {
+    chrome.tabs.create({ url: chrome.runtime.getURL("grant-permission.html") });
+    window.close();
   });
 
   // Load devices
