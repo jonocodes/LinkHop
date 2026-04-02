@@ -16,6 +16,8 @@ from django.templatetags.static import static
 from django.utils.http import urlencode, url_has_allowed_host_and_scheme
 from django.utils import timezone
 
+from django.contrib.auth.models import User
+
 from core.account_auth import account_and_device_required, account_login_required, account_session_login, account_session_logout, get_account_user
 from core.account_site import account_site
 from core.device_auth import COOKIE_NAME, get_device_from_request
@@ -36,7 +38,43 @@ def healthcheck(_request: HttpRequest) -> HttpResponse:
     return HttpResponse("ok", content_type="text/plain")
 
 
+def first_run_setup_view(request: HttpRequest) -> HttpResponse:
+    """One-time setup page to create the first admin user."""
+    if User.objects.filter(is_superuser=True).exists():
+        return redirect("home")
+
+    error = ""
+    if request.method == "POST":
+        username = request.POST.get("username", "").strip()
+        password = request.POST.get("password", "").strip()
+        password2 = request.POST.get("password2", "").strip()
+
+        if not username:
+            error = "Username is required."
+        elif not password:
+            error = "Password is required."
+        elif password != password2:
+            error = "Passwords do not match."
+        elif len(password) < 8:
+            error = "Password must be at least 8 characters."
+        else:
+            User.objects.create_superuser(username=username, password=password)
+            from core.middleware import FirstRunMiddleware
+            FirstRunMiddleware._setup_complete = True
+            from django.contrib.auth import login
+            login(request, User.objects.get(username=username), backend="django.contrib.auth.backends.ModelBackend")
+            return redirect("admin:index")
+
+    return render(request, "first_run_setup.html", {"error": error})
+
+
+def _needs_first_run_setup() -> bool:
+    return not User.objects.filter(is_superuser=True).exists()
+
+
 def home_view(request: HttpRequest) -> HttpResponse:
+    if _needs_first_run_setup():
+        return redirect("first_run_setup")
     device, _ = get_device_from_request(request)
     account_user = get_account_user(request)
     return render(request, "home.html", {

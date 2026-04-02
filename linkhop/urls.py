@@ -22,6 +22,7 @@ from core.views import (
     admin_settings_view,
     connect_view,
     disconnect_view,
+    first_run_setup_view,
     healthcheck,
     home_view,
     hop_view,
@@ -32,6 +33,7 @@ from core.views import (
 
 urlpatterns = [
     path("", home_view, name="home"),
+    path("setup/", first_run_setup_view, name="first_run_setup"),
     path("manifest.json", manifest_view, name="manifest"),
     path("service-worker.js", service_worker_view, name="service_worker"),
     path("admin/settings/", admin.site.admin_view(admin_settings_view), name="admin_settings"),

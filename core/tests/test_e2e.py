@@ -75,7 +75,13 @@ class EndToEndTestCase(TestCase):
         self.assertEqual(Device.objects.count(), 0)
         self.assertEqual(User.objects.count(), 0)
 
+    def test_home_page_redirects_to_setup_when_no_superuser(self):
+        response = self.client.get("/")
+        self.assertEqual(response.status_code, 302)
+        self.assertIn("/setup/", response.url)
+
     def test_home_page_exposes_primary_links(self):
+        User.objects.create_superuser(username="admin", password="adminpass")
         response = self.client.get("/")
 
         self.assertEqual(response.status_code, 200)
