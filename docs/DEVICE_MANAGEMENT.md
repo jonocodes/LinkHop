@@ -18,23 +18,23 @@ Guide for managing devices, including registration, revocation, and re-registrat
 
 ### How It Works
 
-LinkHop uses a two-step pairing flow:
+LinkHop uses two authentication layers:
 
-1. **Pairing PIN** - Single-use 6-digit PIN created by admin or an existing device
-2. **Device Token** - Permanent bearer token received after registration
+1. **Account session** — password-based login at `/account/login/` (Django session cookie, 2 weeks)
+2. **Device token** — long-lived cookie set when you register a browser as a device (1 year)
 
 ```
-┌─────────────┐     6-digit PIN          ┌─────────────┐
-│   Admin     │ ───────────────────────→ │ New Device  │
-│  (Creates)  │                          │ (Registers) │
+┌─────────────┐     Password login       ┌─────────────┐
+│   User      │ ──────────────────────→  │  Account    │
+│  (Browser)  │                          │  Session    │
 └─────────────┘                          └──────┬──────┘
                                                 │
-                                                │ Device Token
+                                                │ Register device
                                                 ↓
                                          ┌─────────────┐
                                          │   Device    │
-                                         │  (Stores    │
-                                         │   Token)    │
+                                         │   Token     │
+                                         │  (Cookie)   │
                                          └─────────────┘
 ```
 
@@ -42,108 +42,60 @@ LinkHop uses a two-step pairing flow:
 
 | Token Type | Format | Lifetime | Usage |
 |------------|--------|----------|-------|
-| Pairing PIN | 6-digit number | 10 minutes, single-use | Initial registration |
-| Device Token | `device_...` | Permanent (until revoked) | API authentication |
+| Account session | Django session cookie | 2 weeks | Account access |
+| Device token | `linkhop_device_token` cookie | 1 year | Device identity, push subscriptions |
 
 ---
 
 ## Registering New Devices
 
-### Step 1: Create Pairing PIN
+### Via Web Interface (recommended)
 
-**Via Admin Panel:**
+1. Visit `/account/login/` and sign in with your account credentials
+2. If the browser doesn't have a device cookie, you'll be redirected to `/account/activate-device/`
+3. Choose a device name (e.g. "Work Laptop", "Phone Firefox")
+4. Click "Register this device"
+5. Browser/OS info is automatically detected from the User-Agent header
 
-1. Login to `https://your-linkhop.com/admin/`
-2. Navigate to "Connected devices" in the Management section
-3. Click "Add device"
-4. Click "Generate PIN"
-5. Share the 6-digit PIN with the new device (expires in 10 minutes)
+If the browser is already registered, visiting `/account/activate-device/` will redirect to the connected devices page with a message showing the existing device name.
 
-**Via Existing Device (web UI):**
+### Via API
 
-1. Login to the app on an existing device
-2. Go to the Pair page (`/pair`)
-3. Click "Generate PIN"
-4. Share the PIN (expires in 10 minutes)
-
-**Via API (from an authenticated device):**
+Devices can also register via the API using a bearer token from an existing device:
 
 ```bash
-curl -X POST https://your-linkhop.com/api/pairings/pin \
-  -H "Authorization: Bearer EXISTING_DEVICE_TOKEN"
-```
-
-**Response:**
-```json
-{
-  "pin": "123456",
-  "expires_at": "2026-03-29T12:10:00Z"
-}
-```
-
-### Step 2: Register Device
-
-**Via Web Interface (recommended):**
-
-1. Open `https://your-linkhop.com/connect`
-2. Enter the 6-digit PIN and a device name
-3. Click "Connect"
-4. Token is stored in browser cookie
-
-**Via API:**
-
-```bash
-curl -X POST https://your-linkhop.com/api/pairings/pin/register \
+curl -X POST https://your-linkhop.com/api/messages \
+  -H "Authorization: Bearer device_..." \
   -H "Content-Type: application/json" \
-  -d '{
-    "pin": "123456",
-    "device_name": "John iPhone"
-  }'
+  -d '{ ... }'
 ```
-
-**Response:**
-```json
-{
-  "device": {
-    "id": "550e8400-e29b-41d4-a716-446655440000",
-    "name": "John iPhone",
-    "is_active": true,
-    "last_seen_at": null
-  },
-  "token": "device_xyz789..."
-}
-```
-
-**⚠️ CRITICAL:** Save the `token` value immediately! It cannot be retrieved later.
 
 ---
 
 ## Viewing Registered Devices
 
+### Via Account Dashboard
+
+1. Sign in at `/account/login/`
+2. Go to Connected Devices in the sidebar
+3. View all registered devices:
+   - Device name (editable via rename)
+   - Online/recently seen/offline status
+   - Browser / OS info
+   - Last active timestamp
+   - Send test / Remove actions
+
 ### Via Admin Panel
 
-1. Go to Management → Connected devices
-2. View all registered devices:
-   - Device name
-   - Online/offline/recently-seen status
-   - Last seen timestamp
-   - Active/revoked status
-   - Send test message button
+1. Login to `/admin/`
+2. Go to LinkHop → Devices
+3. View all devices across all accounts
 
 ### Via API
-
-**List all devices:**
 
 ```bash
 curl -H "Authorization: Bearer YOUR_DEVICE_TOKEN" \
   https://your-linkhop.com/api/devices
-```
-
-**Get current device info:**
-
-```bash
-curl -H "Authorization: Bearer YOUR_DEVICE_TOKEN" \
-  https://your-linkhop.com/api/device/me
 ```
 
 ### Device States
@@ -154,9 +106,8 @@ curl -H "Authorization: Bearer YOUR_DEVICE_TOKEN" \
 | `is_active: false` | Device disabled by admin |
 | `revoked_at: null` | Token is valid |
 | `revoked_at: timestamp` | Token revoked, cannot authenticate |
-| `last_seen_at: timestamp` | Last API activity |
-| Online (green) | Currently connected via SSE |
-| Recently seen (orange) | No active SSE stream but seen within 25 seconds |
+| Online (green) | Push delivered recently |
+| Recently seen (orange) | Seen within 25 seconds |
 | Offline (grey) | Not seen within threshold |
 
 ---
@@ -171,19 +122,20 @@ Revoke a device when:
 - User no longer needs access
 - Suspicious activity detected
 
-### Method 1: Admin Panel (Recommended)
+### Method 1: Account Dashboard
+
+1. Sign in at `/account/login/`
+2. Go to Connected Devices
+3. Click "Remove" next to the device
+
+### Method 2: Admin Panel
 
 1. Login to `/admin/`
-2. Go to Management → Connected devices
-3. Click "View" next to the device
+2. Go to LinkHop → Devices
+3. Click on the device
 4. Set `revoked_at` to the current timestamp and save
 
-**Effects:**
-- Device token immediately stops working
-- Device cannot send or receive messages
-- Device appears as inactive in admin
-
-### Method 2: Django Shell
+### Method 3: Django Shell
 
 ```bash
 python manage.py shell
@@ -193,81 +145,44 @@ python manage.py shell
 from core.models import Device
 from django.utils import timezone
 
-# Find device
 device = Device.objects.get(name="John iPhone")
-
-# Revoke
 device.revoked_at = timezone.now()
 device.save()
-
-print(f"Device {device.name} revoked at {device.revoked_at}")
 ```
 
 ### What Happens After Revocation
 
-**Immediate Effects:**
-```bash
-# All API calls fail with 401
-curl -H "Authorization: Bearer REVOKED_TOKEN" \
-  https://your-linkhop.com/api/device/me
-
-# Response: 401 Unauthorized
-```
-
-**Device Experience:**
-- Web app: Redirected to `/connect` page
-- API clients: Receive 401 errors
-- SSE connections: Disconnected
+- API calls from the device fail with 401
+- Web pages redirect to the login page
+- Push subscriptions are no longer used for delivery
 
 ---
 
 ## Re-registering Devices
 
-### Scenario 1: Token Lost (Not Revoked)
+### Scenario 1: Device Cookie Lost
 
-If the device token is lost but the device wasn't revoked:
+If the browser's device cookie was cleared:
 
-**Unfortunately, tokens cannot be retrieved.** You must:
-
-1. Revoke the old device (if you can identify it)
-2. Generate a new pairing PIN from admin
-3. Register as new device
-
-```bash
-python manage.py shell
-```
-
-```python
-from core.models import Device
-from django.utils import timezone
-
-# Find and revoke
-device = Device.objects.get(name="John iPhone")
-device.revoked_at = timezone.now()
-device.save()
-```
-
-Then generate a new PIN from admin and re-register.
+1. Sign in at `/account/login/`
+2. You'll be prompted to register the device again
+3. The old device record remains in the database — remove it via Connected Devices if desired
 
 ### Scenario 2: Device Replaced
 
-When replacing a device (e.g., new phone):
+When replacing a device (e.g. new phone):
 
-**Option A: Fresh Registration (recommended)**
-1. Generate a new pairing PIN from admin
-2. Register new device with new name (e.g., "John iPhone 14")
-3. Update any shortcuts/automation to use new token
-4. Revoke old device after verification
+1. Sign in on the new device at `/account/login/`
+2. Register it with a new name
+3. Remove the old device from Connected Devices
 
 ### Scenario 3: Device Compromised
 
-If token is suspected compromised:
+If a token is suspected compromised:
 
-1. **Immediately revoke** the device via admin panel
-2. **Generate a new pairing PIN**
-3. **Register new device** with new token
-4. **Update all clients** with new token
-5. **Review message logs** for unauthorized access
+1. Immediately remove the device from Connected Devices or revoke in admin
+2. Sign in on a fresh browser and register a new device
+3. Review the message log at `/admin/message-log/` for suspicious activity
 
 ---
 
@@ -283,67 +198,38 @@ Bad:   "Device 1"
 Bad:   "Phone"
 ```
 
-**2. Pairing PINs Expire Quickly**
+**2. Regular Audit**
 
-PINs expire after 10 minutes and are single-use. Only share them immediately before registering a device.
-
-**3. Regular Audit**
-
-Review devices monthly:
-```bash
-python manage.py shell
-```
+Review devices monthly via the Connected Devices page or:
 
 ```python
 from core.models import Device
 from django.utils import timezone
 from datetime import timedelta
 
-# Find inactive devices (no activity in 30 days)
 inactive = Device.objects.filter(
     last_seen_at__lt=timezone.now() - timedelta(days=30),
     revoked_at__isnull=True
 )
-
 for d in inactive:
     print(f"Review: {d.name} - Last seen: {d.last_seen_at}")
 ```
 
-**4. Principle of Least Privilege**
-- Only generate pairing PINs when needed
-- PINs are single-use; generating a new one invalidates the previous one for the same device
-
 ### For Users
 
-**1. Store Tokens Securely**
+**1. Use Different Devices Per Browser**
 
-```bash
-# Good: Environment variable
-export LINKHOP_TOKEN="device_abc123..."
+Don't share device tokens between browsers. Each browser should have its own registration.
 
-# Good: Password manager
-# Store in 1Password, Bitwarden, etc.
+**2. Log Out on Shared Computers**
 
-# Bad: Plain text file
-# echo "token" > token.txt  # DON'T DO THIS
-```
-
-**2. Use Different Tokens Per Device**
-
-Don't share tokens between devices. Each should have its own registration.
-
-**3. Rotate Tokens Periodically**
-
-Every 6-12 months:
-1. Register new device token (generate PIN + re-register)
-2. Update all integrations
-3. Revoke old token
+The account session expires after 2 weeks. Use `/account/logout/` on shared machines.
 
 ---
 
 ## Troubleshooting
 
-### "401 Unauthorized" Error
+### "401 Unauthorized" API Error
 
 **Causes:**
 1. Token is revoked
@@ -352,90 +238,41 @@ Every 6-12 months:
 
 **Diagnosis:**
 ```bash
-# Check if token works
 curl -H "Authorization: Bearer YOUR_TOKEN" \
   https://your-linkhop.com/api/device/me
 ```
 
-**Solutions:**
-- If revoked: Re-register device using a new pairing PIN
-- If inactive: Admin must reactivate
-- If wrong token: Find correct token or re-register
+### Messages Not Arriving
 
-### "device_name_conflict" Error
-
-**Cause:** Device names must be unique
-
-**Solutions:**
-```bash
-# Option 1: Use different name
-# Register with "John iPhone 2" instead
-
-# Option 2: Admin deletes old device
-python manage.py shell
-Device.objects.get(name="John iPhone").delete()
-```
-
-### "invalid_pairing_pin" Error
-
-**Causes:**
-1. PIN already used
-2. PIN expired (10 minute window)
-3. PIN typo
-
-**Solutions:**
-- Generate a fresh PIN from admin or an existing device
-- Register promptly before it expires
-
-### Lost Device Token
-
-**No recovery option.** You must:
-1. Revoke old device (if identifiable)
-2. Generate a new pairing PIN
-3. Register as new device
-4. Update all integrations
+1. Check push notification permission in the browser
+2. Visit `/account/debug/` for push diagnostics
+3. Verify VAPID keys are configured (check `.env`)
+4. Check the message log at `/admin/message-log/`
 
 ### Device Shows "Offline"
 
 **Normal if:**
-- Web browser tab closed
-- Mobile app in background
-- No recent activity
+- Browser tab closed
+- No recent API activity
 
-**Not normal if:**
-- Active browser tab shows offline
-- Recently sent messages not appearing
-
-**Check:**
-```bash
-# Verify SSE connection
-# Open browser dev tools → Network → Look for /api/events/stream
-# Should show status 200 and streaming data
-```
+**Check push:**
+- Visit `/account/debug/` on the device
+- Verify push subscription is active
+- Try "Send test push" to verify delivery
 
 ---
 
 ## Quick Reference
 
-### Admin Commands
-
-```bash
-# List all devices
-python manage.py shell -c "from core.models import Device; [print(f'{d.name}: Active={d.is_active}, Revoked={d.revoked_at}') for d in Device.objects.all()]"
-
-# Revoke device by name
-python manage.py shell -c "from core.models import Device; from django.utils import timezone; Device.objects.filter(name='DEVICE_NAME').update(revoked_at=timezone.now())"
-```
-
 ### API Quick Reference
 
 | Action | Endpoint | Auth |
 |--------|----------|------|
-| Create pairing PIN | `POST /api/pairings/pin` | Bearer |
-| Register | `POST /api/pairings/pin/register` | None (needs PIN) |
 | List devices | `GET /api/devices` | Bearer |
 | My device | `GET /api/device/me` | Bearer |
-| Revoke | Admin only | N/A |
+| Send message | `POST /api/messages` | Bearer |
+| Push config | `GET /api/push/config` | Bearer |
+| Test push | `POST /api/push/test` | Bearer |
 
 ---
 
