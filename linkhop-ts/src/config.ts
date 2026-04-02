@@ -46,16 +46,6 @@ export function applyRuntimeConfig(values: Record<string, string>): void {
   cachedConfig = null;
 }
 
-export async function isConfigured(): Promise<boolean> {
-  const config = await getConfig();
-  return Boolean(
-    config.passwordHash &&
-      config.vapidPublicKey &&
-      config.vapidPrivateKey &&
-      config.sessionSecret,
-  );
-}
-
 function readEnv(name: string): string {
   const value = Deno.env.get(name) || '';
   if (

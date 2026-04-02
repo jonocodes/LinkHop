@@ -154,12 +154,12 @@ Deno.test({
     const { applyRuntimeConfig, getConfig } = await import('../src/config.ts');
     const { stringify } = await import('@std/dotenv');
     const { join } = await import('@std/path');
-    const { hashPassword } = await import('../src/services/setup.ts');
+    const { hash } = await import('bcryptjs');
 
     const tmpDir = await Deno.makeTempDir({ prefix: 'linkhop_self_' });
     const envPath = join(tmpDir, '.env');
     const dbPath = join(tmpDir, 'test.db');
-    const passwordHash = await hashPassword('pass');
+    const passwordHash = await hash('pass', 12);
 
     await Deno.writeTextFile(envPath, stringify({
       PASSWORD_HASH: passwordHash,
@@ -212,12 +212,12 @@ Deno.test({
     const { applyRuntimeConfig, getConfig } = await import('../src/config.ts');
     const { stringify } = await import('@std/dotenv');
     const { join } = await import('@std/path');
-    const { hashPassword } = await import('../src/services/setup.ts');
+    const { hash } = await import('bcryptjs');
 
     const tmpDir = await Deno.makeTempDir({ prefix: 'linkhop_self2_' });
     const envPath = join(tmpDir, '.env');
     const dbPath = join(tmpDir, 'test.db');
-    const passwordHash = await hashPassword('pass');
+    const passwordHash = await hash('pass', 12);
 
     await Deno.writeTextFile(envPath, stringify({
       PASSWORD_HASH: passwordHash,

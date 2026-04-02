@@ -5,12 +5,13 @@ Based on the `LINKHOP_TS.md` spec.
 ### Core Infrastructure
 - [x] Deno + Hono app setup (`src/main.ts`, `src/app.ts`)
 - [x] Config from env vars / `.env` (`src/config.ts`)
+- [x] Startup validation — refuses to start without `PASSWORD_HASH`, `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`
 - [x] SQLite database with `devices` + `push_subscriptions` tables (`src/db.ts`)
 - [x] TypeScript types (`src/types.ts`)
 - [x] Base64url and crypto utilities (`src/utils/`)
 
 ### Auth
-- [x] First-run setup — password + VAPID key generation (`src/services/setup.ts`)
+- [x] Password verification via bcrypt (`src/services/setup.ts`)
 - [x] Session login/logout — signed HMAC cookies (`src/middleware/auth.ts`)
 - [x] Device token flow — `device_<random>`, SHA256 hash, cookie + Bearer (`src/services/devices.ts`, `src/middleware/auth.ts`)
 - [ ] Rate limiting middleware (values written to `.env` but never enforced)
@@ -27,7 +28,6 @@ Based on the `LINKHOP_TS.md` spec.
 
 ### Page Routes
 - [x] `GET /` — redirect to inbox or login
-- [x] `GET/POST /setup` — first-run setup
 - [x] `GET/POST /login` — login form
 - [x] `GET /logout` — clear session
 - [x] `GET /account/inbox` — inbox UI
@@ -49,12 +49,17 @@ Based on the `LINKHOP_TS.md` spec.
 
 ### Client-Side / PWA
 - [x] Service worker — caching, push handler, IndexedDB, notification clicks (`public/service-worker.js`)
-- [x] Push subscription manager (`public/push.js`)
+- [x] Push subscription manager with auto-sync on page load (`public/push.js`)
 - [x] Inbox UI with IndexedDB (`public/inbox.js`)
 - [x] Service worker registration (`public/pwa-register.js`)
 - [x] Stylesheet (`public/styles.css`)
 - [x] PWA manifest (`public/manifest.json`)
 - [ ] PWA icons — `"icons": []` is empty
+
+### Docker
+- [x] Dockerfile (denoland/deno, layered build)
+- [x] docker-compose.yml
+- [x] .dockerignore
 
 ### Thin backend
 - [ ] make into a spa with client side template rendering
@@ -70,17 +75,16 @@ Based on the `LINKHOP_TS.md` spec.
 - [ ] Browser extension code (separate repo, API endpoint exists)
 
 ### Testing
-- [ ] Test framework set up (e.g. Deno built-in test runner)
-- [ ] Unit tests for `src/config.ts`
+- [x] Test framework set up (Deno built-in test runner)
+- [x] Unit tests for `src/utils/crypto.ts`
+- [x] Unit tests for `src/utils/base64url.ts`
+- [x] Unit tests for `src/services/messages.ts` (validation + self-send)
 - [ ] Unit tests for `src/services/devices.ts`
-- [ ] Unit tests for `src/services/messages.ts` (validation + relay)
 - [ ] Unit tests for `src/services/push.ts` (subscription CRUD, push delivery)
-- [ ] Unit tests for `src/services/setup.ts` (password hashing, VAPID key generation)
-- [ ] Unit tests for `src/utils/crypto.ts`
-- [ ] Unit tests for `src/utils/base64url.ts`
+- [ ] Unit tests for `src/config.ts`
 - [ ] Unit tests for `src/middleware/auth.ts` (session, device token, requireSession, requireDevice)
 - [ ] Integration tests for API routes (`src/routes/api.ts`)
 - [ ] Integration tests for page routes (`src/routes/pages.ts`)
 - [ ] Database schema migration tests (`src/db.ts`)
 - [ ] Service worker tests (`public/service-worker.js`)
-- [ ] End-to-end tests (login → activate device → send message → receive push)
+- [x] End-to-end tests — full flow: login, device registration, messaging, push delivery, API coverage

@@ -1,9 +1,8 @@
 import { assertEquals, assertNotEquals } from 'jsr:@std/assert';
 import { join } from '@std/path';
+import { hash } from 'bcryptjs';
 import { createApp } from '../src/app.ts';
-import { applyRuntimeConfig, getConfig } from '../src/config.ts';
-import { hashPassword } from '../src/services/setup.ts';
-import { generateVapidKeys } from '../src/utils/crypto.ts';
+import { applyRuntimeConfig } from '../src/config.ts';
 import { stringify } from '@std/dotenv';
 
 const PROJECT_ROOT = join(import.meta.url.replace('file://', ''), '..', '..');
@@ -29,14 +28,13 @@ async function globalSetup() {
   const tmpDir = await Deno.makeTempDir({ prefix: 'linkhop_e2e_' });
   testDbPath = join(tmpDir, 'test.db');
 
-  const passwordHash = await hashPassword(TEST_PASSWORD);
-  const vapid = await generateVapidKeys();
+  const passwordHash = await hash(TEST_PASSWORD, 12);
 
   const testEnv = {
     PASSWORD_HASH: passwordHash,
     SESSION_SECRET: 'e2e-test-secret-key-12345',
-    VAPID_PUBLIC_KEY: vapid.publicKey,
-    VAPID_PRIVATE_KEY: vapid.privateKey,
+    VAPID_PUBLIC_KEY: 'BBvpFoiYt65QJjzdcssh4bqdAMVSd8TO7vv-7cdz9Bj7PQts0v2uGX_XN5MWQIo2Bg131oL-OJDrPIXQeF2aGGI',
+    VAPID_PRIVATE_KEY: 'PQts0v2uGX_XN5MWQIo2Bg131oL-OJDrPIXQeF2aGGI',
     VAPID_SUBJECT: 'mailto:test@localhost',
     DB_PATH: testDbPath,
     PORT: '8001',
@@ -222,11 +220,6 @@ Deno.test({
       assertEquals(res.status, 200);
       const html = await res.text();
       assertNotEquals(html.indexOf('Settings'), -1);
-    });
-
-    await t.step('GET /setup redirects when already configured', async () => {
-      const res = await app.request('/setup', { redirect: 'manual' });
-      assertEquals(res.status, 302);
     });
 
     await t.step('GET /api/push/config returns VAPID key', async () => {

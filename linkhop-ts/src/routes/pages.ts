@@ -1,6 +1,6 @@
 import { Hono } from '@hono/hono';
 import { getCookie } from '@hono/hono/cookie';
-import { getConfig, isConfigured } from '../config.ts';
+import { getConfig } from '../config.ts';
 import { getDb } from '../db.ts';
 import {
   clearSessionCookie,
@@ -10,85 +10,16 @@ import {
   setSessionCookie,
 } from '../middleware/auth.ts';
 import { createDevice, listActiveDevices } from '../services/devices.ts';
-import { persistSetup, verifyPassword } from '../services/setup.ts';
+import { verifyPassword } from '../services/setup.ts';
 import { deviceTable, layout } from '../utils/html.ts';
 
 export const pages = new Hono();
-
-pages.use(async (c, next) => {
-  const configured = await isConfigured();
-  const pathname = new URL(c.req.url).pathname;
-
-  if (
-    !configured && pathname !== '/setup' && pathname !== '/healthz' &&
-    pathname !== '/styles.css' &&
-    pathname !== '/manifest.json' && pathname !== '/service-worker.js' &&
-    pathname !== '/push.js' && pathname !== '/pwa-register.js' &&
-    pathname !== '/inbox.js'
-  ) {
-    return c.redirect('/setup');
-  }
-
-  await next();
-});
 
 pages.get('/', (c) => {
   if (c.get('session')) {
     return c.redirect('/account/inbox');
   }
   return c.redirect('/login');
-});
-
-pages.get('/setup', async (c) => {
-  if (await isConfigured()) {
-    return c.redirect('/');
-  }
-
-  return c.html(layout({
-    title: 'Setup',
-    heading: 'First-run setup',
-    body: `
-      <form method="post">
-        <label>Password <input type="password" name="password" minlength="8" required /></label>
-        <label>Confirm password <input type="password" name="password_confirm" minlength="8" required /></label>
-        <button type="submit">Set up</button>
-      </form>
-      <p>This creates the password hash, session secret, and VAPID keys in <code>.env</code>.</p>
-    `,
-  }));
-});
-
-pages.post('/setup', async (c) => {
-  if (await isConfigured()) {
-    return c.redirect('/');
-  }
-
-  const body = await c.req.parseBody();
-  const password = String(body.password || '');
-  const confirmation = String(body.password_confirm || '');
-
-  if (password.length < 8 || password !== confirmation) {
-    return c.html(
-      layout({
-        title: 'Setup',
-        heading: 'First-run setup',
-        flash: 'Passwords must match and be at least 8 characters.',
-        body: `
-        <form method="post">
-          <label>Password <input type="password" name="password" minlength="8" required /></label>
-          <label>Confirm password <input type="password" name="password_confirm" minlength="8" required /></label>
-          <button type="submit">Set up</button>
-        </form>
-      `,
-      }),
-      400,
-    );
-  }
-
-  await persistSetup(password);
-  const config = await getConfig(true);
-  await setSessionCookie(c, config);
-  return c.redirect('/account/activate-device');
 });
 
 pages.get('/login', (c) => {
@@ -385,8 +316,6 @@ pages.get('/account/settings', requireSession(), async (c) => {
     activePath: '/account/settings',
     body: `
       <dl>
-        <dt>Configured</dt>
-        <dd>${await isConfigured() ? 'Yes' : 'No'}</dd>
         <dt>DB path</dt>
         <dd><code>${config.dbPath}</code></dd>
         <dt>VAPID subject</dt>
