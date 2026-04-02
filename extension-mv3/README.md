@@ -15,7 +15,7 @@ See `../extension/` for the Firefox (Manifest V2 / SSE) version.
 
 1. Click the extension icon
 2. Enter your LinkHop server URL and click **Open settings**
-3. On the `/inbox` page that opens, click **🧩 extension**
+3. On the `/account/inbox/` page that opens, click **🧩 extension**
 4. The extension is now linked
 5. Open the popup and click **Enable notifications** to register for Web Push
 
@@ -37,7 +37,7 @@ See `../extension/` for the Firefox (Manifest V2 / SSE) version.
 
 ## How it works
 
-Linking uses the same `postMessage` bridge as the Firefox extension: the `/inbox` page sends the device token to a content script, which relays it to the service worker.
+Linking uses the same `postMessage` bridge as the Firefox extension: the `/account/inbox/` page sends the device token to a content script, which relays it to the service worker.
 
 On setup the service worker fetches the VAPID public key from `/api/push/config`, subscribes via `pushManager.subscribe()`, and registers the subscription with `/api/push/subscriptions`. Incoming messages trigger a `push` event in the service worker, which calls `showNotification()`. Clicking a notification opens the URL and marks the message as opened.
 

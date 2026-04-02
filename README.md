@@ -40,7 +40,7 @@ Make it easy to send a URL or text message from one device to another, even if t
 * **Ephemeral** - messages are not meant to be stored long-term
 * **Device-to-device** - everything is addressed to your own devices
 * **Self-hosted** - you control where it runs
-* **Queue-based** - messages are persisted server-side until a client receives them
+* **Push-based** - messages are relayed via Web Push and stored client-side in IndexedDB
 * **Extension-optional** - works fully in a normal browser
 
 ---
@@ -104,13 +104,13 @@ LinkHop uses a simple model:
 
 * Devices are registered endpoints
 * Messages are sent between devices
-* The server queues messages until a receiving client accepts them
-* Devices receive realtime notifications when online
+* The server relays messages via Web Push to the recipient's browser
+* Messages are stored client-side in IndexedDB
 
 Delivery is:
 
-* queue-backed for reliable handoff
-* realtime when possible via HTTP + SSE
+* push-based via Web Push (VAPID)
+* stored locally in each device's browser for offline access
 
 ---
 
@@ -118,7 +118,7 @@ Delivery is:
 
 Active development — core functionality is working.
 
-The app includes device registration and enrollment, a full JSON API, a browser-based send form and inbox, SSE real-time delivery, browser notifications, Web Push support, and browser extensions for Firefox (MV2/SSE) and Chrome (MV3/Web Push).
+The app includes password-based account login, device registration, a full JSON API, a browser-based send form and inbox, Web Push delivery, browser notifications, client-side message storage (IndexedDB), and browser extensions for Firefox (MV2) and Chrome (MV3/Web Push).
 
 For more detail:
 
@@ -158,14 +158,7 @@ python manage.py migrate
 
 ### Run the development server
 
-For SSE support the app must run under ASGI:
-
-```bash
-pip install uvicorn
-uvicorn linkhop.asgi:application --reload
-```
-
-Or with the standard WSGI server (no SSE):
+### Run the development server
 
 ```bash
 python manage.py runserver
@@ -177,16 +170,18 @@ The app will be available at `http://127.0.0.1:8000/`.
 
 | Route | Description |
 |---|---|
-| `/` | Public front page with links to connect, admin, and the project repository |
-| `/connect` | Connect a browser by pairing with a 6-digit PIN |
-| `/pair` | Add a device by generating a 6-digit pairing PIN |
-| `/send` | Send a message to another device |
-| `/hop` | Share-entry route for bookmarks and HTTP Shortcuts; preserves pending sends through connect |
-| `/inbox` | View incoming messages |
-| `/messages/{id}` | Read a text message (records opened) |
-| `/messages/{id}/open` | Open a URL message — records opened and redirects |
+| `/` | Public front page (redirects to `/setup/` on first run) |
+| `/setup/` | First-run setup — create the initial admin account |
+| `/account/login/` | Log in with your account credentials |
+| `/account/inbox/` | View incoming messages (stored in IndexedDB) |
+| `/account/send/` | Send a message to another device |
+| `/account/connected-devices/` | View and manage registered devices |
+| `/account/activate-device/` | Register this browser as a device |
+| `/account/bookmarklet/` | Generate a bookmarklet for quick sends |
+| `/account/debug/` | Push notification diagnostics |
+| `/hop` | Share-entry route for bookmarklets and HTTP Shortcuts |
 
-`/connect` is public. The rest of the device web interface requires a connected device cookie, not an admin session.
+All `/account/` routes require an active account session. Device-specific pages also require a registered device cookie.
 
 The app now includes a basic PWA shell:
 
@@ -207,25 +202,19 @@ Actual push delivery requires VAPID keys to be configured on the server.
 | Route | Description |
 |---|---|
 | `POST /api/session/link` | Return the current device token for the browser session (used by browser extensions) |
-| `POST /api/pairings/pin` | Generate a 6-digit pairing PIN from an authenticated device |
-| `POST /api/pairings/pin/register` | Exchange a pairing PIN for a connected device session |
 | `GET /api/push/config` | Get push notification capability and VAPID public key |
 | `POST /api/push/subscriptions` | Save the current device's push subscription |
 | `DELETE /api/push/subscriptions` | Remove the current device's push subscription |
 | `GET /api/device/me` | Identify the authenticated device |
 | `GET /api/devices` | List active devices |
 | `POST /api/messages` | Send a message |
-| `GET /api/messages/incoming` | List non-expired incoming messages |
-| `POST /api/messages/{id}/received` | Signal receipt |
-| `POST /api/messages/{id}/presented` | Signal presentation |
-| `POST /api/messages/{id}/opened` | Signal the user opened the message |
-| `GET /api/events/stream` | SSE stream for real-time message notifications |
+| `POST /api/push/test` | Send a test push to the authenticated device |
 
 Admin management tools include:
 
 * `/admin/settings/` for global runtime settings
-* `/admin/add-device/` for creating a short-lived pairing PIN and join link for a new device
-* `/admin/bookmarklet/` for generating drag-to-bookmarks links for sending the current page URL through LinkHop
+* `/admin/message-log/` for viewing the message relay log
+* `/admin/bookmarklet/` for generating drag-to-bookmarks links
 
 ### Run tests
 
@@ -243,46 +232,38 @@ ruff check .
 
 ## Getting started
 
-### 1. Create a user account
+### 1. Start the server and create an admin account
+
+```bash
+python manage.py migrate
+python manage.py runserver
+```
+
+Visit `http://127.0.0.1:8000/`. On first run, you'll be redirected to `/setup/` to create the initial admin account. Alternatively, create one from the command line:
 
 ```bash
 python manage.py createsuperuser
 ```
 
-Sign in at `/account/login/` with those credentials to access the account dashboard. This is the primary interface for managing devices.
+### 2. Log in and register your first device
 
-`/admin/` is the Django admin panel — useful for inspecting raw database records, but not required for normal use.
+Sign in at `/account/login/`. You'll be prompted to register the current browser as a device — give it a name (e.g. "Work Laptop").
 
-### 2. Pair the first device
+### 3. Register additional devices
 
-Generate a 6-digit PIN from `/account/add-device/` or from an already connected device.
+On each additional device, visit `/account/login/`, sign in with the same account, and register that browser. Each device gets its own name and push subscription.
 
-### 3. Connect each device to the web interface
+### 4. Enable push notifications
 
-On each device (phone, desktop browser, etc.), visit `/connect`, enter the 6-digit PIN, and choose a device name. The paired device is then connected in that browser.
+After registering a device, the inbox page will prompt you to enable push notifications. This is required for receiving messages.
 
-Once connected:
+### 5. Send and receive
 
-* `/pair` — add a device by generating a short-lived 6-digit PIN and a direct join link
-* `/send` — send a message to another device (sends from this device)
-* `/inbox` — see messages addressed to this device
-* `/disconnect` — forget this device and remove its device record
-* `/hop` — shortcut alias for `/send`, useful for bookmarks or HTTP Shortcuts on Android
-* Pass `?type=url&body=https://example.com` to prefill the send form
+* `/account/send/` — pick a recipient device and send a URL or text message
+* `/account/inbox/` — messages arrive via push and are stored in the browser's IndexedDB
+* `/hop?type=url&body=https://example.com` — shortcut for bookmarklets and HTTP Shortcuts
 
-The inbox connects to the SSE stream automatically using the cookie. If browser notifications are supported, a permission prompt appears on first visit. When a message arrives while the page is in the background, a browser notification is shown.
-
-### 4. Pair additional devices with a 6-digit PIN
-
-1. On the trusted device, open `/pair`
-2. Generate a 6-digit PIN
-3. On the new device, open `/connect`
-4. Enter the PIN plus a device name
-5. Submit the form to register and connect the new device
-
-The PIN is single-use and short-lived.
-
-### 5. Send and receive via the API
+### 6. API usage
 
 List devices:
 
@@ -304,20 +285,6 @@ curl -X POST http://127.0.0.1:8000/api/messages \
   }'
 ```
 
-Check incoming messages:
-
-```bash
-curl http://127.0.0.1:8000/api/messages/incoming \
-  -H "Authorization: Bearer device_..."
-```
-
-Confirm opened:
-
-```bash
-curl -X POST http://127.0.0.1:8000/api/messages/MESSAGE_UUID/opened \
-  -H "Authorization: Bearer device_..."
-```
-
 ---
 
 ## Browser extensions
@@ -330,7 +297,7 @@ Two extensions are included:
 | Real-time delivery | SSE (persistent connection) | Web Push |
 | Works on LAN / without internet | ✅ Yes | ❌ No |
 
-Both extensions share the same setup flow: enter the server URL in the popup, open `/inbox`, click **🧩 extension**. The extension reuses your existing browser device token — no separate device is created.
+Both extensions share the same setup flow: enter the server URL in the popup, open `/account/inbox/`, click **extension**. The extension reuses your existing browser device token — no separate device is created.
 
 See [`extension/README.md`](./extension/README.md) and [`extension-mv3/README.md`](./extension-mv3/README.md) for installation and setup details.
 

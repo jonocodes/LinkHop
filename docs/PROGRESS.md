@@ -374,6 +374,50 @@ docs/
 
 ---
 
+## Phase 13 — End-to-end encryption (E2E)
+
+Client-side encryption so the server never sees message content.
+
+### Key management
+
+* [ ] Generate ECDH P-256 keypair per device on registration (Web Crypto API)
+* [ ] Store private key in IndexedDB (never leaves the device)
+* [ ] Upload public key to server on device registration
+* [ ] Expose device public keys via API so senders can fetch recipient keys
+* [ ] Handle key rotation on device re-registration (old messages become unreadable)
+
+### Encryption flow
+
+* [ ] Sender fetches recipient's public key from server
+* [ ] Sender derives shared secret via ECDH + HKDF
+* [ ] Sender encrypts body with AES-GCM using derived key
+* [ ] Ciphertext + ephemeral public key + nonce sent as message body
+* [ ] Recipient decrypts using own private key + sender's ephemeral key
+* [ ] Server only sees opaque ciphertext — cannot read body
+
+### Migration and compatibility
+
+* [ ] Add `encrypted` boolean field to message relay payload
+* [ ] Unencrypted messages still work (gradual rollout)
+* [ ] Client UI indicates whether a message was encrypted
+* [ ] Update send page and extension to encrypt before sending
+* [ ] Update service worker to decrypt on receive before storing in IndexedDB
+
+### Features affected
+
+* [ ] Move URL validation client-side (server can't inspect encrypted URLs)
+* [ ] "ping server" auto-reply: decide behavior (skip for encrypted messages, or remove)
+* [ ] Message metadata log remains unaffected (already body-free)
+
+### Testing
+
+* [ ] Unit tests for encrypt/decrypt round-trip in JS
+* [ ] E2E test: encrypted message between two devices
+* [ ] Backward compat test: unencrypted message still works
+* [ ] Key mismatch test: message from re-registered device fails gracefully
+
+---
+
 ## Milestone definitions
 
 ### MVP milestone

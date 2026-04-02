@@ -4,7 +4,7 @@ import logging
 from django.conf import settings
 from django.utils import timezone
 
-from core.models import Device, Message, PushSubscription
+from core.models import Device, PushSubscription
 
 logger = logging.getLogger(__name__)
 
@@ -63,23 +63,13 @@ def deactivate_push_subscription(*, device: Device, endpoint: str) -> int:
     )
 
 
-def notify_device_push_subscriptions(*, device: Device, message: Message, is_test: bool = False) -> None:
-    if not push_is_configured():
-        return
+def _send_to_subscriptions(*, device: Device, payload: str, subscriptions) -> dict:
+    """Send a push payload to a queryset of subscriptions. Returns delivery stats."""
+    delivered = 0
+    total = 0
 
-    payload = json.dumps(
-        {
-            "message_id": str(message.id),
-            "type": message.type,
-            "body": message.body,
-            "sender": message.sender_device.name if message.sender_device_id else "unknown",
-            "recipient_device_id": str(device.id),
-            **({"test": True} if is_test else {}),
-        }
-    )
-
-    subscriptions = PushSubscription.objects.filter(device=device, is_active=True)
     for subscription in subscriptions:
+        total += 1
         try:
             webpush(
                 subscription_info={
@@ -110,8 +100,42 @@ def notify_device_push_subscriptions(*, device: Device, message: Message, is_tes
             logger.warning("Push delivery failed for %s: %s", subscription.endpoint, exc)
             continue
 
+        delivered += 1
         now = timezone.now()
         subscription.last_success_at = now
         subscription.last_error = ""
         subscription.save(update_fields=["last_success_at", "last_error", "updated_at"])
         Device.objects.filter(id=device.id).update(last_push_at=now)
+
+    return {"delivered": delivered, "total": total}
+
+
+def relay_push_message(
+    *,
+    device: Device,
+    message_id: str,
+    message_type: str,
+    body: str,
+    sender_name: str,
+    recipient_device_id: str,
+    created_at: str,
+    is_test: bool = False,
+) -> dict:
+    """Relay a message to a device via Web Push. Returns delivery stats."""
+    if not push_is_configured():
+        return {"delivered": 0, "total": 0}
+
+    payload = json.dumps(
+        {
+            "message_id": message_id,
+            "type": message_type,
+            "body": body,
+            "sender": sender_name,
+            "recipient_device_id": recipient_device_id,
+            "created_at": created_at,
+            **({"test": True} if is_test else {}),
+        }
+    )
+
+    subscriptions = PushSubscription.objects.filter(device=device, is_active=True)
+    return _send_to_subscriptions(device=device, payload=payload, subscriptions=subscriptions)

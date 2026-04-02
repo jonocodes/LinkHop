@@ -50,27 +50,6 @@ def check_sends_rate_limit(*, device_id: str) -> tuple[bool, int]:
     return allowed, limit
 
 
-def check_confirmation_rate_limit(*, device_id: str) -> tuple[bool, int]:
-    """
-    Check if device is within rate limits for confirmation endpoints.
-
-    Returns (allowed, limit_per_minute).
-    """
-    gs = _get_global_settings()
-    limit = gs.api_confirmations_per_minute if gs else 120
-    
-    now = timezone.now()
-    window_key = now.replace(second=0, microsecond=0).isoformat()
-    key = f"confirm:{device_id}:{window_key}"
-    
-    allowed = check_rate_limit(
-        key=key,
-        limit=limit,
-        window_seconds=60,
-    )
-    return allowed, limit
-
-
 def check_registration_rate_limit(*, ip_address: str) -> tuple[bool, int]:
     """
     Check if IP is within rate limits for device registration.

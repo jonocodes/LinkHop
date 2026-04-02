@@ -1,10 +1,11 @@
 {% extends "admin/base_site.html" %}
 
 {% block content %}
+{% include "account/_dark_overrides.html" %}
 <div id="content-main">
   <div class="module aligned">
     <h2 style="margin-bottom:0.5rem">Bookmarklet</h2>
-    <p style="margin:0 0 1rem;color:var(--body-quiet-color, #666)">
+    <p style="margin:0 0 1rem;color:var(--lh-quiet)">
       Drag this button to your bookmarks bar. When used on any page, it opens LinkHop with that page URL prefilled and ready to send.
     </p>
     <p style="margin:0 0 1rem">
@@ -14,22 +15,22 @@
         style="display:inline-block;padding:0.7rem 1rem;background:#2563eb;color:#fff;border-radius:999px;font-weight:700;text-decoration:none;cursor:grab"
       >Send with LinkHop</a>
     </p>
-    <p style="margin:0 0 1rem;color:var(--body-quiet-color, #666)">
+    <p style="margin:0 0 1rem;color:var(--lh-quiet)">
       If dragging the styled button is awkward in your browser, drag this plain link instead:
       <a href="{{ bookmarklet_js }}" draggable="true">LinkHop bookmarklet</a>
     </p>
-    <p style="margin:0 0 1rem;color:var(--body-quiet-color, #666)">
+    <p style="margin:0 0 1rem;color:var(--lh-quiet)">
       The bookmarklet targets:
       <code style="user-select:all">{{ hop_url }}</code>
     </p>
-    <p style="margin:0;color:var(--body-quiet-color, #666)">
+    <p style="margin:0;color:var(--lh-quiet)">
       Current behavior: it opens a popup when possible and falls back to the current tab if the browser blocks popups.
     </p>
 
-    <hr style="margin:1.25rem 0;border:none;border-top:1px solid var(--border-color,#ddd)">
+    <hr style="margin:1.25rem 0;border:none;border-top:1px solid var(--lh-border)">
 
     <p style="margin:0 0 0.5rem;font-weight:600">Test</p>
-    <p style="margin:0 0 0.75rem;color:var(--body-quiet-color, #666)">
+    <p style="margin:0 0 0.75rem;color:var(--lh-quiet)">
       Simulates clicking the bookmarklet with <code>https://example.com</code> as the current page URL.
     </p>
     <button type="button" id="test-bookmarklet-btn" style="padding:0.4rem 0.9rem;background:var(--button-bg,#417690);color:var(--button-fg,#fff);border:none;border-radius:4px;font-size:0.875rem;font-weight:600;cursor:pointer">Test bookmarklet</button>

@@ -2,30 +2,21 @@ import json
 import uuid
 from functools import wraps
 
-from django.core.exceptions import PermissionDenied
 from django.utils import timezone
 from django.core.exceptions import ValidationError as DjangoValidationError
-from django.db import IntegrityError
 from django.http import HttpRequest, HttpResponse, JsonResponse
 from django.views.decorators.csrf import csrf_exempt
 
 from core.models import Device
-from core.services.auth import create_pairing_pin, get_device_for_token, provision_extension_device, register_device_with_pairing_pin
-from core.services.messages import (
-    create_message,
-    list_incoming_messages,
-    mark_message_opened,
-    mark_message_presented,
-    mark_message_received,
-)
+from core.services.auth import get_device_for_token, provision_extension_device
+from core.services.messages import relay_message
 from core.services.push import (
     deactivate_push_subscription,
     get_public_push_config,
-    notify_device_push_subscriptions,
+    relay_push_message,
     upsert_push_subscription,
 )
 from core.services.rate_limiter import (
-    check_confirmation_rate_limit,
     check_registration_rate_limit,
     check_sends_rate_limit,
     get_client_ip,
@@ -48,10 +39,6 @@ def parse_json_body(request: HttpRequest) -> dict:
 
 def json_error(code: str, message: str, status: int = 400) -> JsonResponse:
     return JsonResponse({"error": {"code": code, "message": message}}, status=status)
-
-
-def json_message_response(message, status: int = 200) -> JsonResponse:
-    return JsonResponse(serialize_message(message), status=status)
 
 
 def require_device_auth(view_func):
@@ -96,61 +83,6 @@ def session_link(request: HttpRequest) -> JsonResponse:
 
 
 @require_device_auth
-def pairing_pin_create(request: HttpRequest) -> JsonResponse:
-    if request.method != "POST":
-        return HttpResponse(status=405)
-    pairing_pin, raw_pin = create_pairing_pin(device=request.auth)
-    return JsonResponse(
-        {
-            "pin": raw_pin,
-            "expires_at": pairing_pin.expires_at.isoformat(),
-        }
-    )
-
-
-@csrf_exempt
-def register_device_with_pin(request: HttpRequest) -> JsonResponse:
-    if request.method != "POST":
-        return HttpResponse(status=405)
-
-    try:
-        payload = parse_json_body(request)
-    except DjangoValidationError as exc:
-        return json_error("validation_error", "; ".join(exc.messages))
-
-    raw_pin = str(payload.get("pin", "")).strip()
-    device_name = str(payload.get("device_name", "")).strip()
-    if not raw_pin or not device_name:
-        return json_error("validation_error", "Both pin and device_name are required.")
-
-    ip_address = get_client_ip(request)
-    allowed, limit = check_registration_rate_limit(ip_address=ip_address)
-    if not allowed:
-        return json_error(
-            "rate_limit_exceeded",
-            f"Too many registration attempts. Maximum {limit} per hour.",
-            status=429,
-        )
-
-    try:
-        registration = register_device_with_pairing_pin(raw_pin=raw_pin, name=device_name)
-    except IntegrityError:
-        return json_error("device_name_conflict", "A device with that name already exists.")
-
-    if registration is None:
-        return json_error("invalid_pairing_pin", "Pairing PIN is invalid or expired.")
-
-    device, raw_token = registration
-    return JsonResponse(
-        {
-            "device": serialize_device(device),
-            "token": raw_token,
-        },
-        status=201,
-    )
-
-
-@require_device_auth
 def device_me(request: HttpRequest) -> JsonResponse:
     if request.method != "GET":
         return HttpResponse(status=405)
@@ -162,17 +94,11 @@ def devices_list(request: HttpRequest) -> JsonResponse:
     if request.method != "GET":
         return HttpResponse(status=405)
 
-    from core.selectors import is_device_online, list_active_devices
+    from core.selectors import list_active_devices
 
     devices = list_active_devices(user=request.auth.owner)
     return JsonResponse(
-        [
-            {
-                **serialize_device(device),
-                "is_online": is_device_online(device),
-            }
-            for device in devices
-        ],
+        [serialize_device(device) for device in devices],
         safe=False,
     )
 
@@ -276,7 +202,7 @@ def messages_create(request: HttpRequest):
         return json_error("recipient_not_found", "Recipient device was not found.")
 
     try:
-        message = create_message(
+        result = relay_message(
             sender_device=request.auth,
             recipient_device=recipient,
             message_type=msg_type,
@@ -285,71 +211,7 @@ def messages_create(request: HttpRequest):
     except DjangoValidationError as exc:
         return json_error("validation_error", "; ".join(exc.messages))
 
-    return json_message_response(message, status=201)
-
-
-@require_device_auth
-def message_get(request: HttpRequest, message_id: str) -> JsonResponse:
-    if request.method != "GET":
-        return HttpResponse(status=405)
-    try:
-        from core.services.messages import _get_owned_message
-        message = _get_owned_message(device=request.auth, message_id=message_id)
-    except DjangoValidationError as exc:
-        return json_error("not_found", "; ".join(exc.messages), status=404)
-    except PermissionDenied as exc:
-        return json_error("forbidden", str(exc), status=403)
-    return json_message_response(message)
-
-
-@require_device_auth
-def messages_incoming(request: HttpRequest) -> JsonResponse:
-    if request.method != "GET":
-        return HttpResponse(status=405)
-    return JsonResponse(
-        [serialize_message(message) for message in list_incoming_messages(device=request.auth)],
-        safe=False,
-    )
-
-
-@require_device_auth
-def message_received(request: HttpRequest, message_id: str):
-    if request.method != "POST":
-        return HttpResponse(status=405)
-    return _message_transition(request, message_id, mark_message_received)
-
-
-@require_device_auth
-def message_presented(request: HttpRequest, message_id: str):
-    if request.method != "POST":
-        return HttpResponse(status=405)
-    return _message_transition(request, message_id, mark_message_presented)
-
-
-@require_device_auth
-def message_opened(request: HttpRequest, message_id: str):
-    if request.method != "POST":
-        return HttpResponse(status=405)
-    return _message_transition(request, message_id, mark_message_opened)
-
-
-def _message_transition(request: HttpRequest, message_id: str, handler):
-    allowed, limit = check_confirmation_rate_limit(device_id=str(request.auth.id))
-    if not allowed:
-        return json_error(
-            "rate_limit_exceeded",
-            f"Too many confirmation attempts. Maximum {limit} per minute.",
-            status=429,
-        )
-
-    try:
-        message = handler(device=request.auth, message_id=message_id)
-    except DjangoValidationError as exc:
-        return json_error("validation_error", "; ".join(exc.messages))
-    except PermissionDenied as exc:
-        return json_error("forbidden", str(exc), status=403)
-
-    return json_message_response(message)
+    return JsonResponse(result, status=201)
 
 
 @require_device_auth
@@ -364,27 +226,21 @@ def push_test(request: HttpRequest) -> JsonResponse:
     if not subs.exists():
         return json_error("no_subscription", "No active push subscription found for this device.")
 
-    from core.models import Message, MessageStatus, MessageType
-    from datetime import timedelta
-
-    # Build a fake transient message — not persisted, just enough for the push payload
-    fake_message = Message(
-        id=uuid.uuid4(),
-        sender_device=request.auth,
-        recipient_device=request.auth,
-        type=MessageType.TEXT,
-        body="LinkHop push test — it works!",
-        status=MessageStatus.QUEUED,
-        created_at=timezone.now(),
-        expires_at=timezone.now() + timedelta(minutes=1),
-    )
-
     try:
-        notify_device_push_subscriptions(device=request.auth, message=fake_message, is_test=True)
+        result = relay_push_message(
+            device=request.auth,
+            message_id=str(uuid.uuid4()),
+            message_type="text",
+            body="LinkHop push test \u2014 it works!",
+            sender_name=request.auth.name,
+            recipient_device_id=str(request.auth.id),
+            created_at=timezone.now().isoformat(),
+            is_test=True,
+        )
     except Exception as exc:
         return json_error("push_failed", str(exc))
 
-    return JsonResponse({"ok": True, "subscriptions": subs.count()})
+    return JsonResponse({"ok": True, "subscriptions": result["total"]})
 
 
 def serialize_device(device: Device) -> dict:
@@ -393,20 +249,4 @@ def serialize_device(device: Device) -> dict:
         "name": device.name,
         "is_active": device.is_active,
         "last_seen_at": device.last_seen_at.isoformat() if device.last_seen_at else None,
-    }
-
-
-def serialize_message(message) -> dict:
-    return {
-        "id": str(message.id),
-        "sender_device_id": str(message.sender_device_id) if message.sender_device_id else None,
-        "recipient_device_id": str(message.recipient_device_id),
-        "type": message.type,
-        "body": message.body,
-        "status": message.status,
-        "created_at": message.created_at.isoformat(),
-        "expires_at": message.expires_at.isoformat(),
-        "received_at": message.received_at.isoformat() if message.received_at else None,
-        "presented_at": message.presented_at.isoformat() if message.presented_at else None,
-        "opened_at": message.opened_at.isoformat() if message.opened_at else None,
     }

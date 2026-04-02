@@ -5,9 +5,8 @@ from django.core.exceptions import ValidationError
 from django.test import TestCase, override_settings
 from django.utils import timezone
 
-from core.models import Device, GlobalSettings, Message, MessageType, PairingPin, PushSubscription
-from core.services.auth import create_pairing_pin, register_device_with_pairing_pin
-from core.services.push import notify_device_push_subscriptions, upsert_push_subscription
+from core.models import Device, GlobalSettings, PushSubscription
+from core.services.push import relay_push_message, upsert_push_subscription
 
 
 class DeviceModelTests(TestCase):
@@ -59,26 +58,6 @@ class DeviceModelTests(TestCase):
         self.assertIsNotNone(device.updated_at)
 
 
-class PairingPinModelTests(TestCase):
-    def test_pairing_pin_is_single_use(self):
-        device = Device.objects.create(name="Issuer", token_hash="issuer-hash")
-        _, raw_pin = create_pairing_pin(device=device)
-
-        first = register_device_with_pairing_pin(raw_pin=raw_pin, name="First Device")
-        second = register_device_with_pairing_pin(raw_pin=raw_pin, name="Second Device")
-
-        self.assertIsNotNone(first)
-        self.assertIsNone(second)
-
-    def test_creating_new_pin_deletes_previous_unused_pin(self):
-        device = Device.objects.create(name="Issuer", token_hash="issuer-hash")
-        first_pin, _ = create_pairing_pin(device=device)
-        _second_pin, _ = create_pairing_pin(device=device)
-
-        self.assertFalse(PairingPin.objects.filter(id=first_pin.id).exists())
-        self.assertEqual(PairingPin.objects.filter(created_by_device=device).count(), 1)
-
-
 class PushSubscriptionModelTests(TestCase):
     def setUp(self):
         self.device = Device.objects.create(name="Push Device", token_hash="push-hash")
@@ -113,14 +92,6 @@ class PushSubscriptionModelTests(TestCase):
         LINKHOP_WEBPUSH_VAPID_SUBJECT="mailto:admin@example.com",
     )
     def test_notify_push_subscription_records_success(self):
-        sender = Device.objects.create(name="Sender", token_hash="sender-hash")
-        message = Message.objects.create(
-            sender_device=sender,
-            recipient_device=self.device,
-            type=MessageType.TEXT,
-            body="hello push",
-            expires_at=Message.default_expiry(),
-        )
         subscription = PushSubscription.objects.create(
             device=self.device,
             endpoint="https://push.example.test/sub/success",
@@ -129,7 +100,15 @@ class PushSubscriptionModelTests(TestCase):
         )
 
         with patch("core.services.push.webpush") as mock_webpush:
-            notify_device_push_subscriptions(device=self.device, message=message)
+            relay_push_message(
+                device=self.device,
+                message_id="test-msg-id",
+                message_type="text",
+                body="hello push",
+                sender_name="Sender",
+                recipient_device_id=str(self.device.id),
+                created_at="2026-01-01T00:00:00Z",
+            )
 
         subscription.refresh_from_db()
         self.assertIsNotNone(subscription.last_success_at)
@@ -143,14 +122,6 @@ class PushSubscriptionModelTests(TestCase):
         LINKHOP_WEBPUSH_VAPID_SUBJECT="mailto:admin@example.com",
     )
     def test_notify_push_subscription_deactivates_gone_endpoint(self):
-        sender = Device.objects.create(name="Sender", token_hash="sender-two-hash")
-        message = Message.objects.create(
-            sender_device=sender,
-            recipient_device=self.device,
-            type=MessageType.TEXT,
-            body="hello push",
-            expires_at=Message.default_expiry(),
-        )
         subscription = PushSubscription.objects.create(
             device=self.device,
             endpoint="https://push.example.test/sub/gone",
@@ -168,7 +139,15 @@ class PushSubscriptionModelTests(TestCase):
                 "core.services.push.webpush",
                 side_effect=FakeWebPushException("subscription gone"),
             ):
-                notify_device_push_subscriptions(device=self.device, message=message)
+                relay_push_message(
+                    device=self.device,
+                    message_id="test-msg-id",
+                    message_type="text",
+                    body="hello push",
+                    sender_name="Sender",
+                    recipient_device_id=str(self.device.id),
+                    created_at="2026-01-01T00:00:00Z",
+                )
 
         subscription.refresh_from_db()
         self.assertFalse(subscription.is_active)
@@ -176,42 +155,3 @@ class PushSubscriptionModelTests(TestCase):
         self.assertIn("subscription gone", subscription.last_error)
 
 
-class MessageModelTests(TestCase):
-    def setUp(self):
-        self.sender = Device.objects.create(name="Sender", token_hash="hash-sender")
-        self.recipient = Device.objects.create(name="Recipient", token_hash="hash-recipient")
-
-    def _message(self, **kwargs):
-        defaults = dict(
-            sender_device=self.sender,
-            recipient_device=self.recipient,
-            type=MessageType.TEXT,
-            body="hello",
-            expires_at=Message.default_expiry(),
-        )
-        defaults.update(kwargs)
-        return Message(**defaults)
-
-    def test_url_message_requires_absolute_http_or_https_url(self):
-        message = self._message(type=MessageType.URL, body="ftp://example.com")
-        with self.assertRaises(ValidationError):
-            message.full_clean()
-
-    def test_text_message_cannot_be_blank(self):
-        message = self._message(body="   ")
-        with self.assertRaises(ValidationError):
-            message.full_clean()
-
-    def test_valid_text_message_passes_validation(self):
-        message = self._message(body="hello\nworld")
-        message.full_clean()
-
-    def test_message_str_representation(self):
-        message = self._message()
-        message.save()
-        self.assertEqual(str(message), f"text:{message.id}")
-
-    def test_message_expiry(self):
-        message = self._message()
-        message.save()
-        self.assertGreater(message.expires_at, timezone.now())

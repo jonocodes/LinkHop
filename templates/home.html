@@ -7,22 +7,30 @@
   <p style="margin:0 0 0.5rem;color:#0066cc;font-size:0.8rem;font-weight:700;letter-spacing:0.08em;text-transform:uppercase">LinkHop</p>
   <h1 style="margin-bottom:0.75rem">Pass links and notes between your devices.</h1>
   <p style="margin:0 0 1.5rem;color:#555;max-width:34rem">
-    LinkHop is a small self-hosted relay for sending URLs and text between your own devices,
-    with queued delivery when the receiving device is offline.
+    LinkHop is a small self-hosted relay for sending links and text between your own devices,
+    with push notification delivery.
   </p>
 
   <div style="display:flex;flex-wrap:wrap;gap:0.75rem;margin-bottom:1rem">
-    <a class="btn" href="{% url 'connect' %}" style="text-decoration:none">Connect Device</a>
+    {% if device %}
+    <a class="btn" href="{% url 'account_inbox' %}" style="text-decoration:none">Open Inbox</a>
+    <a class="btn" href="{% url 'account_send' %}" style="text-decoration:none;background:#1f2937">Send</a>
+    {% elif account_user %}
+    <a class="btn" href="{% url 'account_activate_device' %}" style="text-decoration:none">Register this device</a>
     <a class="btn" href="{% url 'account_connected_devices' %}" style="text-decoration:none;background:#1f2937">Account</a>
+    {% else %}
+    <a class="btn" href="{% url 'account_login' %}" style="text-decoration:none">Log in</a>
+    {% endif %}
     <a class="btn" href="{{ github_url }}" style="text-decoration:none;background:#fff;color:#1a1a1a;border:1px solid #ccc" target="_blank" rel="noopener noreferrer">GitHub</a>
   </div>
 
   <div style="color:#666;font-size:0.95rem">
     {% if device %}
     <p style="margin:0 0 0.5rem">Connected as <strong>{{ device.name }}</strong>.</p>
-    <p style="margin:0"><a href="{% url 'inbox' %}">Open inbox</a> or <a href="{% url 'send' %}">send a message</a>.</p>
+    {% elif account_user %}
+    <p style="margin:0">Logged in as <strong>{{ account_user.username }}</strong>. Register this browser to start sending messages.</p>
     {% else %}
-    <p style="margin:0">New device? Use a 6-digit pairing PIN from an existing device.</p>
+    <p style="margin:0">Log in to manage your devices and send messages.</p>
     {% endif %}
   </div>
 

@@ -60,6 +60,11 @@ python -c "import secrets; print(secrets.token_urlsafe(50))"
 
 ```bash
 python manage.py migrate
+```
+
+On first visit to the web app, you'll be redirected to `/setup/` to create the initial admin account. Alternatively:
+
+```bash
 python manage.py createsuperuser
 ```
 

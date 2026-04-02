@@ -14,7 +14,7 @@ See `../extension-mv3/` for the Chrome (Manifest V3 / Web Push) version.
 
 1. Click the extension icon
 2. Enter your LinkHop server URL and click **Open settings**
-3. On the `/inbox` page that opens, click **🧩 extension**
+3. On the `/account/inbox/` page that opens, click **extension**
 4. The extension is now linked as the same device as your browser — no separate device is created
 
 ## Features
@@ -27,6 +27,6 @@ See `../extension-mv3/` for the Chrome (Manifest V3 / Web Push) version.
 
 ## How it works
 
-Linking is done via a `postMessage` bridge: the `/inbox` page posts the device token to a content script, which relays it to the background script via `browser.runtime.sendMessage`. The background script saves the config and opens an SSE connection.
+Linking is done via a `postMessage` bridge: the `/account/inbox/` page posts the device token to a content script, which relays it to the background script via `browser.runtime.sendMessage`. The background script saves the config and opens an SSE connection.
 
 The background script connects to `/api/events/stream?token=...` using `EventSource`. When a `message` event arrives it fetches the full message, shows a native notification, and records `received` + `presented` signals. Clicking the notification records `opened` and opens the URL.

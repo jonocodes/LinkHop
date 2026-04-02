@@ -1,11 +1,10 @@
 import hashlib
 import secrets
-from datetime import timedelta
 
+from django.contrib.auth import authenticate as django_authenticate
 from django.db import transaction
-from django.utils import timezone
 
-from core.models import Device, DeviceType, Message, PairingPin
+from core.models import Device, DeviceType
 
 
 def hash_token(raw_token: str) -> str:
@@ -16,68 +15,32 @@ def generate_token(prefix: str) -> str:
     return f"{prefix}_{secrets.token_urlsafe(32)}"
 
 
-
-def _generate_pairing_pin() -> str:
-    return f"{secrets.randbelow(1_000_000):06d}"
-
-
-@transaction.atomic
-def create_pairing_pin(*, device: Device | None = None, owner=None) -> tuple[PairingPin, str]:
-    resolved_owner = owner or (device.owner if device is not None else None)
-
-    if device is not None:
-        PairingPin.objects.filter(
-            created_by_device=device,
-            used_at__isnull=True,
-            expires_at__gt=timezone.now(),
-        ).delete()
-    elif resolved_owner is not None:
-        PairingPin.objects.filter(
-            owner=resolved_owner,
-            created_by_device__isnull=True,
-            used_at__isnull=True,
-            expires_at__gt=timezone.now(),
-        ).delete()
-
-    for _ in range(20):
-        raw_pin = _generate_pairing_pin()
-        pin = PairingPin.objects.filter(code_hash=hash_token(raw_pin)).first()
-        if pin is not None and pin.is_usable:
-            continue
-
-        pairing_pin = PairingPin.objects.create(
-            code_hash=hash_token(raw_pin),
-            created_by_device=device,
-            owner=resolved_owner,
-            expires_at=timezone.now() + timedelta(minutes=10),
-        )
-        return pairing_pin, raw_pin
-
-    raise RuntimeError("Unable to allocate a unique pairing PIN.")
-
-
-
-
-@transaction.atomic
-def register_device_with_pairing_pin(
+def register_device_for_user(
     *,
-    raw_pin: str,
-    name: str,
+    user,
+    device_name: str,
+) -> tuple[Device, str]:
+    """Create a new device for an already-authenticated user.
+
+    Returns (device, raw_token).
+    """
+    return create_device_token(name=device_name, owner=user)
+
+
+def authenticate_and_register_device(
+    *,
+    username: str,
+    password: str,
+    device_name: str,
 ) -> tuple[Device, str] | None:
-    pin_hash = hash_token(raw_pin)
-    try:
-        pin = PairingPin.objects.select_for_update().get(code_hash=pin_hash)
-    except PairingPin.DoesNotExist:
+    """Authenticate with username + password, create a new device for that user.
+
+    Returns (device, raw_token) on success, None if credentials are invalid.
+    """
+    user = django_authenticate(username=username, password=password)
+    if user is None or not user.is_active:
         return None
-
-    if not pin.is_usable:
-        return None
-
-    device, raw_token = create_device_token(name=name, owner=pin.owner)
-
-    pin.used_at = timezone.now()
-    pin.save(update_fields=["used_at", "updated_at"])
-    return device, raw_token
+    return create_device_token(name=device_name, owner=user)
 
 
 def create_device_token(
@@ -140,5 +103,4 @@ def get_device_for_token(raw_token: str) -> Device | None:
 
 @transaction.atomic
 def forget_device(*, device: Device) -> None:
-    Message.objects.filter(sender_device=device).delete()
     device.delete()

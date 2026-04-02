@@ -21,7 +21,7 @@ if _csrf_origins:
 
 # SameSite=None is required so the browser extension (cross-origin) can send the session cookie.
 # SameSite=None requires Secure=True; default to True when not in DEBUG mode.
-SESSION_COOKIE_SAMESITE = "None"
+SESSION_COOKIE_SAMESITE = "None" if not DEBUG else "Lax"
 SESSION_COOKIE_SECURE = not DEBUG
 
 INSTALLED_APPS = [
@@ -115,8 +115,8 @@ UNFOLD = {
 }
 
 UNFOLD_ACCOUNT = {
-    "SITE_TITLE": "LinkHop Account",
-    "SITE_HEADER": "LinkHop Account",
+    "SITE_TITLE": "LinkHop",
+    "SITE_HEADER": "LinkHop",
     "SITE_SYMBOL": "person",
     "SHOW_HISTORY": False,
     "SHOW_VIEW_ON_SITE": False,
@@ -153,14 +153,40 @@ AXES_COOLOFF_TIME = 1
 AXES_RESET_ON_SUCCESS = True
 AXES_LOCKOUT_TEMPLATE = None
 
+_LOG_DIR = BASE_DIR / "data"
+LOGGING = {
+    "version": 1,
+    "disable_existing_loggers": False,
+    "formatters": {
+        "standard": {
+            "format": "%(asctime)s %(levelname)s %(name)s %(message)s",
+        },
+    },
+    "handlers": {
+        "console": {
+            "class": "logging.StreamHandler",
+            "formatter": "standard",
+        },
+        "file": {
+            "class": "logging.handlers.RotatingFileHandler",
+            "filename": os.environ.get("LINKHOP_LOG_FILE", _LOG_DIR / "linkhop.log"),
+            "maxBytes": 5 * 1024 * 1024,  # 5 MB
+            "backupCount": 3,
+            "formatter": "standard",
+        },
+    },
+    "loggers": {
+        "core": {
+            "handlers": ["console", "file"],
+            "level": "INFO",
+        },
+    },
+}
+
 LINKHOP_MESSAGE_URL_MAX_LENGTH = 2048
-LINKHOP_MESSAGE_TEXT_MAX_LENGTH = 8000
-LINKHOP_MESSAGE_RETENTION_DAYS = 7
-LINKHOP_MAX_PENDING_MESSAGES = 500
+LINKHOP_MESSAGE_TEXT_MAX_LENGTH = 3500
 LINKHOP_API_SENDS_PER_MINUTE = 30
-LINKHOP_API_CONFIRMATIONS_PER_MINUTE = 120
 LINKHOP_API_REGISTRATIONS_PER_HOUR = 10
-LINKHOP_MAX_SSE_STREAMS_PER_DEVICE = 5
 LINKHOP_WEBPUSH_VAPID_PUBLIC_KEY = os.getenv("LINKHOP_WEBPUSH_VAPID_PUBLIC_KEY", "")
 LINKHOP_WEBPUSH_VAPID_PRIVATE_KEY = os.getenv("LINKHOP_WEBPUSH_VAPID_PRIVATE_KEY", "")
 LINKHOP_WEBPUSH_VAPID_SUBJECT = os.getenv(

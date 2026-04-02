@@ -11,6 +11,23 @@ def build_admin_sidebar_navigation(request: HttpRequest) -> list[dict]:
     if request.path.startswith("/account/"):
         return [
             {
+                "title": "Messages",
+                "items": [
+                    {
+                        "title": "Send",
+                        "icon": "send",
+                        "link": reverse("account_send"),
+                        "permission": lambda req: True,
+                    },
+                    {
+                        "title": "Inbox",
+                        "icon": "inbox",
+                        "link": reverse("account_inbox"),
+                        "permission": lambda req: True,
+                    },
+                ],
+            },
+            {
                 "title": "Devices",
                 "items": [
                     {
@@ -20,9 +37,9 @@ def build_admin_sidebar_navigation(request: HttpRequest) -> list[dict]:
                         "permission": lambda req: True,
                     },
                     {
-                        "title": "Add device",
+                        "title": "Register device",
                         "icon": "add_circle",
-                        "link": reverse("account_add_device"),
+                        "link": reverse("account_activate_device"),
                         "permission": lambda req: True,
                     },
                     {
@@ -31,6 +48,11 @@ def build_admin_sidebar_navigation(request: HttpRequest) -> list[dict]:
                         "link": reverse("account_bookmarklet"),
                         "permission": lambda req: True,
                     },
+                ],
+            },
+            {
+                "title": "Account",
+                "items": [
                     {
                         "title": "Change password",
                         "icon": "lock",
@@ -41,6 +63,12 @@ def build_admin_sidebar_navigation(request: HttpRequest) -> list[dict]:
                         "title": "System info",
                         "icon": "info",
                         "link": reverse("account_system"),
+                        "permission": lambda req: True,
+                    },
+                    {
+                        "title": "Debug",
+                        "icon": "bug_report",
+                        "link": reverse("account_debug"),
                         "permission": lambda req: True,
                     },
                 ],
@@ -80,16 +108,10 @@ def build_admin_sidebar_navigation(request: HttpRequest) -> list[dict]:
                     "permission": lambda req: req.user.has_perm("core.view_device"),
                 },
                 {
-                    "title": "Messages",
-                    "icon": "mail",
-                    "link": reverse("admin:core_message_changelist"),
-                    "permission": lambda req: req.user.has_perm("core.view_message"),
-                },
-                {
-                    "title": "Pairing PINs",
-                    "icon": "pin",
-                    "link": reverse("admin:core_pairingpin_changelist"),
-                    "permission": lambda req: req.user.has_perm("core.view_pairingpin"),
+                    "title": "Message log",
+                    "icon": "history",
+                    "link": reverse("admin_message_log"),
+                    "permission": lambda req: req.user.is_superuser,
                 },
                 {
                     "title": "Push subscriptions",

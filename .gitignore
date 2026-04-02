@@ -9,3 +9,4 @@ staticfiles/
 .ruff_cache/
 linkhop.egg-info
 result
+data/*.log
