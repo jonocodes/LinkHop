@@ -387,6 +387,175 @@ ntfy serve --cache-duration=168h  # 7 days
 
 ---
 
+## Alternative: Minimal VAPID Relay (No ntfy)
+
+Instead of using ntfy as the push relay, another option is to run a minimal VAPID relay — a tiny service (~50-100 lines) that only does VAPID signing and forwards messages to Web Push endpoints. No message storage whatsoever.
+
+### Concept
+
+```
+┌──────────┐     POST /send          ┌──────────────┐     Web Push      ┌──────────────┐
+│ Device A │ ──────────────────────→ │ VAPID Relay  │ ───────────────→ │ Push Service │
+│ (sender) │                         │ (stateless)  │                   │ (Mozilla/    │
+└──────────┘                         └──────────────┘                   │  Google/etc) │
+                                                                        └──────┬───────┘
+                                                                               │
+                                                                               ↓
+                                                                        ┌──────────────┐
+                                                                        │  Device B    │
+                                                                        │  (receiver)  │
+                                                                        └──────────────┘
+```
+
+The relay stores **nothing**. It accepts a message, signs a VAPID JWT, POSTs to the recipient's Web Push endpoint, and forgets. Message retention is handled entirely by the push services (Mozilla autopush, Google FCM, etc.) — they hold messages until the device comes online.
+
+### Why this over ntfy?
+
+- **Even simpler** — no cache, no topics, no subscription management on the relay side
+- **Native Web Push** — uses the same push mechanism browsers already implement; no ntfy-specific API
+- **Zero state** — the relay is truly stateless; can be restarted, redeployed, or scaled horizontally with no coordination
+- **Push service retention** — Mozilla and Google already queue messages for offline devices; no need to duplicate this
+
+### Relay responsibilities
+
+The relay does exactly three things:
+
+1. **Accept messages** — `POST /send` with recipient push subscription + encrypted payload
+2. **Sign VAPID** — generate a JWT signed with the server's VAPID private key
+3. **Forward** — POST to the push service endpoint with the signed JWT and payload
+
+That's it. No database, no message queue, no device registry, no authentication beyond VAPID.
+
+### API
+
+Single endpoint:
+
+```
+POST /send
+Content-Type: application/json
+
+{
+  "subscription": {
+    "endpoint": "https://updates.push.services.mozilla.com/wpush/v2/...",
+    "keys": {
+      "p256dh": "...",
+      "auth": "..."
+    }
+  },
+  "payload": "<encrypted ciphertext>",
+  "ttl": 86400
+}
+
+→ 201 Created  (forwarded to push service)
+→ 410 Gone     (subscription expired)
+```
+
+The `ttl` field tells the push service how long to retain the message if the device is offline. Default could be 86400 (24 hours), max depends on the push service.
+
+### What moves to the client
+
+Everything the current Django server handles (device registry, authentication, message routing) moves to client-side code:
+
+| Responsibility | Current server | VAPID relay | Where it lives |
+|---|---|---|---|
+| VAPID signing | Server | Relay | Relay (only server-side thing) |
+| Device registry | Database | — | Client IndexedDB + registry sync |
+| Message routing | Server picks endpoint | — | Client picks endpoint from local device list |
+| Authentication | Session + device token | — | Password-derived encryption key |
+| Message storage | — | — | Client IndexedDB |
+| Push subscription mgmt | Server stores subs | — | Client manages own subscription |
+
+### Device registry without a server
+
+Same approach as the ntfy version: devices sync via a shared registry. Two options:
+
+**Option A: Registry via a dedicated push topic (ntfy-style)**
+Use a single ntfy topic or similar pub-sub channel for device list sync. This hybrid approach uses ntfy only for the registry, and the VAPID relay for actual message delivery.
+
+**Option B: Registry via the relay itself**
+Add a second endpoint to the relay:
+
+```
+POST /registry
+{
+  "topic": "<password-derived-topic-id>",
+  "event": { "action": "join", "name": "Phone", "subscription": {...} }
+}
+
+GET /registry/<topic>
+→ Returns cached registry events (ephemeral, in-memory or short-lived)
+```
+
+This breaks the "truly stateless" property but keeps it minimal — the registry is just a small in-memory event buffer that can be lost without data loss (devices rebuild from local IndexedDB).
+
+**Option C: No central registry**
+Devices exchange push subscriptions out-of-band (QR code, manual copy-paste, or a one-time setup page). Simplest for 2-3 devices but doesn't scale well.
+
+### Implementation size
+
+The relay can be implemented in:
+
+- **Python** — ~50 lines with `pywebpush` + any ASGI framework
+- **Cloudflare Worker** — ~80 lines of JS (free tier, globally distributed)
+- **Deno Deploy** — ~60 lines of TypeScript (free tier)
+- **Go** — ~100 lines, single static binary
+
+Example (Python, minimal):
+
+```python
+from fastapi import FastAPI
+from pywebpush import webpush
+
+app = FastAPI()
+VAPID_PRIVATE_KEY = "..."
+VAPID_CLAIMS = {"sub": "mailto:you@example.com"}
+
+@app.post("/send")
+async def send(body: dict):
+    webpush(
+        subscription_info=body["subscription"],
+        data=body["payload"],
+        vapid_private_key=VAPID_PRIVATE_KEY,
+        vapid_claims=VAPID_CLAIMS,
+        ttl=body.get("ttl", 86400),
+    )
+    return {"status": "sent"}
+```
+
+### Hosting options (free tier)
+
+| Platform | Runtime | Cold start | Free tier |
+|---|---|---|---|
+| Cloudflare Workers | JS/Wasm | ~0ms | 100k req/day |
+| Deno Deploy | TS/JS | ~50ms | 1M req/month |
+| Fly.io | Any (container) | ~1-2s | 3 shared VMs |
+| Railway | Any | ~1-2s | $5 credit/month |
+| Local | Any | N/A | Free |
+
+Cloudflare Workers is the most appealing: zero cold start, global edge deployment, generous free tier, and the relay is small enough to fit in a Worker easily. The only catch is that `pywebpush` won't run on Workers — you'd implement VAPID signing in JS using the Web Crypto API.
+
+### Tradeoffs vs ntfy
+
+| Aspect | ntfy relay | VAPID relay |
+|---|---|---|
+| Message storage | 12h cache (configurable) | None (push service handles retention) |
+| Real-time (app open) | SSE/WebSocket via ntfy | SSE/WebSocket requires separate solution |
+| Background delivery | Web Push via ntfy | Web Push directly |
+| Device registry | ntfy topic as event log | Needs separate solution (see options above) |
+| Self-hosting | Single Go binary | ~50 lines of code |
+| Hosted (free) | ntfy.sh | Cloudflare Workers, Deno Deploy, etc. |
+| VAPID key management | ntfy handles it | You manage VAPID keys |
+| Complexity | Low (ntfy does most of the work) | Very low relay, but more client-side logic |
+
+### When to choose which
+
+- **ntfy** — if you want the simplest overall system with built-in caching, SSE, and a mature ecosystem
+- **VAPID relay** — if you want absolute minimal server footprint, zero message storage, and are comfortable with more client-side logic
+
+Both options share the same client-side architecture: IndexedDB for storage, password-derived encryption, client-side device management. The difference is only in the push delivery layer.
+
+---
+
 ## Open Questions / Decisions
 
 1. **Password change** — Changing the password changes the registry topic and encryption key. All devices would need to re-join. Could support this by publishing a "migration" message to the old registry topic before switching.
