@@ -68,6 +68,7 @@ class PushSubscriptionModelTests(TestCase):
             endpoint="https://push.example.test/sub/123",
             p256dh="old-key",
             auth_secret="old-auth",
+            client_type="browser",
             user_agent="UA 1",
         )
 
@@ -76,6 +77,7 @@ class PushSubscriptionModelTests(TestCase):
             endpoint="https://push.example.test/sub/123",
             p256dh="new-key",
             auth_secret="new-auth",
+            client_type="extension",
             user_agent="UA 2",
         )
 
@@ -83,6 +85,7 @@ class PushSubscriptionModelTests(TestCase):
         second.refresh_from_db()
         self.assertEqual(second.p256dh, "new-key")
         self.assertEqual(second.auth_secret, "new-auth")
+        self.assertEqual(second.client_type, "extension")
         self.assertEqual(second.user_agent, "UA 2")
         self.assertTrue(second.is_active)
 
@@ -154,4 +157,43 @@ class PushSubscriptionModelTests(TestCase):
         self.assertIsNotNone(subscription.last_failure_at)
         self.assertIn("subscription gone", subscription.last_error)
 
+    @override_settings(
+        LINKHOP_WEBPUSH_VAPID_PUBLIC_KEY="public-key",
+        LINKHOP_WEBPUSH_VAPID_PRIVATE_KEY="private-key",
+        LINKHOP_WEBPUSH_VAPID_SUBJECT="mailto:admin@example.com",
+    )
+    def test_extension_subscription_suppresses_browser_push_subscription(self):
+        browser_sub = PushSubscription.objects.create(
+            device=self.device,
+            endpoint="https://push.example.test/sub/browser",
+            p256dh="browser-key",
+            auth_secret="browser-secret",
+            client_type="browser",
+        )
+        extension_sub = PushSubscription.objects.create(
+            device=self.device,
+            endpoint="https://push.example.test/sub/extension",
+            p256dh="extension-key",
+            auth_secret="extension-secret",
+            client_type="extension",
+        )
+
+        with patch("core.services.push.webpush") as mock_webpush:
+            relay_push_message(
+                device=self.device,
+                message_id="test-msg-id",
+                message_type="text",
+                body="hello push",
+                sender_name="Sender",
+                recipient_device_id=str(self.device.id),
+                created_at="2026-01-01T00:00:00Z",
+            )
+
+        self.assertEqual(mock_webpush.call_count, 1)
+        payload = mock_webpush.call_args.kwargs["subscription_info"]
+        self.assertEqual(payload["endpoint"], extension_sub.endpoint)
+        browser_sub.refresh_from_db()
+        extension_sub.refresh_from_db()
+        self.assertIsNone(browser_sub.last_success_at)
+        self.assertIsNotNone(extension_sub.last_success_at)
 

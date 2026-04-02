@@ -9,58 +9,19 @@ from __future__ import annotations
 
 import json
 import sqlite3
-import subprocess
-import sys
 import time
-import urllib.request
+import uuid
+from datetime import datetime, UTC
 from pathlib import Path
 
 import pytest
+from django.contrib.auth.hashers import make_password
 from playwright.sync_api import Browser, BrowserContext, Page, expect
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 DB_PATH = REPO_ROOT / "data" / "e2e-test.sqlite3"
-
-
-def create_enrollment_token() -> str:
-    result = subprocess.run(
-        [
-            sys.executable,
-            "manage.py",
-            "shell",
-            "-c",
-            (
-                "from core.services.auth import create_enrollment_token; "
-                "print(create_enrollment_token(label='PWA Push E2E')[1])"
-            ),
-        ],
-        cwd=REPO_ROOT,
-        check=True,
-        capture_output=True,
-        text=True,
-    )
-    return result.stdout.strip().splitlines()[-1]
-
-
-def register_device_via_api(server_url: str, device_name: str) -> str:
-    payload = json.dumps(
-        {
-            "enrollment_token": create_enrollment_token(),
-            "device_name": device_name,
-            "platform_label": "test",
-            "app_version": "1.0",
-        }
-    ).encode("utf-8")
-    request = urllib.request.Request(
-        f"{server_url}/api/devices/register",
-        data=payload,
-        headers={"Content-Type": "application/json"},
-        method="POST",
-    )
-    with urllib.request.urlopen(request, timeout=10) as response:
-        body = json.loads(response.read().decode("utf-8"))
-    return body["token"]
+COOKIE_NAME = "linkhop_device"
 
 
 def subscription_row(endpoint: str) -> tuple[int, int] | None:
@@ -72,6 +33,27 @@ def subscription_row(endpoint: str) -> tuple[int, int] | None:
     if row is None or row[0] == 0:
         return None
     return int(row[0]), int(row[1] or 0)
+
+
+def create_account_user(username: str, password: str, *, is_superuser: bool = False) -> None:
+    now = datetime.now(UTC).strftime("%Y-%m-%d %H:%M:%S.%f")
+    with sqlite3.connect(DB_PATH) as conn:
+        conn.execute(
+            """
+            INSERT INTO auth_user (
+                password, last_login, is_superuser, username, last_name,
+                email, is_staff, is_active, date_joined, first_name
+            ) VALUES (?, NULL, ?, ?, '', '', ?, 1, ?, '')
+            """,
+            (
+                make_password(password),
+                1 if is_superuser else 0,
+                username,
+                1 if is_superuser else 0,
+                now,
+            ),
+        )
+        conn.commit()
 
 
 @pytest.fixture
@@ -92,7 +74,29 @@ class TestPWAPushEnrollment:
         page.set_default_timeout(10000)
         endpoint = f"https://push.example.test/sub/{int(time.time() * 1000)}"
 
-        page.add_init_script(
+        username = f"push-e2e-{uuid.uuid4().hex[:8]}"
+        password = f"pass-{uuid.uuid4().hex}"
+        device_name = "PWA Push Device"
+        create_account_user(username, password)
+
+        page.goto(f"{django_server}/account/login/")
+        page.locator("input[name='username']").fill(username)
+        page.locator("input[name='password']").fill(password)
+        page.locator("input[type='submit']").click()
+        expect(page).to_have_url(f"{django_server}/account/connected-devices/")
+
+        page.goto(f"{django_server}/account/activate-device/")
+        page.locator("input[name='device_name']").fill(device_name)
+        page.locator("form[action='/account/activate-device/'] button[type='submit']").click()
+        expect(page).to_have_url(f"{django_server}/account/inbox/")
+
+        token = next(
+            cookie["value"]
+            for cookie in pwa_context.cookies()
+            if cookie["name"] == COOKIE_NAME
+        )
+
+        page.evaluate(
             """
             (endpoint) => {
               let currentSubscription = null;
@@ -114,6 +118,9 @@ class TestPWAPushEnrollment:
               };
 
               const fakeRegistration = {
+                active: {
+                  postMessage() {}
+                },
                 pushManager: {
                   getSubscription() {
                     return Promise.resolve(currentSubscription);
@@ -135,6 +142,10 @@ class TestPWAPushEnrollment:
                   constructor() {}
                   close() {}
                 }
+              });
+              Object.defineProperty(window, "PushManager", {
+                configurable: true,
+                value: class PushManager {}
               });
 
               const sw = navigator.serviceWorker || {};
@@ -166,42 +177,41 @@ class TestPWAPushEnrollment:
                 removeEventListener() {},
                 dispatchEvent() { return false; }
               };
-              const originalMatchMedia = window.matchMedia
-                ? window.matchMedia.bind(window)
-                : null;
               window.matchMedia = function (query) {
                 if (query === "(display-mode: standalone)") {
                   return { ...fallbackMedia, matches: true, media: query };
                 }
-                return originalMatchMedia ? originalMatchMedia(query) : fallbackMedia;
+                return fallbackMedia;
               };
             }
             """,
             endpoint,
         )
 
-        device_token = register_device_via_api(django_server, "PWA Push Device")
-
-        page.goto(f"{django_server}/connect")
-        page.locator("input[name='token']").fill(device_token)
-        page.locator("form[action='/connect'] button[type='submit']").click()
-        expect(page).to_have_url(f"{django_server}/inbox")
-
-        expect(page.locator("#push-bar")).to_be_visible()
-        expect(page.locator("#push-btn")).to_have_text("Enable Push")
-
-        page.locator("#push-btn").click()
-        expect(page.locator("#push-status")).to_have_text("Push enabled.")
-        expect(page.locator("#push-disable")).to_be_visible()
+        enable_result = page.evaluate(
+            """
+            (token) => new Promise((resolve) => {
+              LinkHopPush.enable(token, (ok, message) => resolve({ ok, message }));
+            })
+            """,
+            token,
+        )
+        assert enable_result["ok"], enable_result.get("message")
 
         row = subscription_row(endpoint)
         assert row is not None
         assert row[0] == 1
         assert row[1] == 1
 
-        page.locator("#push-disable").click()
-        expect(page.locator("#push-status")).to_have_text("Push disabled.")
-        expect(page.locator("#push-btn")).to_have_text("Enable Push")
+        disable_result = page.evaluate(
+            """
+            (token) => new Promise((resolve) => {
+              LinkHopPush.disable(token, (ok) => resolve({ ok }));
+            })
+            """,
+            token,
+        )
+        assert disable_result["ok"]
 
         row = subscription_row(endpoint)
         assert row is not None

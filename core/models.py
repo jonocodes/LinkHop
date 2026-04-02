@@ -70,6 +70,7 @@ class PushSubscription(TimestampedModel):
     endpoint = models.URLField(unique=True, max_length=1000)
     p256dh = models.CharField(max_length=255)
     auth_secret = models.CharField(max_length=255)
+    client_type = models.CharField(max_length=20, blank=True, default="")
     user_agent = models.CharField(max_length=255, blank=True)
     is_active = models.BooleanField(default=True)
     last_success_at = models.DateTimeField(null=True, blank=True)

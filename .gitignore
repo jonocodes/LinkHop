@@ -10,3 +10,4 @@ staticfiles/
 linkhop.egg-info
 result
 data/*.log
+.DS_Store

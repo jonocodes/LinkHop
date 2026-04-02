@@ -1,0 +1,9 @@
+{
+  "name": "LinkHop TS",
+  "short_name": "LinkHop",
+  "start_url": "/account/inbox",
+  "display": "standalone",
+  "background_color": "#f3efe6",
+  "theme_color": "#0f766e",
+  "icons": []
+}

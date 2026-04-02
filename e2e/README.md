@@ -1,6 +1,6 @@
 # LinkHop E2E Browser Tests
 
-Browser-based tests using Playwright to verify real-time functionality.
+Browser-based tests using Playwright to verify the maintained web flows.
 
 ## Setup
 
@@ -11,14 +11,14 @@ The tests are configured to work with your existing Playwright setup from `../sa
 ### Using pytest (from LinkHop directory):
 
 ```bash
-# Run all E2E tests
+# Run maintained browser E2E tests
 pytest e2e/ -v
 
 # Run push enrollment browser test
 pytest e2e/test_pwa_push.py -v
 
-# Run SSE browser test
-pytest e2e/test_sse_realtime.py -v
+# Run MV3 extension browser tests
+pytest e2e/test_extension_mv3.py -v -s
 
 # Run with headed browser (visible)
 pytest e2e/ -v --headed
@@ -50,27 +50,22 @@ pytest e2e/ -v
 
 - `conftest.py` - Playwright fixtures and Django server setup
 - `test_pwa_push.py` - Installed-PWA push enrollment and unsubscribe flow
-- `test_sse_realtime.py` - Tests for SSE real-time message delivery
-  - Device enrollment through browser
-  - Real-time message delivery
-  - Message status updates
-  - Multiple message ordering
+- `test_extension_mv3.py` - Mocked MV3 extension tests for shared-device linking, sending, and push registration
 
 ## How It Works
 
 1. **Django Server Fixture**: Automatically starts `manage.py runserver` on port 8000
-2. **Browser Contexts**: Creates isolated browser contexts for each device
-3. **Device Enrollment**: Browser tests use the current token or PIN-based connect flow
+2. **Browser Contexts**: Creates isolated browser contexts for each test run
+3. **Account + Device Flow**: Browser tests use the current account and `/account/...` device flow
 4. **Push Mocking**: `test_pwa_push.py` mocks browser push APIs while persisting real subscriptions server-side
-5. **SSE Connection**: The inbox page automatically establishes SSE connection
-6. **Real-time Verification**: Checks that messages appear without page refresh
+5. **Extension Mocking**: `test_extension_mv3.py` loads the MV3 extension in Chromium and mocks push APIs inside the extension service worker
 
 ## Push E2E Notes
 
 `test_pwa_push.py` does not require a real browser push service. It:
 
 1. Creates a real device token through the LinkHop API
-2. Connects through `/connect`
+2. Connects through the current account/device flow
 3. Mocks `Notification`, `serviceWorker`, and `PushManager`
 4. Verifies `/api/push/subscriptions` persists and deactivates the subscription row
 

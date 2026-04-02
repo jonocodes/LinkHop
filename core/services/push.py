@@ -36,6 +36,7 @@ def upsert_push_subscription(
     endpoint: str,
     p256dh: str,
     auth_secret: str,
+    client_type: str = "",
     user_agent: str = "",
 ) -> PushSubscription:
     subscription, _ = PushSubscription.objects.update_or_create(
@@ -44,6 +45,7 @@ def upsert_push_subscription(
             "device": device,
             "p256dh": p256dh,
             "auth_secret": auth_secret,
+            "client_type": client_type[:20],
             "user_agent": user_agent[:255],
             "is_active": True,
             "last_error": "",
@@ -138,4 +140,6 @@ def relay_push_message(
     )
 
     subscriptions = PushSubscription.objects.filter(device=device, is_active=True)
+    if subscriptions.filter(client_type="extension").exists():
+        subscriptions = subscriptions.filter(client_type="extension")
     return _send_to_subscriptions(device=device, payload=payload, subscriptions=subscriptions)

@@ -109,20 +109,11 @@ self.addEventListener("push", (event) => {
 
 self.addEventListener("notificationclick", (event) => {
   event.notification.close();
-  const { type, body, messageId } = event.notification.data || {};
+  const { type, body } = event.notification.data || {};
 
   if (type === "url" && body) {
     event.waitUntil(clients.openWindow(body));
   }
-
-  // Mark opened
-  event.waitUntil(
-    getConfig().then((config) => {
-      if (config && messageId) {
-        apiFetch(config, `/api/messages/${messageId}/opened`, { method: "POST" }).catch(() => {});
-      }
-    })
-  );
 });
 
 // ---------------------------------------------------------------------------

@@ -16,7 +16,7 @@ See `../extension/` for the Firefox (Manifest V2 / SSE) version.
 1. Click the extension icon
 2. Enter your LinkHop server URL and click **Open settings**
 3. On the `/account/inbox/` page that opens, click **🧩 extension**
-4. The extension is now linked
+4. The extension is now linked to the current browser device
 5. Open the popup and click **Enable notifications** to register for Web Push
 
 ## Features
@@ -24,7 +24,8 @@ See `../extension/` for the Firefox (Manifest V2 / SSE) version.
 - **Web Push notifications** — server delivers messages via the browser push service; works even when the popup is closed
 - **Send current page** — click the icon, pick a device, hit Send
 - **Context menu** — right-click any page, link, or selection to send via LinkHop
-- **Notification click** — opens the URL in a new tab
+- **Shared device identity** — the extension reuses the current browser device token instead of creating a separate device
+- **Single notification path** — when an active extension push subscription exists, server delivery prefers the extension channel and suppresses browser/PWA push for that device
 
 ## Differences from the Firefox (MV2) extension
 
@@ -37,9 +38,9 @@ See `../extension/` for the Firefox (Manifest V2 / SSE) version.
 
 ## How it works
 
-Linking uses the same `postMessage` bridge as the Firefox extension: the `/account/inbox/` page sends the device token to a content script, which relays it to the service worker.
+Linking uses the same `postMessage` bridge as the Firefox extension: the `/account/inbox/` page sends the current browser device token to a content script, which relays it to the service worker.
 
-On setup the service worker fetches the VAPID public key from `/api/push/config`, subscribes via `pushManager.subscribe()`, and registers the subscription with `/api/push/subscriptions`. Incoming messages trigger a `push` event in the service worker, which calls `showNotification()`. Clicking a notification opens the URL and marks the message as opened.
+On setup the service worker fetches the VAPID public key from `/api/push/config`, subscribes via `pushManager.subscribe()`, and registers the subscription with `/api/push/subscriptions` using `client_type: "extension"`. Server delivery prefers extension subscriptions over browser/PWA subscriptions for the same device, so notifications arrive one way instead of both. Incoming messages trigger a `push` event in the service worker, which calls `showNotification()`. Clicking a notification opens the URL.
 
 ## Requirements
 

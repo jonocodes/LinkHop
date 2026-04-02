@@ -137,6 +137,7 @@ def push_subscriptions(request: HttpRequest):
         endpoint=endpoint,
         p256dh=p256dh,
         auth_secret=auth_secret,
+        client_type=str(payload.get("client_type", "")).strip(),
         user_agent=request.META.get("HTTP_USER_AGENT", ""),
     )
 
@@ -146,7 +147,7 @@ def push_subscriptions(request: HttpRequest):
     ua_string = request.META.get("HTTP_USER_AGENT", "")
     browser, os_str = parse_ua(ua_string)
     update_fields = []
-    if client_type:
+    if client_type and client_type != "extension":
         request.auth.device_type = client_type
         update_fields.append("device_type")
     if browser and not request.auth.browser:

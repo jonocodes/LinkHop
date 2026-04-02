@@ -109,7 +109,7 @@ async function initMainScreen(config) {
   devices.forEach((d) => {
     const opt = document.createElement("option");
     opt.value = d.id;
-    opt.textContent = d.name + (d.is_online ? " 🟢" : "");
+    opt.textContent = d.name;
     opt.selected = d.id === config.defaultDeviceId;
     select.appendChild(opt);
   });

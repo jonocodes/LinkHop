@@ -53,9 +53,9 @@ test-e2e:
 test-e2e-browser:
     python -m pytest e2e/ -v
 
-# Run extension E2E tests only
+# Run MV3 extension E2E tests only
 test-extension:
-    python -m pytest e2e/test_extension.py -v -s
+    python -m pytest e2e/test_extension_mv3.py -v -s
 
 # Run browser E2E tests with visible browser (headed mode)
 test-e2e-headed:

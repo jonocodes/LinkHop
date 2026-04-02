@@ -41,8 +41,18 @@ def django_server() -> Generator[str, None, None]:
     env.setdefault("LINKHOP_WEBPUSH_VAPID_PUBLIC_KEY", "test-public-key")
     env.setdefault("LINKHOP_WEBPUSH_VAPID_PRIVATE_KEY", "test-private-key")
     env.setdefault("LINKHOP_WEBPUSH_VAPID_SUBJECT", "mailto:test@example.com")
+
+    subprocess.run(
+        [sys.executable, "manage.py", "migrate", "--noinput"],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        env=env,
+        check=True,
+        text=True,
+    )
+
     process = subprocess.Popen(
-        [sys.executable, "manage.py", "runserver", "127.0.0.1:8000", "--noreload"],
+        [sys.executable, "manage.py", "runserver", "127.0.0.1:8000", "--noreload", "--insecure"],
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
         env=env,

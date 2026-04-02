@@ -80,6 +80,7 @@ class ApiFlowTests(TestCase):
             self.assertEqual(create_response.status_code, 204)
             self.assertEqual(PushSubscription.objects.count(), 1)
             self.assertTrue(PushSubscription.objects.first().is_active)
+            self.assertEqual(PushSubscription.objects.first().client_type, "")
 
             delete_response = self.client.delete(
                 "/api/push/subscriptions",
@@ -89,3 +90,28 @@ class ApiFlowTests(TestCase):
             )
             self.assertEqual(delete_response.status_code, 204)
             self.assertFalse(PushSubscription.objects.get().is_active)
+
+    def test_extension_push_subscription_does_not_change_device_type(self):
+        device, token = self.register_device("Push Device")
+
+        response = self.client.post(
+            "/api/push/subscriptions",
+            data=json.dumps(
+                {
+                    "endpoint": "https://push.example.test/sub/extension",
+                    "keys": {
+                        "p256dh": "p256dh-key",
+                        "auth": "auth-secret",
+                    },
+                    "client_type": "extension",
+                }
+            ),
+            content_type="application/json",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+
+        self.assertEqual(response.status_code, 204)
+        device.refresh_from_db()
+        subscription = PushSubscription.objects.get(endpoint="https://push.example.test/sub/extension")
+        self.assertEqual(subscription.client_type, "extension")
+        self.assertEqual(device.device_type, "")
