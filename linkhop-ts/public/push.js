@@ -17,12 +17,14 @@
   }
 
   function postJson(url, token, method, payload) {
+    var headers = { 'Content-Type': 'application/json' };
+    if (token) {
+      headers['Authorization'] = 'Bearer ' + token;
+    }
     return fetch(url, {
       method: method,
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': 'Bearer ' + token,
-      },
+      headers: headers,
+      credentials: 'same-origin',
       body: JSON.stringify(payload),
     });
   }
@@ -31,7 +33,13 @@
     return navigator.serviceWorker.ready;
   }
 
+  /** Idempotent; ensures Enable Push is not blocked waiting for `window.load`. */
+  function ensureServiceWorkerRegistered() {
+    return navigator.serviceWorker.register('/service-worker.js');
+  }
+
   function postAuthMessage(token) {
+    if (!token) return Promise.resolve();
     return getRegistration().then(function (registration) {
       var worker = registration.active || registration.waiting ||
         registration.installing;
@@ -40,7 +48,7 @@
         type: 'linkhop_push_auth',
         token: token,
       });
-    }).catch(function () {});
+    });
   }
 
   function getSubscription() {
@@ -137,53 +145,103 @@
         return;
       }
 
-      fetch('/api/push/config', {
-        headers: { 'Authorization': 'Bearer ' + token },
-      })
-        .then(function (response) {
-          return response.ok ? response.json() : null;
-        })
-        .then(function (config) {
-          if (!config || !config.supported || !config.vapid_public_key) {
-            callback(false, 'Push is not configured on the server.');
+      if (
+        typeof window.isSecureContext !== 'undefined' &&
+        !window.isSecureContext
+      ) {
+        callback(
+          false,
+          'Web Push needs a secure context (HTTPS or http://localhost). Try opening http://127.0.0.1:8000 on this machine.',
+        );
+        return;
+      }
+
+      // Permission must run in the user-gesture window. If we fetch /api/push/config
+      // first, Chromium treats the gesture as stale and requestPermission() never
+      // completes properly from the click handler.
+      var permPromise;
+      if (Notification.permission === 'granted') {
+        permPromise = Promise.resolve('granted');
+      } else {
+        var permAsk = Notification.requestPermission();
+        var permTimeout = new Promise(function (_, reject) {
+          window.setTimeout(function () {
+            reject(
+              new Error(
+                'Notification permission did not finish (no prompt?). Use Chrome/Firefox in a normal window on http://127.0.0.1:8000 — not an IDE embedded browser.',
+              ),
+            );
+          }, 45000);
+        });
+        permPromise = Promise.race([permAsk, permTimeout]);
+      }
+
+      permPromise
+        .then(function (permission) {
+          if (permission !== 'granted') {
+            callback(false, 'Notification permission was not granted.');
             return;
           }
-
-          return Notification.requestPermission().then(function (permission) {
-            if (permission !== 'granted') {
-              callback(false, 'Notification permission was not granted.');
-              return null;
-            }
-
-            return postAuthMessage(token).then(function () {
-              return navigator.serviceWorker.ready;
+          return fetch('/api/push/config', {
+            credentials: 'same-origin',
+            headers: token ? { 'Authorization': 'Bearer ' + token } : {},
+          })
+            .then(function (response) {
+              return response.ok ? response.json() : null;
             })
-              .then(function (registration) {
-                return registration.pushManager.getSubscription()
-                  .then(function (existing) {
-                    if (existing) return existing;
-                    return registration.pushManager.subscribe({
-                      userVisibleOnly: true,
-                      applicationServerKey: urlBase64ToUint8Array(
-                        config.vapid_public_key,
-                      ),
-                    });
+            .then(function (config) {
+              if (!config || !config.supported || !config.vapid_public_key) {
+                callback(false, 'Push is not configured on the server.');
+                return;
+              }
+              return ensureServiceWorkerRegistered()
+                .then(function () {
+                  return navigator.serviceWorker.ready;
+                })
+                .then(function (registration) {
+                  return new Promise(function (resolve) {
+                    window.setTimeout(function () {
+                      postAuthMessage(token)
+                        .then(function () {
+                          resolve(registration);
+                        })
+                        .catch(function () {
+                          resolve(registration);
+                        });
+                    }, 50);
                   });
-              })
-              .then(function (subscription) {
-                if (!subscription) return;
-                var payload = Object.assign({}, subscription.toJSON(), {
-                  client_type: window.LinkHopPush.isStandalone()
-                    ? 'pwa'
-                    : 'browser',
-                });
-                return postJson(
-                  '/api/push/subscriptions',
-                  token,
-                  'POST',
-                  payload,
-                )
-                  .then(function (response) {
+                })
+                .then(function (registration) {
+                  return registration.pushManager.getSubscription()
+                    .then(function (existing) {
+                      if (existing) return existing;
+                      return registration.pushManager.subscribe({
+                        userVisibleOnly: true,
+                        applicationServerKey: urlBase64ToUint8Array(
+                          config.vapid_public_key,
+                        ),
+                      });
+                    });
+                })
+                .then(function (subscription) {
+                  if (!subscription) {
+                    callback(
+                      false,
+                      'Could not create a push subscription (browser blocked or unsupported).',
+                    );
+                    return;
+                  }
+                  var payload = Object.assign({}, subscription.toJSON(), {
+                    client_type: window.LinkHopPush.isStandalone()
+                      ? 'pwa'
+                      : 'browser',
+                  });
+                  return postJson(
+                    '/api/push/subscriptions',
+                    token,
+                    'POST',
+                    payload,
+                  ).then(function (response) {
                     callback(
                       response.status === 204,
                       response.status === 204
@@ -191,11 +249,14 @@
                         : 'Failed to save push subscription.',
                     );
                   });
-              });
-          });
+                });
+            });
         })
-        .catch(function () {
-          callback(false, 'Failed to enable push notifications.');
+        .catch(function (err) {
+          var msg = err && err.message
+            ? String(err.message)
+            : String(err || 'Failed to enable push notifications.');
+          callback(false, msg);
         });
     },
 

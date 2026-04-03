@@ -5,7 +5,7 @@
     return;
   }
 
-  window.addEventListener('load', function () {
+  function registerSw() {
     navigator.serviceWorker.register('/service-worker.js').catch(
       function (error) {
         if (window.console && typeof window.console.warn === 'function') {
@@ -16,5 +16,11 @@
         }
       },
     );
-  });
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', registerSw);
+  } else {
+    registerSw();
+  }
 })();

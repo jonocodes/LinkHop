@@ -1,7 +1,7 @@
 import { Hono } from '@hono/hono';
 import { getCookie } from '@hono/hono/cookie';
 import { getDb } from '../db.ts';
-import { requireDeviceToken } from '../middleware/auth.ts';
+import { requireDeviceToken, requireSession } from '../middleware/auth.ts';
 import { listActiveDevices } from '../services/devices.ts';
 import {
   MessageValidationError,
@@ -33,6 +33,10 @@ function serializeDevice(device: DeviceRecord) {
   };
 }
 
+api.get('/me', requireSession(), (c) => {
+  return c.json({ authenticated: true });
+});
+
 api.get('/push/config', (c) => {
   return c.json(getPublicPushConfig(c.get('config')));
 });
@@ -42,8 +46,10 @@ api.get('/device/me', requireDeviceToken(), (c) => {
 });
 
 api.get('/devices', requireDeviceToken(), (c) => {
+  const config = c.get('config');
   return c.json({
-    devices: listActiveDevices(getDb(c.get('config'))).map(serializeDevice),
+    devices: listActiveDevices(getDb(config)).map(serializeDevice),
+    allow_self_send: config.allowSelfSend,
   });
 });
 
@@ -134,17 +140,21 @@ api.post('/push/test', requireDeviceToken(), async (c) => {
     return c.json({ error: 'device authentication required' }, 401);
   }
 
+  const messageId = crypto.randomUUID();
+  const createdAt = new Date().toISOString();
+  const testBody = 'LinkHop push test - it works!';
+
   const result = await relayPushMessage(
     getDb(c.get('config')),
     c.get('config'),
     {
       device,
-      messageId: crypto.randomUUID(),
+      messageId,
       messageType: 'text',
-      body: 'LinkHop push test - it works!',
+      body: testBody,
       senderName: device.name,
       recipientDeviceId: device.id,
-      createdAt: new Date().toISOString(),
+      createdAt,
       isTest: true,
     },
   );
@@ -155,7 +165,24 @@ api.post('/push/test', requireDeviceToken(), async (c) => {
     }, 400);
   }
 
-  return c.json({ ok: true, subscriptions: result.total });
+  // Echo for the client: inbox reads from IndexedDB; push delivery can be late or dropped
+  // while the tab is focused, so the SPA ingests this in parallel with the push event.
+  return c.json({
+    ok: true,
+    subscriptions: result.total,
+    delivered: result.delivered,
+    message: {
+      id: messageId,
+      type: 'text',
+      body: testBody,
+      sender: device.name,
+      recipient_device_id: device.id,
+      created_at: createdAt,
+      read: false,
+      direction: 'incoming',
+      test: true,
+    },
+  });
 });
 
 api.post('/session/link', (c) => {

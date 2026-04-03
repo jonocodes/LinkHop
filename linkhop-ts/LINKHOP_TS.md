@@ -313,6 +313,27 @@ Setup auto-generates `PASSWORD_HASH`, `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, a
 
 ---
 
+## Testing
+
+### API and HTTP (Deno)
+
+In-process tests (no browser):
+
+```bash
+cd linkhop-ts
+deno task test
+```
+
+Covers `GET /healthz`, login, session, device registration, `/api/*` routes, and related flows.
+
+### Browser E2E (Playwright)
+
+Full stack: real Chromium, service worker, inbox UI, and the **Test Push** button. Requires Node, npm, and Deno on `PATH`.
+
+See **[playwright/README.md](playwright/README.md)** for install, commands, and what the test asserts.
+
+---
+
 ## Deployment
 
 ### Local (Deno)
@@ -340,6 +361,15 @@ deno task start --cert localhost.pem --key localhost-key.pem
 # Option 2: Caddy reverse proxy (auto-TLS for local dev)
 caddy reverse-proxy --from localhost:443 --to localhost:8000
 ```
+
+### Browser compatibility (Web Push)
+
+The Deno server only signs and POSTs to subscription endpoints returned by the browser. **`pushManager.subscribe()`** and notification permission are entirely **client-side**.
+
+- **Chromium** (Chrome, stock Chromium) normally uses Google’s push infrastructure. **Ungoogled Chromium** and some **custom/embedded** Chromium builds often cannot use that path — you may see registration failures, *push service not available*, or a long-running enable step. Use Firefox, vanilla Chrome/Chromium, or another device to verify receiving.
+- Use **`http://127.0.0.1`**, **`http://localhost`**, or **HTTPS** so the page is a **secure context** and the service worker registers reliably.
+
+Broken push on such a browser is **not** fixed by changing VAPID keys or LinkHop environment variables alone.
 
 ### Deno Deploy
 

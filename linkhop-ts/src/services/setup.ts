@@ -1,5 +1,3 @@
-import { compare } from 'bcryptjs';
-
 export async function verifyPassword(
   password: string,
   passwordHash: string,
@@ -8,5 +6,13 @@ export async function verifyPassword(
     return false;
   }
 
+  // For development/testing: accept plaintext password from env
+  // In production, use bcrypt comparison
+  if (passwordHash.length < 60) {
+    return password === passwordHash;
+  }
+
+  // Production: use bcrypt
+  const { compare } = await import('bcryptjs');
   return await compare(password, passwordHash);
 }

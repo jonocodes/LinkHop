@@ -61,9 +61,50 @@ Based on the `LINKHOP_TS.md` spec.
 - [x] docker-compose.yml
 - [x] .dockerignore
 
-### Thin backend
-- [ ] make into a spa with client side template rendering
-- [ ] reduce the backend to API calls
+### Thin backend (SPA migration)
+
+**Strategy**: Keep `/login` server-rendered (works without JS), convert `/account/*` to SPA
+
+#### Phase 1: API additions
+- [x] `GET /api/me` — Check session status, return `{ authenticated: true }` or 401
+- [x] Update `GET /` route — serve static `index.html` shell instead of redirect
+
+#### Phase 2: Client-side infrastructure  
+- [x] Create `public/app.html` — SPA entry point with nav shell
+- [x] Create `public/app.js` — Client-side router
+  - Handle hash or history-based routing (`#/inbox`, `#/send`, `#/devices`, `#/settings`)
+  - Auth guard — redirect to `/login` if session invalid
+  - Render appropriate view based on current route
+- [x] API calls embedded in app.js — no separate api.js needed
+
+#### Phase 3: Convert pages to client components
+- [x] Inbox page (`/account/inbox`)
+  - Move render logic from `inbox.js` into router view
+  - Fetch device info from `/api/device/me` on load
+  - Preserve existing push UI and message list functionality
+- [x] Send page (`/account/send`)
+  - Convert server-rendered form to client-rendered
+  - Fetch device list from `/api/devices` on mount
+  - POST to `/api/messages` with fetch
+- [x] Devices page (`/account/devices`)
+  - Convert server-rendered table to client-rendered
+  - Fetch from `/api/devices` on mount
+- [x] Settings page (`/account/settings`)
+  - Convert read-only display to client-rendered
+
+#### Phase 4: Backend cleanup
+- [x] Remove `/account/inbox`, `/account/send`, `/account/devices` HTML routes from pages.ts
+- [x] Keep `/account/activate-device` server-rendered (simpler, infrequent use)
+- [x] Keep `/account/bookmarklet` server-rendered (no interactivity needed)
+- [x] Simplify `src/routes/pages.ts` — only `/login`, `/logout`, `/account/activate-device`, `/account/bookmarklet`
+- [x] Serve app.html/app.js from app.ts with static middleware
+
+#### Phase 5: Testing & polish
+- [ ] Test auth flow: login → redirect to SPA → logout
+- [ ] Test navigation between routes
+- [ ] Test direct URL access (e.g., `/account/send` → should serve SPA, client redirects)
+- [ ] Verify push notifications still work with new auth flow
+- [ ] Update service worker to cache `app.html` and `app.js`
 
 ### Not Implemented (from spec)
 - [ ] Rate limiting (`src/middleware/rate-limit.ts`)

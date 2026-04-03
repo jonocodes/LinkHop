@@ -13,6 +13,7 @@
       var pushDisable = document.getElementById('push-disable');
       var pushTest = document.getElementById('push-test');
       var pushStatus = document.getElementById('push-status');
+      var pushEnableInFlight = false;
 
       function setPushStatusText(text, isError) {
         if (!text) {
@@ -30,16 +31,21 @@
           pushBar.style.display = 'none';
           return;
         }
+        if (pushEnableInFlight) {
+          return;
+        }
         pushBar.style.display = 'grid';
         pushBtn.disabled = false;
         if (!state.supported && state.hint) {
           pushCopy.textContent = state.hint;
           pushBtn.style.display = 'none';
           pushDisable.style.display = 'none';
+          pushTest.style.display = 'none';
           setPushStatusText('');
           return;
         }
         pushBtn.style.display = '';
+        pushTest.style.display = '';
         if (state.subscribed) {
           pushCopy.textContent = 'Push notifications are enabled.';
           pushBtn.textContent = 'Enabled';
@@ -61,10 +67,19 @@
           return;
         }
         pushCopy.textContent = 'Enable push notifications for this device?';
-        setPushStatusText('');
+        // Do not clear push-status here: refreshPushState runs after Enable Push
+        // and would wipe a useful error from the enable() callback.
       }
 
       function refreshPushState() {
+        if (!window.LinkHopPush || typeof window.LinkHopPush.getState !== 'function') {
+          pushBar.style.display = 'grid';
+          pushCopy.textContent = 'Push support failed to load. Refresh the page.';
+          pushBtn.style.display = 'none';
+          pushDisable.style.display = 'none';
+          pushTest.style.display = 'none';
+          return;
+        }
         window.LinkHopPush.getState(renderPushState);
       }
 
@@ -197,8 +212,9 @@
       );
 
       if (window.LinkHopPush.isSupported()) {
-        window.LinkHopPush.syncAuthToken(token);
-        refreshPushState();
+        if (token) {
+          window.LinkHopPush.syncAuthToken(token);
+        }
         window.LinkHopPush.syncSubscription(token, function (ok) {
           if (!ok) {
             setPushStatusText(
@@ -209,17 +225,39 @@
         });
       }
 
+      // Always run: initial HTML hides #push-bar (display:none) until this runs.
+      // Previously this only ran when isSupported(), so the bar never appeared in
+      // environments without Push (and looked "missing" if the check failed).
+      refreshPushState();
+
       pushBtn.addEventListener('click', function () {
+        pushEnableInFlight = true;
         pushBtn.disabled = true;
         pushBtn.textContent = 'Working...';
         setPushStatusText('');
+        var watchdog = window.setTimeout(function () {
+          if (!pushEnableInFlight) return;
+          pushEnableInFlight = false;
+          setPushStatusText(
+            'Still working… if this never completes, the browser cannot use Web Push here. Open http://127.0.0.1:8000 in Chrome or Firefox outside the IDE.',
+            true,
+          );
+          refreshPushState();
+        }, 120000);
         window.LinkHopPush.enable(token, function (ok, message) {
+          window.clearTimeout(watchdog);
+          pushEnableInFlight = false;
           if (ok) {
             setPushStatusText('Push enabled.');
             refreshPushState();
             return;
           }
-          setPushStatusText(message || 'Push setup failed.', true);
+          var msg = message || 'Push setup failed.';
+          if (/push service not available/i.test(msg)) {
+            msg =
+              'This browser has no push service (common in IDE-embedded Chromium). Use standalone Chrome/Firefox at http://127.0.0.1:8000 — your LinkHop server is fine.';
+          }
+          setPushStatusText(msg, true);
           refreshPushState();
         });
       });
@@ -236,9 +274,8 @@
         setPushStatusText('Sending test push...');
         fetch('/api/push/test', {
           method: 'POST',
-          headers: {
-            'Authorization': 'Bearer ' + token,
-          },
+          credentials: 'same-origin',
+          headers: token ? { 'Authorization': 'Bearer ' + token } : {},
         })
           .then(function (response) {
             return response.json().catch(function () {
@@ -252,7 +289,16 @@
               setPushStatusText(result.data.error || 'Test push failed.', true);
               return;
             }
+            var msg = result.data.message;
+            if (msg && navigator.serviceWorker && navigator.serviceWorker.controller) {
+              navigator.serviceWorker.controller.postMessage({
+                type: 'linkhop_ingest_message',
+                message: msg,
+              });
+            }
             setPushStatusText('Test push sent.');
+            loadAndRender();
+            setTimeout(loadAndRender, 250);
           })
           .catch(function () {
             setPushStatusText('Test push failed.', true);

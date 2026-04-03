@@ -182,6 +182,8 @@ python -c "import secrets; print(secrets.token_urlsafe(50))"
 - **Default:** `mailto:admin@localhost`
 - **Description:** VAPID subject claim used for Web Push delivery
 
+VAPID keys are required for the server to **deliver** to existing subscriptions. They do not make **`pushManager.subscribe()`** succeed in the browser; that still needs a normal browser with a working platform push service (see **README** → *Enable push notifications* and **linkhop-ts/LINKHOP_TS.md** → *Browser compatibility*).
+
 **Setup Note:**
 Generate a P-256 VAPID keypair and place the resulting URL-safe base64 values in your real `.env`.
 Do not commit the private key.

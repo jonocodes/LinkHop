@@ -94,14 +94,22 @@ export function optionalAuth(): MiddlewareHandler {
 
     let device: DeviceRecord | null = null;
     const db = getDb(config);
-    const bearer = c.req.header('authorization')?.replace(/^Bearer\s+/i, '');
-    const deviceToken = bearer || getCookie(c, config.deviceCookieName) || '';
+    const bearerRaw =
+      c.req.header('authorization')?.replace(/^Bearer\s+/i, '')?.trim() || '';
+    const bearer =
+      bearerRaw === 'undefined' || bearerRaw === 'null' || bearerRaw === ''
+        ? ''
+        : bearerRaw;
+    const cookieToken = getCookie(c, config.deviceCookieName) || '';
 
-    if (deviceToken) {
-      device = await getDeviceByToken(db, deviceToken);
-      if (device) {
-        touchDeviceSeen(db, device.id);
-      }
+    if (bearer) {
+      device = await getDeviceByToken(db, bearer);
+    }
+    if (!device && cookieToken) {
+      device = await getDeviceByToken(db, cookieToken);
+    }
+    if (device) {
+      touchDeviceSeen(db, device.id);
     }
 
     c.set('device', device);
@@ -109,9 +117,22 @@ export function optionalAuth(): MiddlewareHandler {
   };
 }
 
+/** Pathname for API vs HTML: mounted apps see relative `c.req.path` (e.g. `/me`), not `/api/me`. */
+function requestPathname(c: Context): string {
+  try {
+    return new URL(c.req.url).pathname;
+  } catch {
+    return c.req.path;
+  }
+}
+
 export function requireSession(): MiddlewareHandler {
   return async (c, next) => {
     if (!c.get('session')) {
+      // API routes should return 401, page routes redirect
+      if (requestPathname(c).startsWith('/api/')) {
+        return c.json({ error: 'session required' }, 401);
+      }
       return c.redirect('/login');
     }
     await next();

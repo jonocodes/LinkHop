@@ -1,4 +1,4 @@
-const CACHE_NAME = 'linkhop-ts-v1';
+const CACHE_NAME = 'linkhop-ts-v3';
 const SHELL_ASSETS = [
   '/styles.css',
   '/manifest.json',
@@ -270,6 +270,11 @@ self.addEventListener('message', (event) => {
 
   if (event.data.type === 'linkhop_push_auth' && event.data.token) {
     event.waitUntil(storeAuthToken(event.data.token));
+    return;
+  }
+
+  if (event.data.type === 'linkhop_ingest_message' && event.data.message) {
+    event.waitUntil(storeMessage(event.data.message));
     return;
   }
 

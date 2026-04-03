@@ -11,3 +11,6 @@ linkhop.egg-info
 result
 data/*.log
 .DS_Store
+linkhop-ts/playwright/node_modules/
+linkhop-ts/playwright/test-results/
+linkhop-ts/playwright/playwright-report/

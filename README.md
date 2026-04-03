@@ -255,7 +255,15 @@ On each additional device, visit `/account/login/`, sign in with the same accoun
 
 ### 4. Enable push notifications
 
-After registering a device, the inbox page will prompt you to enable push notifications. This is required for receiving messages.
+After registering a device, the inbox page will prompt you to enable push notifications. Messages are delivered **only via Web Push** (there is no server-side inbox queue). The recipient browser must successfully subscribe for delivery to work.
+
+**Browsers and Web Push.** The server signs outgoing pushes with VAPID; whether **Subscribe** works depends on the browser’s connection to a real platform push service (for example Chromium → Google’s endpoint, Firefox → Mozilla’s). These environments often **cannot subscribe**, show errors like *push service not available*, or leave *Enable Push* stuck on *Working…*:
+
+- **Ungoogled Chromium** — typically lacks the usual Chromium push path; use stock **Chrome**, **Chromium**, or **Firefox**, or test receiving on another device.
+- **Embedded or IDE-integrated browsers** — many have no usable push implementation; open the app in a normal browser window.
+- **Secure context** — prefer `http://localhost` / `http://127.0.0.1` or HTTPS; arbitrary `http://` hosts can block service workers and push.
+
+Sending and the rest of the UI can still work when push cannot be enabled on a given profile; only **receiving via Web Push** on that profile is affected.
 
 ### 5. Send and receive
 

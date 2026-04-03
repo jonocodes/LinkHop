@@ -178,6 +178,19 @@ Deno.test({
       }
     });
 
+    await t.step('GET /api/me requires session', async () => {
+      const res = await app.request('/api/me');
+      assertEquals(res.status, 401);
+    });
+
+    await t.step('GET /api/me returns authenticated with session', async () => {
+      const res = await app.request('/api/me', {
+        headers: { Cookie: `${SESSION_COOKIE}=${session}` },
+      });
+      assertEquals(res.status, 200);
+      assertEquals(await res.json(), { authenticated: true });
+    });
+
     await t.step('GET /account/activate-device renders form', async () => {
       const res = await app.request('/account/activate-device', {
         headers: { Cookie: `${SESSION_COOKIE}=${session}` },
@@ -193,33 +206,44 @@ Deno.test({
       assertNotEquals(deviceToken.indexOf('device_'), -1);
     });
 
-    await t.step('GET /account/inbox renders with session+device', async () => {
+    await t.step('GET /account/inbox serves SPA shell with session', async () => {
       const res = await app.request('/account/inbox', {
         headers: {
-          Cookie: `${SESSION_COOKIE}=${session}; ${DEVICE_COOKIE}=${deviceToken}`,
+          Cookie: `${SESSION_COOKIE}=${session}`,
         },
       });
       assertEquals(res.status, 200);
       const html = await res.text();
-      assertNotEquals(html.indexOf('TestLaptop'), -1);
+      // SPA shell should have the app.html content
+      assertNotEquals(html.indexOf('page-heading'), -1);
+      assertNotEquals(html.indexOf('main-nav'), -1);
     });
 
-    await t.step('GET /account/devices lists registered device', async () => {
+    await t.step('GET /account/send serves SPA shell', async () => {
+      const res = await app.request('/account/send', {
+        headers: { Cookie: `${SESSION_COOKIE}=${session}` },
+      });
+      assertEquals(res.status, 200);
+      const html = await res.text();
+      assertNotEquals(html.indexOf('app-content'), -1);
+    });
+
+    await t.step('GET /account/devices serves SPA shell', async () => {
       const res = await app.request('/account/devices', {
         headers: { Cookie: `${SESSION_COOKIE}=${session}` },
       });
       assertEquals(res.status, 200);
       const html = await res.text();
-      assertNotEquals(html.indexOf('TestLaptop'), -1);
+      assertNotEquals(html.indexOf('app-content'), -1);
     });
 
-    await t.step('GET /account/settings renders', async () => {
+    await t.step('GET /account/settings serves SPA shell', async () => {
       const res = await app.request('/account/settings', {
         headers: { Cookie: `${SESSION_COOKIE}=${session}` },
       });
       assertEquals(res.status, 200);
       const html = await res.text();
-      assertNotEquals(html.indexOf('Settings'), -1);
+      assertNotEquals(html.indexOf('app-content'), -1);
     });
 
     await t.step('GET /api/push/config returns VAPID key', async () => {
@@ -256,6 +280,7 @@ Deno.test({
       const body = await res.json();
       assertEquals(body.devices.length, 1);
       assertEquals(body.devices[0].name, 'TestLaptop');
+      assertEquals(body.allow_self_send, true);
     });
 
     await t.step('API /api/messages rejects invalid payload', async () => {
@@ -429,18 +454,18 @@ Deno.test({
       assertEquals(typeof body.token, 'string');
     });
 
-    await t.step('GET /hop redirects to /account/send with device', async () => {
+    await t.step('GET /hop redirects to /account/send with session', async () => {
       const res = await app.request('/hop', {
-        headers: { Cookie: `${DEVICE_COOKIE}=${deviceToken}` },
+        headers: { Cookie: `${SESSION_COOKIE}=${session}` },
         redirect: 'manual',
       });
       assertEquals(res.status, 302);
       assertEquals(res.headers.get('location'), '/account/send');
     });
 
-    await t.step('GET /share redirects to /account/send with device', async () => {
+    await t.step('GET /share redirects to /account/send with session', async () => {
       const res = await app.request('/share', {
-        headers: { Cookie: `${DEVICE_COOKIE}=${deviceToken}` },
+        headers: { Cookie: `${SESSION_COOKIE}=${session}` },
         redirect: 'manual',
       });
       assertEquals(res.status, 302);

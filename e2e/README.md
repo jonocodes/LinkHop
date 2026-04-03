@@ -20,6 +20,9 @@ pytest e2e/test_pwa_push.py -v
 # Run MV3 extension browser tests
 pytest e2e/test_extension_mv3.py -v -s
 
+# linkhop-ts (Deno stack): Node + Playwright — see linkhop-ts/playwright/README.md
+#   cd linkhop-ts/playwright && npm install && npx playwright install chromium && npm test
+
 # Run with headed browser (visible)
 pytest e2e/ -v --headed
 
