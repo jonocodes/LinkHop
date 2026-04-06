@@ -9,7 +9,13 @@ export default defineConfig({
   },
   plugins: [
     VitePWA({
+      strategies: "injectManifest",
+      srcDir: "src",
+      filename: "sw.ts",
       registerType: "autoUpdate",
+      injectManifest: {
+        globPatterns: ["**/*.{js,css,html,png,svg}"],
+      },
       manifest: {
         name: "LinkHop Lite",
         short_name: "LinkHop",
@@ -27,8 +33,9 @@ export default defineConfig({
           },
         ],
       },
-      workbox: {
-        globPatterns: ["**/*.{js,css,html,png,svg}"],
+      devOptions: {
+        enabled: true,
+        type: "module",
       },
     }),
   ],

@@ -9,6 +9,7 @@ import { actionAnnounce, actionLeave, actionSend } from "../../src/engine/action
 import type { Effect } from "../../src/engine/reducer.js";
 import { loadConfig, saveConfig, loadState, saveState, clearAll, type BrowserConfig } from "./db.js";
 import { subscribeSSE, publishHTTP } from "./sse.js";
+import { requestPermission, showMessageNotification } from "./notifications.js";
 
 export type AppScreen = "setup" | "main";
 export type ConnectionStatus = "disconnected" | "connecting" | "connected";
@@ -61,6 +62,7 @@ export class App {
     };
 
     await saveConfig({ device: this.config, ntfy_url: this.ntfyUrl });
+    await requestPermission();
     this.state = createEmptyState();
     this.screen = "main";
     this.callbacks.onScreenChange("main");
@@ -153,9 +155,22 @@ export class App {
     const result = validateEvent(event, this.config.network_id);
     if (!result.valid) return;
 
+    // Check if this is a new message for us (before processing, to detect new vs dup)
+    const isNewMessage =
+      result.event.type === "msg.send" &&
+      result.event.payload.to_device_id === this.config.device_id &&
+      !this.state.messages.has(result.event.payload.msg_id);
+
     const { effects } = processEvent(this.state, result.event, this.config);
     await saveState(this.state);
     this.callbacks.onStateChange();
+
+    // Show notification for new incoming messages
+    if (isNewMessage && result.event.type === "msg.send") {
+      const fromDevice = this.state.devices.get(result.event.from_device_id);
+      const fromName = fromDevice?.device_name ?? result.event.from_device_id;
+      showMessageNotification(fromName, result.event.payload.body.text);
+    }
 
     for (const effect of effects) {
       await this.executeEffect(effect);

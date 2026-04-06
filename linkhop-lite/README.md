@@ -185,4 +185,8 @@ bun src/cli/index.ts replay fixtures/device-announce.json
 - [x] Leave network and reset from UI
 - [x] Messages sorted newest-first
 - [x] SVG app icon
-- [ ] Push notifications via service worker
+- [x] Notification permission request on setup
+- [x] Foreground notifications on new message (via SW showNotification)
+- [x] Custom service worker with push event handler
+- [x] Notification click opens/focuses app
+- [ ] ntfy web push subscription (requires VAPID key from ntfy server)
