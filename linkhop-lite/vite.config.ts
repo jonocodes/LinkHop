@@ -3,6 +3,7 @@ import { VitePWA } from "vite-plugin-pwa";
 
 export default defineConfig({
   root: "web",
+  base: process.env.VITE_BASE ?? "/",
   build: {
     outDir: "../dist-web",
     emptyOutDir: true,
@@ -23,7 +24,7 @@ export default defineConfig({
         theme_color: "#1a1a2e",
         background_color: "#1a1a2e",
         display: "standalone",
-        start_url: "/",
+        start_url: ".",
         icons: [
           {
             src: "icon.svg",
