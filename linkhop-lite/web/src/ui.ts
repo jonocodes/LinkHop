@@ -39,10 +39,7 @@ function renderSetupScreen(): string {
         <label for="setup-password">Password</label>
         <input id="setup-password" type="password" placeholder="shared secret" />
       </div>
-      <div class="form-group">
-        <label for="setup-ntfy">ntfy server</label>
-        <input id="setup-ntfy" type="url" value="https://ntfy.sh" />
-      </div>
+      <input id="setup-ntfy" type="hidden" value="https://ntfy.sh" />
       <button id="setup-btn">Join network</button>
       <button class="secondary setup-settings-link" id="setup-settings-btn" type="button">Settings</button>
     </div>
