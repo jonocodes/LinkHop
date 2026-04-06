@@ -1,0 +1,49 @@
+{
+  "name": "device-leave",
+  "description": "Receiving a device.leave after announce marks device as removed",
+  "device": {
+    "device_id": "dev_local",
+    "device_name": "Local",
+    "network_id": "net_test",
+    "env": "test"
+  },
+  "steps": [
+    {
+      "kind": "incoming_event",
+      "event": {
+        "type": "device.announce",
+        "timestamp": "2026-04-04T18:00:00Z",
+        "network_id": "net_test",
+        "event_id": "evt_001",
+        "from_device_id": "dev_peer",
+        "payload": {
+          "device_id": "dev_peer",
+          "device_name": "Peer Phone",
+          "device_topic": "linkhop.test.net_test.device.dev_peer",
+          "protocol_version": "lite-v1"
+        }
+      }
+    },
+    {
+      "kind": "incoming_event",
+      "event": {
+        "type": "device.leave",
+        "timestamp": "2026-04-04T18:05:00Z",
+        "network_id": "net_test",
+        "event_id": "evt_002",
+        "from_device_id": "dev_peer",
+        "payload": {
+          "device_id": "dev_peer"
+        }
+      }
+    }
+  ],
+  "expected": {
+    "devices": [
+      {
+        "device_id": "dev_peer",
+        "is_removed": true
+      }
+    ]
+  }
+}

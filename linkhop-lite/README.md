@@ -28,7 +28,10 @@ The protocol and engine layers use only web-standard APIs and have zero Node dep
 Requires a running ntfy instance (default `http://localhost:8080`, override with `NTFY_URL`).
 
 ```bash
-# Initialize a device
+# Initialize with a shared password (derives network_id deterministically)
+bun src/cli/index.ts init --name "My Laptop" --password "shared-secret"
+
+# Or with an explicit network ID
 bun src/cli/index.ts init --name "My Laptop" --network net_abc123
 
 # Show identity
@@ -49,6 +52,9 @@ bun src/cli/index.ts inbox
 bun src/cli/index.ts pending
 bun src/cli/index.ts events
 bun src/cli/index.ts export-state
+
+# Replay a fixture file
+bun src/cli/index.ts replay fixtures/device-announce.json
 ```
 
 ## Spec documents
@@ -121,7 +127,7 @@ bun src/cli/index.ts export-state
 - [x] `watch` — live subscribe to registry + device topics
 - [x] `events` — print event log as JSON
 - [x] `export-state` — dump full local state
-- [ ] `replay <file>` — replay fixture/event log into engine
+- [x] `replay <file>` — replay fixture/event log into engine
 
 ### Tests
 
@@ -139,7 +145,9 @@ bun src/cli/index.ts export-state
 - [x] Duplicate delivery dedup via relay
 - [x] Dropped ack scenario via relay
 - [x] Late subscriber receives retained events
-- [ ] Simulation fixture format and replay
+- [x] Simulation fixture format and replay
+- [x] Fixture-driven tests (all JSON fixtures auto-loaded)
+- [x] Fixture runner assertion failure detection
 
 ### Deferred (per spec)
 
@@ -147,5 +155,5 @@ bun src/cli/index.ts export-state
 - [ ] Encryption / signing
 - [ ] Password rotation
 - [ ] Heartbeat / stronger presence
-- [ ] Password-derived network_id (currently manual)
+- [x] Password-derived network_id (PBKDF2 via Web Crypto)
 - [ ] Browser app (IndexedDB storage, SSE transport, UI)

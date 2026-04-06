@@ -3,12 +3,14 @@
 import { Command } from "commander";
 import { loadConfig, loadState, saveConfig, saveState } from "./store.js";
 import { generateDeviceId, generateNetworkId } from "../protocol/ids.js";
+import { deriveNetworkId } from "../protocol/network.js";
 import { deviceTopicFromConfig, registryTopicFromConfig } from "../protocol/topics.js";
 import { actionAnnounce, actionLeave, actionSend } from "../engine/actions.js";
 import { processEvent } from "../engine/reducer.js";
 import { validateEvent } from "../protocol/validate.js";
 import { getDevices, getInbox, getPending } from "../engine/state.js";
 import { publish, subscribe } from "../transport/ntfy.js";
+import { runFixture, type Fixture } from "../engine/fixtures.js";
 import type { DeviceConfig } from "../protocol/types.js";
 import type { Effect } from "../engine/reducer.js";
 
@@ -42,7 +44,8 @@ program
   .command("init")
   .description("Create device identity and network config")
   .option("-n, --name <name>", "device display name")
-  .option("--network <id>", "network ID to join")
+  .option("--network <id>", "network ID (overrides --password)")
+  .option("-p, --password <password>", "shared password to derive network ID")
   .option("--env <env>", "environment", "test")
   .action(async (opts) => {
     const existing = loadConfig();
@@ -51,10 +54,19 @@ program
       return;
     }
 
+    let networkId: string;
+    if (opts.network) {
+      networkId = opts.network;
+    } else if (opts.password) {
+      networkId = await deriveNetworkId(opts.password);
+    } else {
+      networkId = generateNetworkId();
+    }
+
     const config: DeviceConfig = {
       device_id: generateDeviceId(),
       device_name: opts.name ?? `device-${Date.now()}`,
-      network_id: opts.network ?? generateNetworkId(),
+      network_id: networkId,
       env: opts.env,
     };
 
@@ -261,6 +273,35 @@ program
     };
 
     console.log(JSON.stringify(exported, null, 2));
+  });
+
+program
+  .command("replay")
+  .description("Replay a fixture file through the engine")
+  .argument("<file>", "path to fixture JSON file")
+  .action(async (file: string) => {
+    const { readFileSync } = await import("node:fs");
+    const { resolve } = await import("node:path");
+
+    const path = resolve(file);
+    const fixture = JSON.parse(readFileSync(path, "utf-8")) as Fixture;
+    const result = runFixture(fixture);
+
+    console.log(`Fixture: ${fixture.name}`);
+    if (fixture.description) console.log(`  ${fixture.description}`);
+    console.log(`Steps:   ${fixture.steps.length}`);
+    console.log(`Effects: ${result.effects.length}`);
+    console.log();
+
+    if (result.passed) {
+      console.log("PASSED");
+    } else {
+      console.log("FAILED");
+      for (const err of result.errors) {
+        console.log(`  - ${err}`);
+      }
+      process.exit(1);
+    }
   });
 
 program.parse();
