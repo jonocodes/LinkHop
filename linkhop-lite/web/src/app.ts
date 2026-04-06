@@ -30,6 +30,7 @@ export class App {
   ntfyUrl = "https://ntfy.sh";
   encryptionEnabled = false;
   encryptionKey: CryptoKey | null = null;
+  selfSendEnabled = false;
 
   private callbacks: AppCallbacks;
   private cleanupSSE: (() => void)[] = [];
@@ -45,6 +46,7 @@ export class App {
       this.config = saved.device;
       this.ntfyUrl = saved.ntfy_url;
       this.encryptionEnabled = saved.encryption_enabled ?? false;
+      this.selfSendEnabled = saved.self_send_enabled ?? false;
       if (saved.password) {
         this.encryptionKey = await deriveEncryptionKey(saved.password);
       }
@@ -61,7 +63,7 @@ export class App {
     const networkId = await deriveNetworkId(password);
     this.ntfyUrl = ntfyUrl;
     this.encryptionKey = await deriveEncryptionKey(password);
-    this.encryptionEnabled = true;
+    this.encryptionEnabled = false;
 
     this.config = {
       device_id: generateDeviceId(),
@@ -74,7 +76,7 @@ export class App {
       device: this.config,
       ntfy_url: this.ntfyUrl,
       password,
-      encryption_enabled: true,
+      encryption_enabled: false,
     });
     await requestPermission();
     this.state = createEmptyState();
@@ -140,6 +142,16 @@ export class App {
     this.callbacks.onStateChange();
     // Re-announce so peers see updated capabilities
     await this.announce();
+  }
+
+  async toggleSelfSend(): Promise<void> {
+    this.selfSendEnabled = !this.selfSendEnabled;
+    const saved = await loadConfig();
+    if (saved) {
+      saved.self_send_enabled = this.selfSendEnabled;
+      await saveConfig(saved);
+    }
+    this.callbacks.onStateChange();
   }
 
   async updateServer(url: string): Promise<void> {

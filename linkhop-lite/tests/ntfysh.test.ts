@@ -1,4 +1,4 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, beforeAll } from "vitest";
 import { publish } from "../src/transport/ntfy.js";
 import { createEmptyState, getDevices, getInbox, getPending } from "../src/engine/state.js";
 import { processEvent } from "../src/engine/reducer.js";
@@ -107,10 +107,16 @@ async function ntfyShReachable(): Promise<boolean> {
   }
 }
 
-const SKIP = !(await ntfyShReachable());
+describe("integration: ntfy.sh public server", { timeout: 30000 }, () => {
+  let reachable = false;
 
-describe.skipIf(SKIP)("integration: ntfy.sh public server", { timeout: 30000 }, () => {
-  it("publish and subscribe roundtrip", async () => {
+  beforeAll(async () => {
+    reachable = await ntfyShReachable();
+    if (!reachable) console.log("Skipping ntfy.sh tests — server not reachable");
+  });
+
+  it("publish and subscribe roundtrip", async (ctx) => {
+    if (!reachable) return ctx.skip();
     const topic = `linkhop-${RUN_ID}-roundtrip`;
     const config = makeConfig("dev_rt", "Roundtrip");
     const event = createDeviceAnnounce(config);
@@ -126,7 +132,8 @@ describe.skipIf(SKIP)("integration: ntfy.sh public server", { timeout: 30000 }, 
     expect(events[0].from_device_id).toBe("dev_rt");
   });
 
-  it("two-device discovery over ntfy.sh", async () => {
+  it("two-device discovery over ntfy.sh", async (ctx) => {
+    if (!reachable) return ctx.skip();
     const phoneConfig = makeConfig("dev_phone_sh", "Phone");
     const desktopConfig = makeConfig("dev_desktop_sh", "Desktop");
     const regTopic = registryTopic("test", `net_${RUN_ID}`);
@@ -153,7 +160,8 @@ describe.skipIf(SKIP)("integration: ntfy.sh public server", { timeout: 30000 }, 
     expect(devices.find((d) => d.device_id === "dev_desktop_sh")).toBeDefined();
   });
 
-  it("full message send/receive/ack flow over ntfy.sh", async () => {
+  it("full message send/receive/ack flow over ntfy.sh", async (ctx) => {
+    if (!reachable) return ctx.skip();
     const sender = makeConfig("dev_sender_sh", "Sender");
     const recipient = makeConfig("dev_recipient_sh", "Recipient");
 

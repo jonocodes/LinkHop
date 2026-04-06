@@ -303,7 +303,7 @@ function updateSendTargets(): void {
   if (!select) return;
 
   const devices = getDevices(app.state).filter(
-    (d) => d.device_id !== app.config?.device_id && !d.is_removed,
+    (d) => (app.selfSendEnabled || d.device_id !== app.config?.device_id) && !d.is_removed,
   );
 
   const currentValue = select.value;
@@ -341,6 +341,15 @@ function renderSettings(): string {
     </div>
 
     <div class="settings-section">
+      <div class="settings-label">Self-send</div>
+      <div class="settings-row">
+        <span>${app.selfSendEnabled ? "Enabled" : "Disabled"}</span>
+        <button class="settings-toggle ${app.selfSendEnabled ? "on" : ""}" id="settings-selfsend-toggle">${app.selfSendEnabled ? "On" : "Off"}</button>
+      </div>
+      <div class="settings-hint">Send messages to yourself through the relay (useful for testing)</div>
+    </div>
+
+    <div class="settings-section">
       <div class="settings-label">Server</div>
       <div class="settings-row">
         <input id="settings-server" type="url" value="${esc(app.ntfyUrl)}" />
@@ -363,6 +372,14 @@ function bindSettingsEvents(): void {
   if (encToggle) {
     encToggle.addEventListener("click", async () => {
       await app.toggleEncryption();
+      renderMainContent();
+    });
+  }
+
+  const selfSendToggle = document.getElementById("settings-selfsend-toggle");
+  if (selfSendToggle) {
+    selfSendToggle.addEventListener("click", async () => {
+      await app.toggleSelfSend();
       renderMainContent();
     });
   }

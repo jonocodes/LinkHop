@@ -52,6 +52,7 @@ export interface BrowserConfig {
   ntfy_url: string;
   password?: string;
   encryption_enabled?: boolean;
+  self_send_enabled?: boolean;
 }
 
 export async function saveConfig(config: BrowserConfig): Promise<void> {
