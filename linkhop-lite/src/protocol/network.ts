@@ -1,6 +1,6 @@
 const SALT = "linkhop-lite-network-v1";
 const ITERATIONS = 100_000;
-const KEY_BYTES = 12;
+const KEY_BYTES = 6;
 
 /**
  * Derive a stable network_id from a shared password.

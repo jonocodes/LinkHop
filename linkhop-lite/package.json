@@ -16,12 +16,14 @@
     "cli": "bun src/cli/index.ts",
     "dev": "vite",
     "build:web": "vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "test:e2e": "bash scripts/download-ntfy.sh && bunx playwright test"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
   "devDependencies": {
+    "@playwright/test": "^1.59.1",
     "@types/node": "^25.5.2",
     "typescript": "^6.0.2",
     "vite": "^8.0.3",
