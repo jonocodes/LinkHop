@@ -39,7 +39,6 @@ function renderSetupScreen(): string {
         <label for="setup-password">Password</label>
         <input id="setup-password" type="password" placeholder="shared secret" />
       </div>
-      <input id="setup-ntfy" type="hidden" value="https://ntfy.sh" />
       <button id="setup-btn">Join network</button>
       <button class="secondary setup-settings-link" id="setup-settings-btn" type="button">Settings</button>
     </div>
@@ -82,7 +81,8 @@ function bindSetupEvents(): void {
     const name = (document.getElementById("setup-name") as HTMLInputElement).value.trim();
     const pool = (document.getElementById("setup-pool") as HTMLInputElement).value.trim();
     const password = (document.getElementById("setup-password") as HTMLInputElement).value;
-    const ntfyUrl = (document.getElementById("setup-ntfy") as HTMLInputElement).value.trim();
+    const serverInput = document.getElementById("setup-settings-server") as HTMLInputElement | null;
+    const ntfyUrl = serverInput?.value.trim() || "https://ntfy.sh";
 
     if (!name || !pool || !password) {
       showError("Name, pool, and password are required");
@@ -103,16 +103,15 @@ function bindSetupEvents(): void {
   });
 
   document.getElementById("setup-settings-btn")!.addEventListener("click", () => {
-    const setupNtfy = document.getElementById("setup-ntfy") as HTMLInputElement;
     const setupForm = document.getElementById("screen-setup")!;
     const settingsPanel = document.getElementById("setup-settings-panel");
 
     if (settingsPanel) {
-      // Toggle off
       settingsPanel.remove();
       return;
     }
 
+    const existingUrl = (document.getElementById("setup-settings-server") as HTMLInputElement | null)?.value || "https://ntfy.sh";
     const panel = document.createElement("div");
     panel.id = "setup-settings-panel";
     panel.className = "settings-panel";
@@ -120,18 +119,12 @@ function bindSetupEvents(): void {
       <div class="settings-section">
         <div class="settings-label">Server</div>
         <div class="settings-row">
-          <input id="setup-settings-server" type="url" value="${setupNtfy.value}" />
+          <input id="setup-settings-server" type="url" value="${existingUrl}" />
         </div>
         <div class="settings-hint">Change the ntfy server URL used for messaging</div>
       </div>
     `;
     setupForm.appendChild(panel);
-
-    // Sync the server field back to the setup form
-    document.getElementById("setup-settings-server")!.addEventListener("input", () => {
-      const val = (document.getElementById("setup-settings-server") as HTMLInputElement).value;
-      setupNtfy.value = val;
-    });
   });
 }
 
@@ -353,10 +346,7 @@ function renderSettings(): string {
 
     <div class="settings-section">
       <div class="settings-label">Server</div>
-      <div class="settings-row">
-        <input id="settings-server" type="url" value="${esc(app.ntfyUrl)}" />
-        <button class="secondary" id="settings-server-save" style="width:auto;padding:10px 16px">Save</button>
-      </div>
+      <div class="settings-hint">${esc(app.ntfyUrl)}</div>
     </div>
 
     <div class="settings-section">
@@ -383,20 +373,6 @@ function bindSettingsEvents(): void {
     selfSendToggle.addEventListener("click", async () => {
       await app.toggleSelfSend();
       renderMainContent();
-    });
-  }
-
-  const serverSave = document.getElementById("settings-server-save");
-  if (serverSave) {
-    serverSave.addEventListener("click", async () => {
-      const input = document.getElementById("settings-server") as HTMLInputElement;
-      const url = input.value.trim();
-      if (!url) {
-        showError("Server URL is required");
-        return;
-      }
-      await app.updateServer(url);
-      showError("Server updated — reconnecting...");
     });
   }
 
