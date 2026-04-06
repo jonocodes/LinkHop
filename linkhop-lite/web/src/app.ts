@@ -47,8 +47,8 @@ export class App {
       this.ntfyUrl = saved.ntfy_url;
       this.encryptionEnabled = saved.encryption_enabled ?? false;
       this.selfSendEnabled = saved.self_send_enabled ?? false;
-      if (saved.password) {
-        this.encryptionKey = await deriveEncryptionKey(saved.password);
+      if (saved.pool && saved.password) {
+        this.encryptionKey = await deriveEncryptionKey(saved.pool, saved.password);
       }
       this.state = await loadState();
       this.screen = "main";
@@ -59,10 +59,10 @@ export class App {
     }
   }
 
-  async setup(name: string, password: string, ntfyUrl: string): Promise<void> {
-    const networkId = await deriveNetworkId(password);
+  async setup(name: string, pool: string, password: string, ntfyUrl: string): Promise<void> {
+    const networkId = await deriveNetworkId(pool, password);
     this.ntfyUrl = ntfyUrl;
-    this.encryptionKey = await deriveEncryptionKey(password);
+    this.encryptionKey = await deriveEncryptionKey(pool, password);
     this.encryptionEnabled = false;
 
     this.config = {
@@ -75,6 +75,7 @@ export class App {
     await saveConfig({
       device: this.config,
       ntfy_url: this.ntfyUrl,
+      pool,
       password,
       encryption_enabled: false,
     });

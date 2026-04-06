@@ -37,7 +37,7 @@ async function ensureNtfy(): Promise<void> {
 }
 
 /** Complete the setup form on a fresh page */
-async function setupDevice(page: Page, name: string, password: string): Promise<void> {
+async function setupDevice(page: Page, name: string, password: string, pool = "e2e-pool"): Promise<void> {
   // Stub Notification API so requestPermission() doesn't hang in headless Firefox
   await page.addInitScript(() => {
     (window as any).Notification = {
@@ -49,6 +49,7 @@ async function setupDevice(page: Page, name: string, password: string): Promise<
   await page.waitForSelector("#setup-name");
 
   await page.fill("#setup-name", name);
+  await page.fill("#setup-pool", pool);
   await page.fill("#setup-password", password);
   await page.fill("#setup-ntfy", NTFY_URL);
   await page.click("#setup-btn");

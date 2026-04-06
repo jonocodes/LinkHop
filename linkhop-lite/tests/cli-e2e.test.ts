@@ -110,7 +110,7 @@ describe.skipIf(SKIP)("CLI e2e", () => {
   }
 
   it("init creates config and whoami shows it", () => {
-    const initOut = cliRun('init --name "TestCLI" --password "secret123" --encrypt');
+    const initOut = cliRun('init --name "TestCLI" --pool "testpool" --password "secret123" --encrypt');
     expect(initOut).toContain("Initialized device");
     expect(initOut).toContain("TestCLI");
     expect(initOut).toContain("encryption: on");
@@ -308,7 +308,7 @@ describe.skipIf(SKIP)("CLI e2e", () => {
   });
 
   it("init with --encrypt flag enables encryption", () => {
-    const out = cliRun('init --name "Encryptor" --password "secret" --encrypt');
+    const out = cliRun('init --name "Encryptor" --pool "testpool" --password "secret" --encrypt');
     expect(out).toContain("encryption: on");
 
     const whoami = cliRun("whoami");
@@ -317,7 +317,7 @@ describe.skipIf(SKIP)("CLI e2e", () => {
   });
 
   it("announce includes encryption capability when password is set", async () => {
-    cliRun('init --name "EncAnn" --password "secret" --encrypt --env test');
+    cliRun('init --name "EncAnn" --pool "testpool" --password "secret" --encrypt --env test');
 
     const regTopic = cliRun("whoami").match(/registry_topic:\s+(\S+)/)?.[1]!;
     const collected = collectEvents(server.url, regTopic, 1);

@@ -50,6 +50,7 @@ function tx(
 export interface BrowserConfig {
   device: DeviceConfig;
   ntfy_url: string;
+  pool?: string;
   password?: string;
   encryption_enabled?: boolean;
   self_send_enabled?: boolean;

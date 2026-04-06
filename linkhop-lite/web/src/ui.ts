@@ -32,7 +32,11 @@ function renderSetupScreen(): string {
         <input id="setup-name" type="text" placeholder="My Phone" />
       </div>
       <div class="form-group">
-        <label for="setup-password">Network password</label>
+        <label for="setup-pool">Pool name</label>
+        <input id="setup-pool" type="text" placeholder="my-family" />
+      </div>
+      <div class="form-group">
+        <label for="setup-password">Password</label>
         <input id="setup-password" type="password" placeholder="shared secret" />
       </div>
       <div class="form-group">
@@ -79,11 +83,12 @@ function renderMainScreen(): string {
 function bindSetupEvents(): void {
   document.getElementById("setup-btn")!.addEventListener("click", async () => {
     const name = (document.getElementById("setup-name") as HTMLInputElement).value.trim();
+    const pool = (document.getElementById("setup-pool") as HTMLInputElement).value.trim();
     const password = (document.getElementById("setup-password") as HTMLInputElement).value;
     const ntfyUrl = (document.getElementById("setup-ntfy") as HTMLInputElement).value.trim();
 
-    if (!name || !password) {
-      showError("Name and password are required");
+    if (!name || !pool || !password) {
+      showError("Name, pool, and password are required");
       return;
     }
 
@@ -92,7 +97,7 @@ function bindSetupEvents(): void {
     btn.textContent = "Joining...";
 
     try {
-      await app.setup(name, password, ntfyUrl);
+      await app.setup(name, pool, password, ntfyUrl);
     } catch (err) {
       showError(`Setup failed: ${err}`);
       btn.disabled = false;

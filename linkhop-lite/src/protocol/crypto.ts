@@ -1,12 +1,12 @@
-const ENCRYPTION_SALT = "linkhop-lite-encryption-v1";
+const ENCRYPTION_SALT_PREFIX = "linkhop-lite-encryption-v1:";
 const ITERATIONS = 100_000;
 const KEY_BITS = 256;
 
 /**
- * Derive an AES-GCM encryption key from a shared password.
+ * Derive an AES-GCM encryption key from a pool name and shared password.
  * Uses PBKDF2 via Web Crypto with a different salt than network_id derivation.
  */
-export async function deriveEncryptionKey(password: string): Promise<CryptoKey> {
+export async function deriveEncryptionKey(pool: string, password: string): Promise<CryptoKey> {
   const encoder = new TextEncoder();
   const keyMaterial = await crypto.subtle.importKey(
     "raw",
@@ -19,7 +19,7 @@ export async function deriveEncryptionKey(password: string): Promise<CryptoKey> 
   return crypto.subtle.deriveKey(
     {
       name: "PBKDF2",
-      salt: encoder.encode(ENCRYPTION_SALT),
+      salt: encoder.encode(ENCRYPTION_SALT_PREFIX + pool),
       iterations: ITERATIONS,
       hash: "SHA-256",
     },
