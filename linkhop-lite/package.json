@@ -10,9 +10,9 @@
   },
   "scripts": {
     "build": "tsc",
-    "test": "vitest run",
-    "test:watch": "vitest",
-    "cli": "node --loader ts-node/esm src/cli/index.ts"
+    "test": "bun vitest run",
+    "test:watch": "bun vitest",
+    "cli": "bun src/cli/index.ts"
   },
   "keywords": [],
   "author": "",
