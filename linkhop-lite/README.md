@@ -17,21 +17,31 @@ bun run dev
 
 ```
 src/
-  protocol/    # Types, event factories, validation, topic naming, ID gen
+  protocol/    # Types, event factories, validation, topic naming, ID gen, crypto
   engine/      # State machine reducer, local actions, state queries
   transport/   # ntfy publish/subscribe (CLI)
   cli/         # Reference CLI (only layer with Node dependencies)
 web/
   src/         # Browser app (PWA)
-    app.ts     # App controller wiring engine + SSE + IndexedDB
+    app.ts     # App controller wiring engine + SSE + IndexedDB + encryption
     db.ts      # IndexedDB persistence
     sse.ts     # SSE transport for ntfy
-    ui.ts      # Vanilla TS UI
+    ui.ts      # Vanilla TS UI (devices, inbox, pending, debug tabs)
 tests/         # Vitest test suites
+e2e/           # Playwright browser e2e tests
 fixtures/      # Replay fixture JSON files
 ```
 
 The protocol and engine layers use only web-standard APIs and have zero Node dependencies, so they can run in the browser unchanged.
+
+## Encryption
+
+Messages can be optionally encrypted with AES-GCM. The encryption key is derived from the same shared password used for network joining (via PBKDF2 with a separate salt).
+
+- **Opt-in per device** — toggle in the status bar switches between "Encrypted" and "Plaintext"
+- **Mixed mode** — all devices can join regardless of encryption. If a device receives an encrypted message it can't decrypt, the UI shows "Encrypted message — cannot decrypt"
+- **Capabilities advertised** — `device.announce` includes `capabilities: ["encryption"]` when a key is available. The devices list shows an E2E badge for encryption-capable peers.
+- **Metadata stays plaintext** — only `payload.body` is encrypted. Envelope fields (type, timestamps, device IDs) remain visible for routing and acks.
 
 ## Reference CLI
 
@@ -67,20 +77,23 @@ bun src/cli/index.ts export-state
 bun src/cli/index.ts replay fixtures/device-announce.json
 ```
 
-## Integration tests
-
-Integration tests run against a real ntfy binary. They auto-skip if the binary isn't present, so `bun test` always works.
+## Testing
 
 ```bash
-# Download ntfy for your platform and run all tests
+# Unit + simulation tests
+bun test
+
+# Integration tests (downloads ntfy binary, auto-skips if unavailable)
 bun run test:integration
 
-# Or download manually (detects OS and arch)
+# Browser e2e tests (Playwright + Firefox + real ntfy)
+bun run test:e2e
+
+# Download ntfy manually (detects OS and arch)
 bash scripts/download-ntfy.sh
-bun test
 ```
 
-Supports linux and macOS on amd64/arm64. The harness starts ntfy on a local port, runs the tests, then stops it.
+Integration and e2e tests run against a real ntfy binary. They auto-skip if the binary isn't present, so `bun test` always works. Supports linux and macOS on amd64/arm64.
 
 ## Spec documents
 
@@ -92,11 +105,11 @@ Supports linux and macOS on amd64/arm64. The harness starts ntfy on a local port
 ### Protocol types and wire format
 
 - [x] Protocol event envelope (type, timestamp, network_id, event_id, from_device_id, payload)
-- [x] `device.announce` event and payload
+- [x] `device.announce` event and payload (with optional capabilities)
 - [x] `device.leave` event and payload
-- [x] `msg.send` event and payload (with `body.kind: "text"`)
+- [x] `msg.send` event and payload (with `body.kind: "text"` and `body.kind: "encrypted"`)
 - [x] `msg.received` event and payload
-- [x] Local device record shape
+- [x] Local device record shape (with capabilities)
 - [x] Local message record shape (with state: pending | received)
 - [x] Local event log entry shape
 
@@ -115,7 +128,7 @@ Supports linux and macOS on amd64/arm64. The harness starts ntfy on a local port
 
 ### Engine / state machine
 
-- [x] `device.announce` creates/updates device record
+- [x] `device.announce` creates/updates device record (stores capabilities)
 - [x] `device.announce` clears `is_removed` on re-announce after leave
 - [x] `device.leave` marks device as removed
 - [x] `msg.send` stores message as received and emits `msg.received` ack
@@ -126,9 +139,19 @@ Supports linux and macOS on amd64/arm64. The harness starts ntfy on a local port
 - [x] `msg.received` ignores acks not addressed to local device
 - [x] Event log records all incoming events
 
+### Encryption
+
+- [x] AES-GCM key derivation from password (PBKDF2, separate salt from network_id)
+- [x] Encrypt message body on send (when toggle enabled)
+- [x] Decrypt message body on receive (when key available)
+- [x] Graceful fallback for undecryptable messages (UI shows warning)
+- [x] `body.kind: "encrypted"` wire format (ciphertext + IV, base64)
+- [x] `capabilities: ["encryption"]` in device.announce
+- [x] Encryption toggle persisted in browser config
+
 ### Local actions
 
-- [x] `actionAnnounce` — produce device.announce publish effect
+- [x] `actionAnnounce` — produce device.announce publish effect (with capabilities)
 - [x] `actionLeave` — produce device.leave publish effect
 - [x] `actionSend` — store pending message + produce msg.send publish effect
 
@@ -136,7 +159,7 @@ Supports linux and macOS on amd64/arm64. The harness starts ntfy on a local port
 
 - [x] ntfy publish (POST JSON to topic)
 - [x] ntfy subscribe (NDJSON streaming — CLI)
-- [x] SSE subscribe (browser)
+- [x] SSE subscribe (browser, with `?since=30s` for late-join catch-up)
 - [x] HTTP publish (browser)
 - [x] Reconnect via EventSource auto-reconnect + re-announce
 
@@ -177,14 +200,12 @@ Supports linux and macOS on amd64/arm64. The harness starts ntfy on a local port
 - [x] Integration: two-device discovery over real ntfy
 - [x] Integration: full send/receive/ack flow over real ntfy
 - [x] Fixture runner assertion failure detection
-
-### Deferred (per spec)
-
-- [ ] Retry / offline recovery extension
-- [ ] Encryption / signing
-- [ ] Password rotation
-- [ ] Heartbeat / stronger presence
-- [x] Password-derived network_id (PBKDF2 via Web Crypto)
+- [x] Encryption: key derivation, round-trip, wrong key, corruption
+- [x] E2e: setup flow (Playwright + Firefox)
+- [x] E2e: device discovery between two browser contexts
+- [x] E2e: cross-device messaging with ack
+- [x] E2e: IndexedDB persistence across reload
+- [x] E2e: leave network and reset
 
 ### Browser app (PWA)
 
@@ -194,12 +215,12 @@ Supports linux and macOS on amd64/arm64. The harness starts ntfy on a local port
 - [x] IndexedDB persistence (config, devices, messages, event log)
 - [x] SSE subscriptions to ntfy
 - [x] Setup screen (name, password, ntfy URL)
-- [x] Tab UI (devices, inbox, pending)
+- [x] Tab UI (devices, inbox, pending, debug)
 - [x] Send messages from inbox tab
 - [x] Connection status indicator (connected/connecting/disconnected)
 - [x] Offline banner with reconnecting state
 - [x] Auto-reconnect via EventSource with re-announce
-- [x] Persistent config (ntfy URL survives reload)
+- [x] Persistent config (ntfy URL + encryption toggle survive reload)
 - [x] Leave network and reset from UI
 - [x] Messages sorted newest-first
 - [x] SVG app icon
@@ -207,4 +228,16 @@ Supports linux and macOS on amd64/arm64. The harness starts ntfy on a local port
 - [x] Foreground notifications on new message (via SW showNotification)
 - [x] Custom service worker with push event handler
 - [x] Notification click opens/focuses app
+- [x] Encryption toggle in status bar (Encrypted / Plaintext)
+- [x] E2E capability badge on devices list
+- [x] Encrypted message fallback display ("cannot decrypt")
+- [x] Debug tab (device config, connection status, event log)
+
+### Deferred (per spec)
+
+- [ ] Retry / offline recovery extension
+- [ ] Password rotation
+- [ ] Heartbeat / stronger presence
+- [x] Password-derived network_id (PBKDF2 via Web Crypto)
+- [x] Encryption (AES-GCM, opt-in, mixed mode)
 - [ ] ntfy web push subscription (server-side feature; SW push handler is ready)
