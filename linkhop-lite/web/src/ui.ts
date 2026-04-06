@@ -52,8 +52,6 @@ function renderMainScreen(): string {
         <span class="status-dot" id="status-dot"></span>
         <span id="status-text">Disconnected</span>
         <span class="status-spacer"></span>
-        <button class="status-toggle" id="encrypt-toggle" title="Toggle encryption"></button>
-        <button class="status-action" id="leave-btn" title="Leave network">Leave</button>
       </div>
 
       <div id="offline-banner" class="offline-banner" style="display:none">
@@ -165,19 +163,6 @@ function bindMainEvents(): void {
     }
   });
 
-  // Encryption toggle
-  document.getElementById("encrypt-toggle")!.addEventListener("click", async () => {
-    await app.toggleEncryption();
-    renderEncryptionToggle();
-  });
-  renderEncryptionToggle();
-
-  // Leave
-  document.getElementById("leave-btn")!.addEventListener("click", async () => {
-    if (!confirm("Leave this network? Local data will be cleared.")) return;
-    await app.leave();
-    await app.reset();
-  });
 }
 
 function showScreen(screen: AppScreen): void {
@@ -207,19 +192,6 @@ function renderStatus(status: ConnectionStatus): void {
   }
 }
 
-function renderEncryptionToggle(): void {
-  const btn = document.getElementById("encrypt-toggle");
-  if (!btn) return;
-  const on = app.encryptionEnabled && app.encryptionKey !== null;
-  const hasKey = app.encryptionKey !== null;
-  btn.textContent = on ? "Encrypted" : "Plaintext";
-  btn.className = `status-toggle ${on ? "on" : "off"}`;
-  btn.title = hasKey
-    ? (on ? "Encryption on — click to send plaintext" : "Encryption off — click to encrypt")
-    : "No encryption key (joined without password)";
-  if (!hasKey) btn.setAttribute("disabled", "true");
-  else btn.removeAttribute("disabled");
-}
 
 function updateSendFormVisibility(): void {
   const sendForm = document.getElementById("send-form");
@@ -391,7 +363,6 @@ function bindSettingsEvents(): void {
   if (encToggle) {
     encToggle.addEventListener("click", async () => {
       await app.toggleEncryption();
-      renderEncryptionToggle();
       renderMainContent();
     });
   }
