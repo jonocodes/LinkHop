@@ -1,0 +1,37 @@
+{
+  "name": "linkhop-lite",
+  "version": "0.1.0",
+  "description": "LinkHop Lite protocol library and reference CLI",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "bin": {
+    "linkhop-lite": "dist/cli/index.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "test": "bun vitest run",
+    "test:integration": "bash scripts/download-ntfy.sh && bun vitest run",
+    "test:watch": "bun vitest",
+    "cli": "bun src/cli/index.ts",
+    "dev": "vite",
+    "build:web": "vite build",
+    "preview": "vite preview",
+    "test:e2e": "bash scripts/download-ntfy.sh && bunx playwright test"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "devDependencies": {
+    "@playwright/test": "^1.59.1",
+    "@types/node": "^25.5.2",
+    "typescript": "^6.0.2",
+    "vite": "^8.0.3",
+    "vite-plugin-pwa": "^1.2.0",
+    "vitest": "^4.1.2"
+  },
+  "dependencies": {
+    "commander": "^14.0.3",
+    "workbox-precaching": "^7.4.0"
+  }
+}

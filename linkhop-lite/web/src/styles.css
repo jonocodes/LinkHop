@@ -1,0 +1,374 @@
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+:root {
+  --bg: #1a1a2e;
+  --surface: #16213e;
+  --surface-2: #0f3460;
+  --accent: #e94560;
+  --text: #eee;
+  --text-dim: #999;
+  --success: #4ade80;
+  --border: #2a2a4a;
+  --radius: 8px;
+}
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  min-height: 100dvh;
+}
+
+#app {
+  max-width: 480px;
+  margin: 0 auto;
+  padding: 16px;
+  min-height: 100dvh;
+  display: flex;
+  flex-direction: column;
+}
+
+h1 {
+  font-size: 1.3rem;
+  margin-bottom: 16px;
+}
+
+h2 {
+  font-size: 1.1rem;
+  margin-bottom: 12px;
+  color: var(--text-dim);
+}
+
+.screen {
+  display: none;
+  flex-direction: column;
+  flex: 1;
+}
+
+.screen.active {
+  display: flex;
+}
+
+/* Setup form */
+.form-group {
+  margin-bottom: 14px;
+}
+
+.form-group label {
+  display: block;
+  font-size: 0.85rem;
+  color: var(--text-dim);
+  margin-bottom: 4px;
+}
+
+input, select {
+  width: 100%;
+  padding: 10px 12px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  color: var(--text);
+  font-size: 1rem;
+}
+
+input:focus, select:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+button {
+  padding: 10px 16px;
+  background: var(--accent);
+  color: white;
+  border: none;
+  border-radius: var(--radius);
+  font-size: 1rem;
+  cursor: pointer;
+  width: 100%;
+}
+
+button:active {
+  opacity: 0.8;
+}
+
+button.secondary {
+  background: var(--surface-2);
+}
+
+/* Tab nav */
+.tab-bar {
+  display: flex;
+  gap: 2px;
+  background: var(--surface);
+  border-radius: var(--radius);
+  padding: 3px;
+  margin-bottom: 16px;
+}
+
+.tab-bar button {
+  flex: 1;
+  padding: 8px;
+  font-size: 0.85rem;
+  background: transparent;
+  border-radius: 6px;
+}
+
+.tab-bar button.active {
+  background: var(--surface-2);
+}
+
+/* Device list */
+.device-item {
+  padding: 10px 12px;
+  background: var(--surface);
+  border-radius: var(--radius);
+  margin-bottom: 8px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.device-item .name {
+  font-weight: 600;
+}
+
+.device-item .meta {
+  font-size: 0.8rem;
+  color: var(--text-dim);
+}
+
+.device-item .badge {
+  font-size: 0.7rem;
+  padding: 2px 8px;
+  border-radius: 10px;
+  background: var(--surface-2);
+}
+
+.device-item .badge.self {
+  background: var(--accent);
+}
+
+.device-item .badge.removed {
+  opacity: 0.5;
+}
+
+/* Messages */
+.msg-item {
+  padding: 10px 12px;
+  background: var(--surface);
+  border-radius: var(--radius);
+  margin-bottom: 8px;
+}
+
+.msg-item .msg-from {
+  font-size: 0.8rem;
+  color: var(--text-dim);
+  margin-bottom: 4px;
+}
+
+.msg-item .msg-body {
+  font-size: 0.95rem;
+}
+
+.msg-item .msg-time {
+  font-size: 0.75rem;
+  color: var(--text-dim);
+  margin-top: 4px;
+}
+
+.msg-item.pending {
+  border-left: 3px solid var(--accent);
+}
+
+.msg-item.received {
+  border-left: 3px solid var(--success);
+}
+
+/* Send form */
+.send-form {
+  display: flex;
+  gap: 8px;
+  margin-top: auto;
+  padding-top: 12px;
+}
+
+.send-form input {
+  flex: 1;
+}
+
+.send-form button {
+  width: auto;
+  padding: 10px 20px;
+}
+
+/* Status bar */
+.status-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  background: var(--surface);
+  border-radius: var(--radius);
+  margin-bottom: 12px;
+  font-size: 0.8rem;
+}
+
+.status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--text-dim);
+}
+
+.status-dot.connected {
+  background: var(--success);
+}
+
+.status-dot.connecting {
+  background: #facc15;
+  animation: pulse 1.5s ease-in-out infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.3; }
+}
+
+.status-spacer {
+  flex: 1;
+}
+
+.status-toggle {
+  padding: 4px 10px;
+  font-size: 0.7rem;
+  width: auto;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+}
+
+.status-toggle.on {
+  background: var(--success);
+  color: #000;
+  border-color: var(--success);
+}
+
+.status-toggle.off {
+  background: transparent;
+  color: var(--text-dim);
+}
+
+.status-toggle:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.status-action {
+  padding: 4px 10px;
+  font-size: 0.75rem;
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--text-dim);
+  width: auto;
+}
+
+.status-action:active {
+  background: var(--surface-2);
+}
+
+/* Offline banner */
+.offline-banner {
+  background: #92400e;
+  color: #fef3c7;
+  text-align: center;
+  padding: 8px;
+  border-radius: var(--radius);
+  margin-bottom: 12px;
+  font-size: 0.85rem;
+  animation: pulse 2s ease-in-out infinite;
+}
+
+.empty-state {
+  text-align: center;
+  color: var(--text-dim);
+  padding: 40px 0;
+  font-size: 0.9rem;
+}
+
+/* Encrypted message */
+.encrypted-msg {
+  color: var(--accent);
+  font-style: italic;
+}
+
+/* Capability badge */
+.capability-badge {
+  font-size: 0.6rem;
+  padding: 1px 5px;
+  border-radius: 6px;
+  background: var(--surface-2);
+  color: var(--success);
+  vertical-align: middle;
+  font-weight: normal;
+}
+
+/* Debug view */
+.debug-section {
+  margin-bottom: 16px;
+}
+
+.debug-title {
+  font-size: 0.8rem;
+  color: var(--text-dim);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-bottom: 6px;
+}
+
+.debug-pre {
+  background: var(--surface);
+  padding: 10px 12px;
+  border-radius: var(--radius);
+  font-size: 0.75rem;
+  font-family: monospace;
+  overflow-x: auto;
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+
+.debug-event {
+  display: flex;
+  gap: 8px;
+  padding: 6px 12px;
+  background: var(--surface);
+  border-radius: 4px;
+  margin-bottom: 2px;
+  font-size: 0.75rem;
+  font-family: monospace;
+  align-items: center;
+}
+
+.debug-event-type {
+  color: var(--accent);
+  min-width: 110px;
+}
+
+.debug-event-dir {
+  color: var(--text-dim);
+  min-width: 60px;
+}
+
+.debug-event-from {
+  color: var(--text-dim);
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.debug-event-time {
+  color: var(--text-dim);
+  white-space: nowrap;
+}

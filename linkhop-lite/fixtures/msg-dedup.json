@@ -1,0 +1,64 @@
+{
+  "name": "msg-dedup",
+  "description": "Duplicate msg.send with same msg_id does not create a second message",
+  "device": {
+    "device_id": "dev_local",
+    "device_name": "Local",
+    "network_id": "net_test",
+    "env": "test"
+  },
+  "initial_state": {
+    "devices": [
+      {
+        "device_id": "dev_peer",
+        "device_name": "Peer",
+        "device_topic": "linkhop-test-net_test-device-dev_peer",
+        "last_event_at": "2026-04-04T18:00:00Z",
+        "last_event_type": "device.announce",
+        "is_removed": false
+      }
+    ]
+  },
+  "steps": [
+    {
+      "kind": "incoming_event",
+      "event": {
+        "type": "msg.send",
+        "timestamp": "2026-04-04T18:10:00Z",
+        "network_id": "net_test",
+        "event_id": "evt_010",
+        "from_device_id": "dev_peer",
+        "payload": {
+          "msg_id": "msg_dup",
+          "attempt_id": 1,
+          "to_device_id": "dev_local",
+          "body": { "kind": "text", "text": "hello" }
+        }
+      }
+    },
+    {
+      "kind": "incoming_event",
+      "event": {
+        "type": "msg.send",
+        "timestamp": "2026-04-04T18:10:05Z",
+        "network_id": "net_test",
+        "event_id": "evt_011",
+        "from_device_id": "dev_peer",
+        "payload": {
+          "msg_id": "msg_dup",
+          "attempt_id": 2,
+          "to_device_id": "dev_local",
+          "body": { "kind": "text", "text": "hello" }
+        }
+      }
+    }
+  ],
+  "expected": {
+    "messages": [
+      {
+        "msg_id": "msg_dup",
+        "state": "received"
+      }
+    ]
+  }
+}
