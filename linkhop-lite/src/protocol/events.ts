@@ -15,7 +15,10 @@ function now(): string {
   return new Date().toISOString();
 }
 
-export function createDeviceAnnounce(config: DeviceConfig): DeviceAnnounceEvent {
+export function createDeviceAnnounce(
+  config: DeviceConfig,
+  capabilities?: string[],
+): DeviceAnnounceEvent {
   return {
     type: "device.announce",
     timestamp: now(),
@@ -27,6 +30,7 @@ export function createDeviceAnnounce(config: DeviceConfig): DeviceAnnounceEvent 
       device_name: config.device_name,
       device_topic: deviceTopicFromConfig(config),
       protocol_version: PROTOCOL_VERSION,
+      ...(capabilities?.length ? { capabilities } : {}),
     },
   };
 }

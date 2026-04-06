@@ -24,16 +24,25 @@ export interface DeviceAnnouncePayload {
   device_name: string;
   device_topic: string;
   protocol_version: string;
+  capabilities?: string[];
 }
 
 export interface DeviceLeavePayload {
   device_id: string;
 }
 
-export interface MessageBody {
+export interface TextBody {
   kind: "text";
   text: string;
 }
+
+export interface EncryptedBody {
+  kind: "encrypted";
+  ciphertext: string;
+  iv: string;
+}
+
+export type MessageBody = TextBody | EncryptedBody;
 
 export interface MsgSendPayload {
   msg_id: string;
@@ -71,6 +80,7 @@ export interface DeviceRecord {
   last_event_at: string;
   last_event_type: EventType;
   is_removed: boolean;
+  capabilities?: string[];
 }
 
 export interface MessageRecord {

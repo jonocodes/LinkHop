@@ -50,6 +50,8 @@ function tx(
 export interface BrowserConfig {
   device: DeviceConfig;
   ntfy_url: string;
+  password?: string;
+  encryption_enabled?: boolean;
 }
 
 export async function saveConfig(config: BrowserConfig): Promise<void> {

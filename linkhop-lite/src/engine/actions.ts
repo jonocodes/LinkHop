@@ -17,8 +17,8 @@ import type { Effect } from "./reducer.js";
  * These produce effects (events to publish) and update local state.
  */
 
-export function actionAnnounce(config: DeviceConfig): Effect {
-  const event = createDeviceAnnounce(config);
+export function actionAnnounce(config: DeviceConfig, capabilities?: string[]): Effect {
+  const event = createDeviceAnnounce(config, capabilities);
   return { type: "publish", topic: registryTopicFromConfig(config), event };
 }
 

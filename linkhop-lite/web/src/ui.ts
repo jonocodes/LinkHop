@@ -1,8 +1,9 @@
 import { App, type AppScreen, type ConnectionStatus } from "./app.js";
 import { getDevices, getInbox, getPending } from "../../src/engine/state.js";
+import type { MessageBody } from "../../src/protocol/types.js";
 
 let app: App;
-let currentTab: "devices" | "inbox" | "pending" = "devices";
+let currentTab: "devices" | "inbox" | "pending" | "debug" = "devices";
 
 export function mount(root: HTMLElement): void {
   app = new App({
@@ -48,6 +49,8 @@ function renderMainScreen(): string {
       <div id="status-bar" class="status-bar">
         <span class="status-dot" id="status-dot"></span>
         <span id="status-text">Disconnected</span>
+        <span class="status-spacer"></span>
+        <button class="status-toggle" id="encrypt-toggle" title="Toggle encryption"></button>
         <button class="status-action" id="leave-btn" title="Leave network">Leave</button>
       </div>
 
@@ -59,6 +62,7 @@ function renderMainScreen(): string {
         <button class="active" data-tab="devices">Devices</button>
         <button data-tab="inbox">Inbox</button>
         <button data-tab="pending">Pending</button>
+        <button data-tab="debug">Debug</button>
       </div>
 
       <div id="main-content"></div>
@@ -127,6 +131,13 @@ function bindMainEvents(): void {
     }
   });
 
+  // Encryption toggle
+  document.getElementById("encrypt-toggle")!.addEventListener("click", async () => {
+    await app.toggleEncryption();
+    renderEncryptionToggle();
+  });
+  renderEncryptionToggle();
+
   // Leave
   document.getElementById("leave-btn")!.addEventListener("click", async () => {
     if (!confirm("Leave this network? Local data will be cleared.")) return;
@@ -162,6 +173,20 @@ function renderStatus(status: ConnectionStatus): void {
   }
 }
 
+function renderEncryptionToggle(): void {
+  const btn = document.getElementById("encrypt-toggle");
+  if (!btn) return;
+  const on = app.encryptionEnabled && app.encryptionKey !== null;
+  const hasKey = app.encryptionKey !== null;
+  btn.textContent = on ? "Encrypted" : "Plaintext";
+  btn.className = `status-toggle ${on ? "on" : "off"}`;
+  btn.title = hasKey
+    ? (on ? "Encryption on — click to send plaintext" : "Encryption off — click to encrypt")
+    : "No encryption key (joined without password)";
+  if (!hasKey) btn.setAttribute("disabled", "true");
+  else btn.removeAttribute("disabled");
+}
+
 function updateSendFormVisibility(): void {
   const sendForm = document.getElementById("send-form");
   if (sendForm) {
@@ -186,6 +211,10 @@ function renderMainContent(): void {
       container.innerHTML = renderPending();
       updateSendFormVisibility();
       break;
+    case "debug":
+      container.innerHTML = renderDebug();
+      updateSendFormVisibility();
+      break;
   }
 }
 
@@ -200,10 +229,11 @@ function renderDevices(): string {
       const isSelf = d.device_id === app.config?.device_id;
       const badgeClass = isSelf ? "badge self" : d.is_removed ? "badge removed" : "badge";
       const badgeText = isSelf ? "you" : d.is_removed ? "left" : "active";
+      const hasEncryption = d.capabilities?.includes("encryption");
       return `
         <div class="device-item">
           <div>
-            <div class="name">${esc(d.device_name)}</div>
+            <div class="name">${esc(d.device_name)}${hasEncryption ? ' <span class="capability-badge">E2E</span>' : ""}</div>
             <div class="meta">${esc(d.device_id)}</div>
           </div>
           <span class="${badgeClass}">${badgeText}</span>
@@ -225,10 +255,11 @@ function renderInbox(): string {
     .map((m) => {
       const from = app.state.devices.get(m.from_device_id);
       const fromLabel = from ? from.device_name : m.from_device_id;
+      const bodyHtml = renderMessageBody(m.body);
       return `
         <div class="msg-item received">
           <div class="msg-from">From ${esc(fromLabel)}</div>
-          <div class="msg-body">${esc(m.body.text)}</div>
+          <div class="msg-body">${bodyHtml}</div>
           <div class="msg-time">${formatTime(m.created_at)}</div>
         </div>
       `;
@@ -248,10 +279,11 @@ function renderPending(): string {
     .map((m) => {
       const to = app.state.devices.get(m.to_device_id);
       const toLabel = to ? to.device_name : m.to_device_id;
+      const bodyHtml = renderMessageBody(m.body);
       return `
         <div class="msg-item pending">
           <div class="msg-from">To ${esc(toLabel)}</div>
-          <div class="msg-body">${esc(m.body.text)}</div>
+          <div class="msg-body">${bodyHtml}</div>
           <div class="msg-time">${formatTime(m.created_at)} \u00b7 attempt ${m.last_attempt_id}</div>
         </div>
       `;
@@ -277,6 +309,63 @@ function updateSendTargets(): void {
   if (currentValue && devices.some((d) => d.device_id === currentValue)) {
     select.value = currentValue;
   }
+}
+
+function renderMessageBody(body: MessageBody): string {
+  if (body.kind === "text") {
+    return esc(body.text);
+  }
+  return `<span class="encrypted-msg">Encrypted message — cannot decrypt</span>`;
+}
+
+function renderDebug(): string {
+  const sections: string[] = [];
+
+  // Device config
+  if (app.config) {
+    sections.push(`
+      <div class="debug-section">
+        <div class="debug-title">Device Config</div>
+        <pre class="debug-pre">${esc(JSON.stringify({
+          device_id: app.config.device_id,
+          device_name: app.config.device_name,
+          network_id: app.config.network_id,
+          env: app.config.env,
+        }, null, 2))}</pre>
+      </div>
+    `);
+  }
+
+  // Connection & encryption
+  sections.push(`
+    <div class="debug-section">
+      <div class="debug-title">Status</div>
+      <pre class="debug-pre">${esc(JSON.stringify({
+        connection: app.connection,
+        ntfy_url: app.ntfyUrl,
+        encryption_enabled: app.encryptionEnabled,
+        has_encryption_key: app.encryptionKey !== null,
+      }, null, 2))}</pre>
+    </div>
+  `);
+
+  // Event log (most recent 50)
+  const log = app.state.eventLog.slice(-50).reverse();
+  sections.push(`
+    <div class="debug-section">
+      <div class="debug-title">Event Log (last ${log.length})</div>
+      ${log.length === 0 ? '<div class="empty-state">No events recorded yet.</div>' : log.map((e) => `
+        <div class="debug-event">
+          <span class="debug-event-type">${esc(e.type)}</span>
+          <span class="debug-event-dir">${e.direction}</span>
+          <span class="debug-event-from">${esc(e.from_device_id)}</span>
+          <span class="debug-event-time">${formatTime(e.timestamp)}</span>
+        </div>
+      `).join("")}
+    </div>
+  `);
+
+  return sections.join("");
 }
 
 function formatTime(iso: string): string {

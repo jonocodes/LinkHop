@@ -49,7 +49,7 @@ export function processEvent(
 }
 
 function handleDeviceAnnounce(state: LocalState, event: DeviceAnnounceEvent): ReducerResult {
-  const { device_id, device_name, device_topic } = event.payload;
+  const { device_id, device_name, device_topic, capabilities } = event.payload;
 
   const existing = state.devices.get(device_id);
   const record: DeviceRecord = {
@@ -59,6 +59,7 @@ function handleDeviceAnnounce(state: LocalState, event: DeviceAnnounceEvent): Re
     last_event_at: event.timestamp,
     last_event_type: event.type,
     is_removed: false,
+    capabilities,
   };
 
   // If device was previously removed, re-announce clears that

@@ -1,8 +1,9 @@
-import type { AnyProtocolEvent, DeviceConfig, LocalState, MessageBody } from "../../src/protocol/types.js";
+import type { AnyProtocolEvent, DeviceConfig, LocalState, MessageBody, TextBody } from "../../src/protocol/types.js";
 import { validateEvent } from "../../src/protocol/validate.js";
 import { registryTopicFromConfig, deviceTopicFromConfig } from "../../src/protocol/topics.js";
 import { generateDeviceId } from "../../src/protocol/ids.js";
 import { deriveNetworkId } from "../../src/protocol/network.js";
+import { deriveEncryptionKey, encryptBody, decryptBody } from "../../src/protocol/crypto.js";
 import { createEmptyState } from "../../src/engine/state.js";
 import { processEvent } from "../../src/engine/reducer.js";
 import { actionAnnounce, actionLeave, actionSend } from "../../src/engine/actions.js";
@@ -27,6 +28,8 @@ export class App {
   screen: AppScreen = "setup";
   connection: ConnectionStatus = "disconnected";
   ntfyUrl = "http://localhost:8080";
+  encryptionEnabled = false;
+  encryptionKey: CryptoKey | null = null;
 
   private callbacks: AppCallbacks;
   private cleanupSSE: (() => void)[] = [];
@@ -41,6 +44,10 @@ export class App {
     if (saved) {
       this.config = saved.device;
       this.ntfyUrl = saved.ntfy_url;
+      this.encryptionEnabled = saved.encryption_enabled ?? false;
+      if (saved.password) {
+        this.encryptionKey = await deriveEncryptionKey(saved.password);
+      }
       this.state = await loadState();
       this.screen = "main";
       this.callbacks.onScreenChange("main");
@@ -53,6 +60,8 @@ export class App {
   async setup(name: string, password: string, ntfyUrl: string): Promise<void> {
     const networkId = await deriveNetworkId(password);
     this.ntfyUrl = ntfyUrl;
+    this.encryptionKey = await deriveEncryptionKey(password);
+    this.encryptionEnabled = true;
 
     this.config = {
       device_id: generateDeviceId(),
@@ -61,7 +70,12 @@ export class App {
       env: "live",
     };
 
-    await saveConfig({ device: this.config, ntfy_url: this.ntfyUrl });
+    await saveConfig({
+      device: this.config,
+      ntfy_url: this.ntfyUrl,
+      password,
+      encryption_enabled: true,
+    });
     await requestPermission();
     this.state = createEmptyState();
     this.screen = "main";
@@ -113,9 +127,25 @@ export class App {
     this.setConnection("disconnected");
   }
 
+  async toggleEncryption(): Promise<void> {
+    this.encryptionEnabled = !this.encryptionEnabled;
+    const saved = await loadConfig();
+    if (saved) {
+      saved.encryption_enabled = this.encryptionEnabled;
+      await saveConfig(saved);
+    }
+    this.callbacks.onStateChange();
+    // Re-announce so peers see updated capabilities
+    await this.announce();
+  }
+
+  private get capabilities(): string[] {
+    return this.encryptionKey ? ["encryption"] : [];
+  }
+
   async announce(): Promise<void> {
     if (!this.config) return;
-    const effect = actionAnnounce(this.config);
+    const effect = actionAnnounce(this.config, this.capabilities);
     await this.executeEffect(effect);
   }
 
@@ -143,7 +173,15 @@ export class App {
       return;
     }
 
-    const body: MessageBody = { kind: "text", text };
+    let body: MessageBody;
+    if (this.encryptionEnabled && this.encryptionKey) {
+      const inner: TextBody = { kind: "text", text };
+      const { ciphertext, iv } = await encryptBody(this.encryptionKey, JSON.stringify(inner));
+      body = { kind: "encrypted", ciphertext, iv };
+    } else {
+      body = { kind: "text", text };
+    }
+
     const effect = actionSend(this.state, this.config, toDeviceId, device.device_topic, body);
     await this.executeEffect(effect);
     await saveState(this.state);
@@ -154,6 +192,26 @@ export class App {
     if (!this.config) return;
     const result = validateEvent(event, this.config.network_id);
     if (!result.valid) return;
+
+    // Try to decrypt encrypted message bodies before processing
+    if (result.event.type === "msg.send" && result.event.payload.body.kind === "encrypted") {
+      const encrypted = result.event.payload.body;
+      if (this.encryptionKey) {
+        const plaintext = await decryptBody(this.encryptionKey, encrypted.ciphertext, encrypted.iv);
+        if (plaintext) {
+          try {
+            const inner = JSON.parse(plaintext) as TextBody;
+            if (inner.kind === "text" && typeof inner.text === "string") {
+              result.event.payload.body = inner;
+            }
+          } catch {
+            // JSON parse failed — leave as encrypted
+          }
+        }
+        // If decryption failed, body stays as kind:"encrypted" — UI handles display
+      }
+      // No encryption key — body stays as kind:"encrypted"
+    }
 
     // Check if this is a new message for us (before processing, to detect new vs dup)
     const isNewMessage =
@@ -169,7 +227,10 @@ export class App {
     if (isNewMessage && result.event.type === "msg.send") {
       const fromDevice = this.state.devices.get(result.event.from_device_id);
       const fromName = fromDevice?.device_name ?? result.event.from_device_id;
-      showMessageNotification(fromName, result.event.payload.body.text);
+      const bodyText = result.event.payload.body.kind === "text"
+        ? result.event.payload.body.text
+        : "[Encrypted message]";
+      showMessageNotification(fromName, bodyText);
     }
 
     for (const effect of effects) {
