@@ -133,7 +133,12 @@ bun src/cli/index.ts export-state
 - [x] Deduplication (no duplicate inbox entries, re-ack on duplicate)
 - [x] Lost acknowledgement scenario
 - [x] Event log recording
-- [ ] In-memory relay simulation (multi-device)
+- [x] In-memory relay simulation (multi-device)
+- [x] Two-device full flow (announce, send, receive, ack)
+- [x] Three-device isolation (messages don't leak)
+- [x] Duplicate delivery dedup via relay
+- [x] Dropped ack scenario via relay
+- [x] Late subscriber receives retained events
 - [ ] Simulation fixture format and replay
 
 ### Deferred (per spec)
