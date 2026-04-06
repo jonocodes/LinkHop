@@ -76,7 +76,7 @@ export async function loadConfig(): Promise<BrowserConfig | null> {
         const legacyReq = tx(db, "config", "readonly").objectStore("config").get("device");
         legacyReq.onsuccess = () => {
           if (legacyReq.result) {
-            resolve({ device: legacyReq.result as DeviceConfig, ntfy_url: "http://localhost:8080" });
+            resolve({ device: legacyReq.result as DeviceConfig, ntfy_url: "https://ntfy.sh" });
           } else {
             resolve(null);
           }

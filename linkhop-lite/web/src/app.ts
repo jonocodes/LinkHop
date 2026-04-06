@@ -27,7 +27,7 @@ export class App {
   state: LocalState = createEmptyState();
   screen: AppScreen = "setup";
   connection: ConnectionStatus = "disconnected";
-  ntfyUrl = "http://localhost:8080";
+  ntfyUrl = "https://ntfy.sh";
   encryptionEnabled = false;
   encryptionKey: CryptoKey | null = null;
 
@@ -139,6 +139,19 @@ export class App {
     }
     this.callbacks.onStateChange();
     // Re-announce so peers see updated capabilities
+    await this.announce();
+  }
+
+  async updateServer(url: string): Promise<void> {
+    this.ntfyUrl = url;
+    const saved = await loadConfig();
+    if (saved) {
+      saved.ntfy_url = url;
+      await saveConfig(saved);
+    }
+    // Reconnect with the new server
+    this.disconnect();
+    this.connect();
     await this.announce();
   }
 

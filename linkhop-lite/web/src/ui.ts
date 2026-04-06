@@ -3,7 +3,8 @@ import { getDevices, getInbox, getPending } from "../../src/engine/state.js";
 import type { MessageBody } from "../../src/protocol/types.js";
 
 let app: App;
-let currentTab: "devices" | "inbox" | "pending" | "debug" = "devices";
+let currentTab: "devices" | "inbox" | "pending" | "settings" = "devices";
+let showDebug = false;
 
 export function mount(root: HTMLElement): void {
   app = new App({
@@ -36,9 +37,10 @@ function renderSetupScreen(): string {
       </div>
       <div class="form-group">
         <label for="setup-ntfy">ntfy server</label>
-        <input id="setup-ntfy" type="url" value="http://localhost:8080" />
+        <input id="setup-ntfy" type="url" value="https://ntfy.sh" />
       </div>
       <button id="setup-btn">Join network</button>
+      <button class="secondary setup-settings-link" id="setup-settings-btn" type="button">Settings</button>
     </div>
   `;
 }
@@ -62,7 +64,7 @@ function renderMainScreen(): string {
         <button class="active" data-tab="devices">Devices</button>
         <button data-tab="inbox">Inbox</button>
         <button data-tab="pending">Pending</button>
-        <button data-tab="debug">Debug</button>
+        <button data-tab="settings">Settings</button>
       </div>
 
       <div id="main-content"></div>
@@ -98,6 +100,38 @@ function bindSetupEvents(): void {
       btn.disabled = false;
       btn.textContent = "Join network";
     }
+  });
+
+  document.getElementById("setup-settings-btn")!.addEventListener("click", () => {
+    const setupNtfy = document.getElementById("setup-ntfy") as HTMLInputElement;
+    const setupForm = document.getElementById("screen-setup")!;
+    const settingsPanel = document.getElementById("setup-settings-panel");
+
+    if (settingsPanel) {
+      // Toggle off
+      settingsPanel.remove();
+      return;
+    }
+
+    const panel = document.createElement("div");
+    panel.id = "setup-settings-panel";
+    panel.className = "settings-panel";
+    panel.innerHTML = `
+      <div class="settings-section">
+        <div class="settings-label">Server</div>
+        <div class="settings-row">
+          <input id="setup-settings-server" type="url" value="${setupNtfy.value}" />
+        </div>
+        <div class="settings-hint">Change the ntfy server URL used for messaging</div>
+      </div>
+    `;
+    setupForm.appendChild(panel);
+
+    // Sync the server field back to the setup form
+    document.getElementById("setup-settings-server")!.addEventListener("input", () => {
+      const val = (document.getElementById("setup-settings-server") as HTMLInputElement).value;
+      setupNtfy.value = val;
+    });
   });
 }
 
@@ -211,8 +245,9 @@ function renderMainContent(): void {
       container.innerHTML = renderPending();
       updateSendFormVisibility();
       break;
-    case "debug":
-      container.innerHTML = renderDebug();
+    case "settings":
+      container.innerHTML = showDebug ? renderDebug() : renderSettings();
+      bindSettingsEvents();
       updateSendFormVisibility();
       break;
   }
@@ -318,8 +353,93 @@ function renderMessageBody(body: MessageBody): string {
   return `<span class="encrypted-msg">Encrypted message — cannot decrypt</span>`;
 }
 
+function renderSettings(): string {
+  const on = app.encryptionEnabled && app.encryptionKey !== null;
+  const hasKey = app.encryptionKey !== null;
+
+  return `
+    <div class="settings-section">
+      <div class="settings-label">Encryption</div>
+      <div class="settings-row">
+        <span>${on ? "Encrypted" : "Plaintext"}</span>
+        <button class="settings-toggle ${on ? "on" : ""}" id="settings-encrypt-toggle"
+          ${!hasKey ? "disabled" : ""}>${on ? "On" : "Off"}</button>
+      </div>
+      ${!hasKey ? '<div class="settings-hint">No encryption key (joined without password)</div>' : ""}
+    </div>
+
+    <div class="settings-section">
+      <div class="settings-label">Server</div>
+      <div class="settings-row">
+        <input id="settings-server" type="url" value="${esc(app.ntfyUrl)}" />
+        <button class="secondary" id="settings-server-save" style="width:auto;padding:10px 16px">Save</button>
+      </div>
+    </div>
+
+    <div class="settings-section">
+      <button class="secondary" id="settings-debug-btn">View Debug Info</button>
+    </div>
+
+    <div class="settings-section">
+      <button class="secondary settings-leave" id="settings-leave-btn">Leave Network</button>
+    </div>
+  `;
+}
+
+function bindSettingsEvents(): void {
+  const encToggle = document.getElementById("settings-encrypt-toggle");
+  if (encToggle) {
+    encToggle.addEventListener("click", async () => {
+      await app.toggleEncryption();
+      renderEncryptionToggle();
+      renderMainContent();
+    });
+  }
+
+  const serverSave = document.getElementById("settings-server-save");
+  if (serverSave) {
+    serverSave.addEventListener("click", async () => {
+      const input = document.getElementById("settings-server") as HTMLInputElement;
+      const url = input.value.trim();
+      if (!url) {
+        showError("Server URL is required");
+        return;
+      }
+      await app.updateServer(url);
+      showError("Server updated — reconnecting...");
+    });
+  }
+
+  const debugBtn = document.getElementById("settings-debug-btn");
+  if (debugBtn) {
+    debugBtn.addEventListener("click", () => {
+      showDebug = true;
+      renderMainContent();
+    });
+  }
+
+  const backBtn = document.getElementById("debug-back-btn");
+  if (backBtn) {
+    backBtn.addEventListener("click", () => {
+      showDebug = false;
+      renderMainContent();
+    });
+  }
+
+  const leaveBtn = document.getElementById("settings-leave-btn");
+  if (leaveBtn) {
+    leaveBtn.addEventListener("click", async () => {
+      if (!confirm("Leave this network? Local data will be cleared.")) return;
+      await app.leave();
+      await app.reset();
+    });
+  }
+}
+
 function renderDebug(): string {
   const sections: string[] = [];
+
+  sections.push(`<button class="secondary" id="debug-back-btn" style="margin-bottom:12px">&larr; Back to Settings</button>`);
 
   // Device config
   if (app.config) {
