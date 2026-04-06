@@ -12,7 +12,10 @@
     "build": "tsc",
     "test": "bun vitest run",
     "test:watch": "bun vitest",
-    "cli": "bun src/cli/index.ts"
+    "cli": "bun src/cli/index.ts",
+    "dev": "vite",
+    "build:web": "vite build",
+    "preview": "vite preview"
   },
   "keywords": [],
   "author": "",
@@ -20,6 +23,8 @@
   "devDependencies": {
     "@types/node": "^25.5.2",
     "typescript": "^6.0.2",
+    "vite": "^8.0.3",
+    "vite-plugin-pwa": "^1.2.0",
     "vitest": "^4.1.2"
   },
   "dependencies": {

@@ -8,6 +8,9 @@ Device-to-device messaging protocol built on ntfy relay. Browser-first, no backe
 bun install
 bun test
 bun src/cli/index.ts --help
+
+# Run browser app (dev server)
+bun run dev
 ```
 
 ## Project structure
@@ -16,9 +19,16 @@ bun src/cli/index.ts --help
 src/
   protocol/    # Types, event factories, validation, topic naming, ID gen
   engine/      # State machine reducer, local actions, state queries
-  transport/   # ntfy publish/subscribe
+  transport/   # ntfy publish/subscribe (CLI)
   cli/         # Reference CLI (only layer with Node dependencies)
+web/
+  src/         # Browser app (PWA)
+    app.ts     # App controller wiring engine + SSE + IndexedDB
+    db.ts      # IndexedDB persistence
+    sse.ts     # SSE transport for ntfy
+    ui.ts      # Vanilla TS UI
 tests/         # Vitest test suites
+fixtures/      # Replay fixture JSON files
 ```
 
 The protocol and engine layers use only web-standard APIs and have zero Node dependencies, so they can run in the browser unchanged.
@@ -110,8 +120,9 @@ bun src/cli/index.ts replay fixtures/device-announce.json
 ### Transport
 
 - [x] ntfy publish (POST JSON to topic)
-- [x] ntfy subscribe (NDJSON streaming)
-- [ ] SSE subscribe (for browser)
+- [x] ntfy subscribe (NDJSON streaming — CLI)
+- [x] SSE subscribe (browser)
+- [x] HTTP publish (browser)
 - [ ] Reconnect / retry on transport failure
 
 ### Reference CLI
@@ -156,4 +167,17 @@ bun src/cli/index.ts replay fixtures/device-announce.json
 - [ ] Password rotation
 - [ ] Heartbeat / stronger presence
 - [x] Password-derived network_id (PBKDF2 via Web Crypto)
-- [ ] Browser app (IndexedDB storage, SSE transport, UI)
+
+### Browser app (PWA)
+
+- [x] Vite build with vite-plugin-pwa
+- [x] PWA manifest (standalone, icons, theme)
+- [x] Service worker (Workbox, auto-update)
+- [x] IndexedDB persistence (config, devices, messages, event log)
+- [x] SSE subscriptions to ntfy
+- [x] Setup screen (name, password, ntfy URL)
+- [x] Tab UI (devices, inbox, pending)
+- [x] Send messages from inbox tab
+- [x] Connection status indicator
+- [ ] Push notifications via service worker
+- [ ] Offline banner / reconnect UX
