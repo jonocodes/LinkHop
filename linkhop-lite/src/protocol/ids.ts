@@ -1,7 +1,7 @@
-import { randomBytes } from "node:crypto";
-
 function randomHex(bytes: number): string {
-  return randomBytes(bytes).toString("hex");
+  const buf = new Uint8Array(bytes);
+  crypto.getRandomValues(buf);
+  return [...buf].map((b) => b.toString(16).padStart(2, "0")).join("");
 }
 
 export function generateDeviceId(): string {
