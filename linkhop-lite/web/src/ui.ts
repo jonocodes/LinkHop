@@ -235,7 +235,7 @@ function renderDevices(): string {
       return `
         <div class="device-item">
           <div>
-            <div class="name">${esc(d.device_name)}${encryptionActive ? ' <span class="capability-badge">E2E</span>' : ""}</div>
+            <div class="name">${esc(d.device_name)}${encryptionActive ? ' <span class="capability-badge">encrypted</span>' : ""}</div>
             <div class="meta">${esc(d.device_id)}</div>
           </div>
           <span class="${badgeClass}">${badgeText}</span>
