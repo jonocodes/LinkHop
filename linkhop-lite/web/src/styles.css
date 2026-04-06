@@ -228,6 +228,42 @@ button.secondary {
   background: var(--success);
 }
 
+.status-dot.connecting {
+  background: #facc15;
+  animation: pulse 1.5s ease-in-out infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.3; }
+}
+
+.status-action {
+  margin-left: auto;
+  padding: 4px 10px;
+  font-size: 0.75rem;
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--text-dim);
+  width: auto;
+}
+
+.status-action:active {
+  background: var(--surface-2);
+}
+
+/* Offline banner */
+.offline-banner {
+  background: #92400e;
+  color: #fef3c7;
+  text-align: center;
+  padding: 8px;
+  border-radius: var(--radius);
+  margin-bottom: 12px;
+  font-size: 0.85rem;
+  animation: pulse 2s ease-in-out infinite;
+}
+
 .empty-state {
   text-align: center;
   color: var(--text-dim);

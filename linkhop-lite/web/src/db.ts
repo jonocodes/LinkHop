@@ -47,22 +47,43 @@ function tx(
 
 // --- Config ---
 
-export async function saveConfig(config: DeviceConfig): Promise<void> {
+export interface BrowserConfig {
+  device: DeviceConfig;
+  ntfy_url: string;
+}
+
+export async function saveConfig(config: BrowserConfig): Promise<void> {
   const db = await openDB();
   return new Promise((resolve, reject) => {
     const t = tx(db, "config", "readwrite");
-    t.objectStore("config").put(config, "device");
+    t.objectStore("config").put(config, "browser");
     t.oncomplete = () => resolve();
     t.onerror = () => reject(t.error);
   });
 }
 
-export async function loadConfig(): Promise<DeviceConfig | null> {
+export async function loadConfig(): Promise<BrowserConfig | null> {
   const db = await openDB();
   return new Promise((resolve, reject) => {
     const t = tx(db, "config", "readonly");
-    const req = t.objectStore("config").get("device");
-    req.onsuccess = () => resolve((req.result as DeviceConfig) ?? null);
+    const req = t.objectStore("config").get("browser");
+    req.onsuccess = () => {
+      const result = req.result;
+      if (!result) {
+        // Try legacy key
+        const legacyReq = tx(db, "config", "readonly").objectStore("config").get("device");
+        legacyReq.onsuccess = () => {
+          if (legacyReq.result) {
+            resolve({ device: legacyReq.result as DeviceConfig, ntfy_url: "http://localhost:8080" });
+          } else {
+            resolve(null);
+          }
+        };
+        legacyReq.onerror = () => reject(legacyReq.error);
+      } else {
+        resolve(result as BrowserConfig);
+      }
+    };
     req.onerror = () => reject(req.error);
   });
 }

@@ -5,9 +5,9 @@ import { generateDeviceId } from "../../src/protocol/ids.js";
 import { deriveNetworkId } from "../../src/protocol/network.js";
 import { createEmptyState } from "../../src/engine/state.js";
 import { processEvent } from "../../src/engine/reducer.js";
-import { actionAnnounce, actionSend } from "../../src/engine/actions.js";
+import { actionAnnounce, actionLeave, actionSend } from "../../src/engine/actions.js";
 import type { Effect } from "../../src/engine/reducer.js";
-import { loadConfig, saveConfig, loadState, saveState } from "./db.js";
+import { loadConfig, saveConfig, loadState, saveState, clearAll, type BrowserConfig } from "./db.js";
 import { subscribeSSE, publishHTTP } from "./sse.js";
 
 export type AppScreen = "setup" | "main";
@@ -29,14 +29,17 @@ export class App {
 
   private callbacks: AppCallbacks;
   private cleanupSSE: (() => void)[] = [];
+  private wasConnected = false;
 
   constructor(callbacks: AppCallbacks) {
     this.callbacks = callbacks;
   }
 
   async init(): Promise<void> {
-    this.config = await loadConfig();
-    if (this.config) {
+    const saved = await loadConfig();
+    if (saved) {
+      this.config = saved.device;
+      this.ntfyUrl = saved.ntfy_url;
       this.state = await loadState();
       this.screen = "main";
       this.callbacks.onScreenChange("main");
@@ -57,7 +60,7 @@ export class App {
       env: "live",
     };
 
-    await saveConfig(this.config);
+    await saveConfig({ device: this.config, ntfy_url: this.ntfyUrl });
     this.state = createEmptyState();
     this.screen = "main";
     this.callbacks.onScreenChange("main");
@@ -68,8 +71,7 @@ export class App {
   connect(): void {
     if (!this.config) return;
     this.disconnect();
-    this.connection = "connecting";
-    this.callbacks.onConnectionChange("connecting");
+    this.setConnection("connecting");
 
     const regTopic = registryTopicFromConfig(this.config);
     const devTopic = deviceTopicFromConfig(this.config);
@@ -78,14 +80,21 @@ export class App {
     const onOpen = () => {
       openCount++;
       if (openCount >= 2) {
-        this.connection = "connected";
-        this.callbacks.onConnectionChange("connected");
+        this.setConnection("connected");
+        // Re-announce on reconnect so peers see us
+        if (this.wasConnected) {
+          this.announce();
+        }
+        this.wasConnected = true;
       }
     };
 
     const onError = () => {
-      this.connection = "disconnected";
-      this.callbacks.onConnectionChange("disconnected");
+      // EventSource auto-reconnects; just update status
+      if (this.connection === "connected") {
+        this.setConnection("connecting");
+        openCount = 0;
+      }
     };
 
     const onEvent = (event: AnyProtocolEvent) => this.handleEvent(event);
@@ -99,14 +108,29 @@ export class App {
   disconnect(): void {
     for (const cleanup of this.cleanupSSE) cleanup();
     this.cleanupSSE = [];
-    this.connection = "disconnected";
-    this.callbacks.onConnectionChange("disconnected");
+    this.setConnection("disconnected");
   }
 
   async announce(): Promise<void> {
     if (!this.config) return;
     const effect = actionAnnounce(this.config);
     await this.executeEffect(effect);
+  }
+
+  async leave(): Promise<void> {
+    if (!this.config) return;
+    const effect = actionLeave(this.config);
+    await this.executeEffect(effect);
+  }
+
+  async reset(): Promise<void> {
+    this.disconnect();
+    await clearAll();
+    this.config = null;
+    this.state = createEmptyState();
+    this.wasConnected = false;
+    this.screen = "setup";
+    this.callbacks.onScreenChange("setup");
   }
 
   async send(toDeviceId: string, text: string): Promise<void> {
@@ -146,5 +170,10 @@ export class App {
         this.callbacks.onError(`Publish failed: ${err}`);
       }
     }
+  }
+
+  private setConnection(status: ConnectionStatus): void {
+    this.connection = status;
+    this.callbacks.onConnectionChange(status);
   }
 }

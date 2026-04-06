@@ -48,6 +48,11 @@ function renderMainScreen(): string {
       <div id="status-bar" class="status-bar">
         <span class="status-dot" id="status-dot"></span>
         <span id="status-text">Disconnected</span>
+        <button class="status-action" id="leave-btn" title="Leave network">Leave</button>
+      </div>
+
+      <div id="offline-banner" class="offline-banner" style="display:none">
+        Connection lost. Reconnecting...
       </div>
 
       <div class="tab-bar">
@@ -94,15 +99,13 @@ function bindSetupEvents(): void {
 
 function bindMainEvents(): void {
   // Tab switching
-  document.querySelectorAll(".tab-bar button").forEach((btn) => {
+  document.querySelectorAll(".tab-bar button[data-tab]").forEach((btn) => {
     btn.addEventListener("click", () => {
       currentTab = (btn as HTMLElement).dataset.tab as typeof currentTab;
-      document.querySelectorAll(".tab-bar button").forEach((b) => b.classList.remove("active"));
+      document.querySelectorAll(".tab-bar button[data-tab]").forEach((b) => b.classList.remove("active"));
       btn.classList.add("active");
       renderMainContent();
-
-      const sendForm = document.getElementById("send-form")!;
-      sendForm.style.display = currentTab === "inbox" ? "flex" : "none";
+      updateSendFormVisibility();
     });
   });
 
@@ -123,6 +126,13 @@ function bindMainEvents(): void {
       document.getElementById("send-btn")!.click();
     }
   });
+
+  // Leave
+  document.getElementById("leave-btn")!.addEventListener("click", async () => {
+    if (!confirm("Leave this network? Local data will be cleared.")) return;
+    await app.leave();
+    await app.reset();
+  });
 }
 
 function showScreen(screen: AppScreen): void {
@@ -138,13 +148,25 @@ function showScreen(screen: AppScreen): void {
 function renderStatus(status: ConnectionStatus): void {
   const dot = document.getElementById("status-dot");
   const text = document.getElementById("status-text");
+  const banner = document.getElementById("offline-banner");
   if (!dot || !text) return;
 
-  dot.className = `status-dot ${status === "connected" ? "connected" : ""}`;
+  dot.className = `status-dot ${status === "connected" ? "connected" : status === "connecting" ? "connecting" : ""}`;
 
-  const label = status === "connected" ? "Connected" : status === "connecting" ? "Connecting..." : "Disconnected";
+  const label = status === "connected" ? "Connected" : status === "connecting" ? "Reconnecting..." : "Disconnected";
   const deviceInfo = app.config ? ` \u00b7 ${app.config.device_name}` : "";
   text.textContent = label + deviceInfo;
+
+  if (banner) {
+    banner.style.display = status === "connecting" ? "block" : "none";
+  }
+}
+
+function updateSendFormVisibility(): void {
+  const sendForm = document.getElementById("send-form");
+  if (sendForm) {
+    sendForm.style.display = currentTab === "inbox" ? "flex" : "none";
+  }
 }
 
 function renderMainContent(): void {
@@ -158,11 +180,11 @@ function renderMainContent(): void {
     case "inbox":
       container.innerHTML = renderInbox();
       updateSendTargets();
-      document.getElementById("send-form")!.style.display = "flex";
+      updateSendFormVisibility();
       break;
     case "pending":
       container.innerHTML = renderPending();
-      document.getElementById("send-form")!.style.display = "none";
+      updateSendFormVisibility();
       break;
   }
 }
@@ -170,7 +192,7 @@ function renderMainContent(): void {
 function renderDevices(): string {
   const devices = getDevices(app.state);
   if (devices.length === 0) {
-    return `<div class="empty-state">No devices discovered yet</div>`;
+    return `<div class="empty-state">No devices discovered yet.<br>Other devices on the same network will appear here.</div>`;
   }
 
   return devices
@@ -195,10 +217,11 @@ function renderInbox(): string {
   if (!app.config) return "";
   const inbox = getInbox(app.state, app.config.device_id);
   if (inbox.length === 0) {
-    return `<div class="empty-state">No messages yet</div>`;
+    return `<div class="empty-state">No messages yet.<br>Send one using the form below.</div>`;
   }
 
-  return inbox
+  return [...inbox]
+    .sort((a, b) => b.created_at.localeCompare(a.created_at))
     .map((m) => {
       const from = app.state.devices.get(m.from_device_id);
       const fromLabel = from ? from.device_name : m.from_device_id;
@@ -217,10 +240,11 @@ function renderPending(): string {
   if (!app.config) return "";
   const pending = getPending(app.state, app.config.device_id);
   if (pending.length === 0) {
-    return `<div class="empty-state">No pending messages</div>`;
+    return `<div class="empty-state">No pending messages.<br>All sent messages have been acknowledged.</div>`;
   }
 
-  return pending
+  return [...pending]
+    .sort((a, b) => b.created_at.localeCompare(a.created_at))
     .map((m) => {
       const to = app.state.devices.get(m.to_device_id);
       const toLabel = to ? to.device_name : m.to_device_id;
@@ -271,7 +295,6 @@ function esc(s: string): string {
 
 function showError(msg: string): void {
   console.error(msg);
-  // Simple inline error - could be a toast later
   const existing = document.querySelector(".error-toast");
   if (existing) existing.remove();
 
@@ -280,7 +303,7 @@ function showError(msg: string): void {
   el.style.cssText =
     "position:fixed;top:16px;left:50%;transform:translateX(-50%);" +
     "background:#e94560;color:white;padding:10px 20px;border-radius:8px;" +
-    "font-size:0.9rem;z-index:100;";
+    "font-size:0.9rem;z-index:100;max-width:90vw;text-align:center;";
   el.textContent = msg;
   document.body.appendChild(el);
   setTimeout(() => el.remove(), 4000);

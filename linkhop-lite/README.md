@@ -123,7 +123,7 @@ bun src/cli/index.ts replay fixtures/device-announce.json
 - [x] ntfy subscribe (NDJSON streaming — CLI)
 - [x] SSE subscribe (browser)
 - [x] HTTP publish (browser)
-- [ ] Reconnect / retry on transport failure
+- [x] Reconnect via EventSource auto-reconnect + re-announce
 
 ### Reference CLI
 
@@ -178,6 +178,11 @@ bun src/cli/index.ts replay fixtures/device-announce.json
 - [x] Setup screen (name, password, ntfy URL)
 - [x] Tab UI (devices, inbox, pending)
 - [x] Send messages from inbox tab
-- [x] Connection status indicator
+- [x] Connection status indicator (connected/connecting/disconnected)
+- [x] Offline banner with reconnecting state
+- [x] Auto-reconnect via EventSource with re-announce
+- [x] Persistent config (ntfy URL survives reload)
+- [x] Leave network and reset from UI
+- [x] Messages sorted newest-first
+- [x] SVG app icon
 - [ ] Push notifications via service worker
-- [ ] Offline banner / reconnect UX
