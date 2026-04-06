@@ -1,0 +1,32 @@
+name: Tests
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "linkhop-lite/**"
+  pull_request:
+    paths:
+      - "linkhop-lite/**"
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install dependencies
+        working-directory: linkhop-lite
+        run: bun install
+
+      - name: Build web
+        working-directory: linkhop-lite
+        run: bun run build:web
+
+      - name: Run tests
+        working-directory: linkhop-lite
+        run: bun run test

@@ -50,8 +50,10 @@ function tx(
 export interface BrowserConfig {
   device: DeviceConfig;
   ntfy_url: string;
+  pool?: string;
   password?: string;
   encryption_enabled?: boolean;
+  self_send_enabled?: boolean;
 }
 
 export async function saveConfig(config: BrowserConfig): Promise<void> {
@@ -76,7 +78,7 @@ export async function loadConfig(): Promise<BrowserConfig | null> {
         const legacyReq = tx(db, "config", "readonly").objectStore("config").get("device");
         legacyReq.onsuccess = () => {
           if (legacyReq.result) {
-            resolve({ device: legacyReq.result as DeviceConfig, ntfy_url: "http://localhost:8080" });
+            resolve({ device: legacyReq.result as DeviceConfig, ntfy_url: "https://ntfy.sh" });
           } else {
             resolve(null);
           }

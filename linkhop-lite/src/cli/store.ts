@@ -17,6 +17,7 @@ function ensureDir(): void {
 
 export interface CLIConfig {
   device: DeviceConfig;
+  pool?: string;
   password?: string;
   encryption_enabled?: boolean;
 }

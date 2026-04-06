@@ -46,8 +46,8 @@ async function tryDecryptBody(
   cliConfig: CLIConfig,
 ): Promise<MessageBody> {
   if (body.kind !== "encrypted") return body;
-  if (!cliConfig.password) return body;
-  const key = await deriveEncryptionKey(cliConfig.password);
+  if (!cliConfig.pool || !cliConfig.password) return body;
+  const key = await deriveEncryptionKey(cliConfig.pool, cliConfig.password);
   const plaintext = await decryptBody(key, body.ciphertext, body.iv);
   if (!plaintext) return body;
   try {
@@ -74,10 +74,11 @@ program
   .command("init")
   .description("Create device identity and network config")
   .option("-n, --name <name>", "device display name")
-  .option("--network <id>", "network ID (overrides --password)")
+  .option("--pool <pool>", "pool name (used with --password to derive network)")
+  .option("--network <id>", "network ID (overrides --pool/--password)")
   .option("-p, --password <password>", "shared password to derive network ID")
   .option("--env <env>", "environment", "test")
-  .option("--encrypt", "enable encryption (requires --password)")
+  .option("--encrypt", "enable encryption (requires --pool and --password)")
   .action(async (opts) => {
     const existing = loadConfig();
     if (existing) {
@@ -88,8 +89,11 @@ program
     let networkId: string;
     if (opts.network) {
       networkId = opts.network;
+    } else if (opts.pool && opts.password) {
+      networkId = await deriveNetworkId(opts.pool, opts.password);
     } else if (opts.password) {
-      networkId = await deriveNetworkId(opts.password);
+      console.error("--password requires --pool. Use --pool <name> --password <secret>");
+      process.exit(1);
     } else {
       networkId = generateNetworkId();
     }
@@ -101,10 +105,11 @@ program
       env: opts.env,
     };
 
-    const encryptionEnabled = opts.encrypt && opts.password;
+    const encryptionEnabled = opts.encrypt && opts.pool && opts.password;
 
     const cliConfig: CLIConfig = {
       device,
+      pool: opts.pool,
       password: opts.password,
       encryption_enabled: encryptionEnabled || false,
     };
@@ -190,8 +195,8 @@ program
     const text = textParts.join(" ");
     let body: MessageBody;
 
-    if (cliConfig.encryption_enabled && cliConfig.password) {
-      const key = await deriveEncryptionKey(cliConfig.password);
+    if (cliConfig.encryption_enabled && cliConfig.pool && cliConfig.password) {
+      const key = await deriveEncryptionKey(cliConfig.pool, cliConfig.password);
       const inner: TextBody = { kind: "text", text };
       const { ciphertext, iv } = await encryptBody(key, JSON.stringify(inner));
       body = { kind: "encrypted", ciphertext, iv };

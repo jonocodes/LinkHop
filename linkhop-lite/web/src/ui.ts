@@ -3,7 +3,8 @@ import { getDevices, getInbox, getPending } from "../../src/engine/state.js";
 import type { MessageBody } from "../../src/protocol/types.js";
 
 let app: App;
-let currentTab: "devices" | "inbox" | "pending" | "debug" = "devices";
+let currentTab: "devices" | "inbox" | "pending" | "settings" = "devices";
+let showDebug = false;
 
 export function mount(root: HTMLElement): void {
   app = new App({
@@ -31,14 +32,19 @@ function renderSetupScreen(): string {
         <input id="setup-name" type="text" placeholder="My Phone" />
       </div>
       <div class="form-group">
-        <label for="setup-password">Network password</label>
+        <label for="setup-pool">Pool name</label>
+        <input id="setup-pool" type="text" placeholder="my-family" />
+      </div>
+      <div class="form-group">
+        <label for="setup-password">Password</label>
         <input id="setup-password" type="password" placeholder="shared secret" />
       </div>
       <div class="form-group">
         <label for="setup-ntfy">ntfy server</label>
-        <input id="setup-ntfy" type="url" value="http://localhost:8080" />
+        <input id="setup-ntfy" type="url" value="https://ntfy.sh" />
       </div>
       <button id="setup-btn">Join network</button>
+      <button class="secondary setup-settings-link" id="setup-settings-btn" type="button">Settings</button>
     </div>
   `;
 }
@@ -50,8 +56,6 @@ function renderMainScreen(): string {
         <span class="status-dot" id="status-dot"></span>
         <span id="status-text">Disconnected</span>
         <span class="status-spacer"></span>
-        <button class="status-toggle" id="encrypt-toggle" title="Toggle encryption"></button>
-        <button class="status-action" id="leave-btn" title="Leave network">Leave</button>
       </div>
 
       <div id="offline-banner" class="offline-banner" style="display:none">
@@ -62,7 +66,7 @@ function renderMainScreen(): string {
         <button class="active" data-tab="devices">Devices</button>
         <button data-tab="inbox">Inbox</button>
         <button data-tab="pending">Pending</button>
-        <button data-tab="debug">Debug</button>
+        <button data-tab="settings">Settings</button>
       </div>
 
       <div id="main-content"></div>
@@ -79,11 +83,12 @@ function renderMainScreen(): string {
 function bindSetupEvents(): void {
   document.getElementById("setup-btn")!.addEventListener("click", async () => {
     const name = (document.getElementById("setup-name") as HTMLInputElement).value.trim();
+    const pool = (document.getElementById("setup-pool") as HTMLInputElement).value.trim();
     const password = (document.getElementById("setup-password") as HTMLInputElement).value;
     const ntfyUrl = (document.getElementById("setup-ntfy") as HTMLInputElement).value.trim();
 
-    if (!name || !password) {
-      showError("Name and password are required");
+    if (!name || !pool || !password) {
+      showError("Name, pool, and password are required");
       return;
     }
 
@@ -92,12 +97,44 @@ function bindSetupEvents(): void {
     btn.textContent = "Joining...";
 
     try {
-      await app.setup(name, password, ntfyUrl);
+      await app.setup(name, pool, password, ntfyUrl);
     } catch (err) {
       showError(`Setup failed: ${err}`);
       btn.disabled = false;
       btn.textContent = "Join network";
     }
+  });
+
+  document.getElementById("setup-settings-btn")!.addEventListener("click", () => {
+    const setupNtfy = document.getElementById("setup-ntfy") as HTMLInputElement;
+    const setupForm = document.getElementById("screen-setup")!;
+    const settingsPanel = document.getElementById("setup-settings-panel");
+
+    if (settingsPanel) {
+      // Toggle off
+      settingsPanel.remove();
+      return;
+    }
+
+    const panel = document.createElement("div");
+    panel.id = "setup-settings-panel";
+    panel.className = "settings-panel";
+    panel.innerHTML = `
+      <div class="settings-section">
+        <div class="settings-label">Server</div>
+        <div class="settings-row">
+          <input id="setup-settings-server" type="url" value="${setupNtfy.value}" />
+        </div>
+        <div class="settings-hint">Change the ntfy server URL used for messaging</div>
+      </div>
+    `;
+    setupForm.appendChild(panel);
+
+    // Sync the server field back to the setup form
+    document.getElementById("setup-settings-server")!.addEventListener("input", () => {
+      const val = (document.getElementById("setup-settings-server") as HTMLInputElement).value;
+      setupNtfy.value = val;
+    });
   });
 }
 
@@ -131,19 +168,6 @@ function bindMainEvents(): void {
     }
   });
 
-  // Encryption toggle
-  document.getElementById("encrypt-toggle")!.addEventListener("click", async () => {
-    await app.toggleEncryption();
-    renderEncryptionToggle();
-  });
-  renderEncryptionToggle();
-
-  // Leave
-  document.getElementById("leave-btn")!.addEventListener("click", async () => {
-    if (!confirm("Leave this network? Local data will be cleared.")) return;
-    await app.leave();
-    await app.reset();
-  });
 }
 
 function showScreen(screen: AppScreen): void {
@@ -173,19 +197,6 @@ function renderStatus(status: ConnectionStatus): void {
   }
 }
 
-function renderEncryptionToggle(): void {
-  const btn = document.getElementById("encrypt-toggle");
-  if (!btn) return;
-  const on = app.encryptionEnabled && app.encryptionKey !== null;
-  const hasKey = app.encryptionKey !== null;
-  btn.textContent = on ? "Encrypted" : "Plaintext";
-  btn.className = `status-toggle ${on ? "on" : "off"}`;
-  btn.title = hasKey
-    ? (on ? "Encryption on — click to send plaintext" : "Encryption off — click to encrypt")
-    : "No encryption key (joined without password)";
-  if (!hasKey) btn.setAttribute("disabled", "true");
-  else btn.removeAttribute("disabled");
-}
 
 function updateSendFormVisibility(): void {
   const sendForm = document.getElementById("send-form");
@@ -211,8 +222,9 @@ function renderMainContent(): void {
       container.innerHTML = renderPending();
       updateSendFormVisibility();
       break;
-    case "debug":
-      container.innerHTML = renderDebug();
+    case "settings":
+      container.innerHTML = showDebug ? renderDebug() : renderSettings();
+      bindSettingsEvents();
       updateSendFormVisibility();
       break;
   }
@@ -296,7 +308,7 @@ function updateSendTargets(): void {
   if (!select) return;
 
   const devices = getDevices(app.state).filter(
-    (d) => d.device_id !== app.config?.device_id && !d.is_removed,
+    (d) => (app.selfSendEnabled || d.device_id !== app.config?.device_id) && !d.is_removed,
   );
 
   const currentValue = select.value;
@@ -318,8 +330,109 @@ function renderMessageBody(body: MessageBody): string {
   return `<span class="encrypted-msg">Encrypted message — cannot decrypt</span>`;
 }
 
+function renderSettings(): string {
+  const on = app.encryptionEnabled && app.encryptionKey !== null;
+  const hasKey = app.encryptionKey !== null;
+
+  return `
+    <div class="settings-section">
+      <div class="settings-label">Encryption</div>
+      <div class="settings-row">
+        <span>${on ? "Encrypted" : "Plaintext"}</span>
+        <button class="settings-toggle ${on ? "on" : ""}" id="settings-encrypt-toggle"
+          ${!hasKey ? "disabled" : ""}>${on ? "On" : "Off"}</button>
+      </div>
+      ${!hasKey ? '<div class="settings-hint">No encryption key (joined without password)</div>' : ""}
+    </div>
+
+    <div class="settings-section">
+      <div class="settings-label">Self-send</div>
+      <div class="settings-row">
+        <span>${app.selfSendEnabled ? "Enabled" : "Disabled"}</span>
+        <button class="settings-toggle ${app.selfSendEnabled ? "on" : ""}" id="settings-selfsend-toggle">${app.selfSendEnabled ? "On" : "Off"}</button>
+      </div>
+      <div class="settings-hint">Send messages to yourself through the relay (useful for testing)</div>
+    </div>
+
+    <div class="settings-section">
+      <div class="settings-label">Server</div>
+      <div class="settings-row">
+        <input id="settings-server" type="url" value="${esc(app.ntfyUrl)}" />
+        <button class="secondary" id="settings-server-save" style="width:auto;padding:10px 16px">Save</button>
+      </div>
+    </div>
+
+    <div class="settings-section">
+      <button class="secondary" id="settings-debug-btn">View Debug Info</button>
+    </div>
+
+    <div class="settings-section">
+      <button class="secondary settings-leave" id="settings-leave-btn">Leave Network</button>
+    </div>
+  `;
+}
+
+function bindSettingsEvents(): void {
+  const encToggle = document.getElementById("settings-encrypt-toggle");
+  if (encToggle) {
+    encToggle.addEventListener("click", async () => {
+      await app.toggleEncryption();
+      renderMainContent();
+    });
+  }
+
+  const selfSendToggle = document.getElementById("settings-selfsend-toggle");
+  if (selfSendToggle) {
+    selfSendToggle.addEventListener("click", async () => {
+      await app.toggleSelfSend();
+      renderMainContent();
+    });
+  }
+
+  const serverSave = document.getElementById("settings-server-save");
+  if (serverSave) {
+    serverSave.addEventListener("click", async () => {
+      const input = document.getElementById("settings-server") as HTMLInputElement;
+      const url = input.value.trim();
+      if (!url) {
+        showError("Server URL is required");
+        return;
+      }
+      await app.updateServer(url);
+      showError("Server updated — reconnecting...");
+    });
+  }
+
+  const debugBtn = document.getElementById("settings-debug-btn");
+  if (debugBtn) {
+    debugBtn.addEventListener("click", () => {
+      showDebug = true;
+      renderMainContent();
+    });
+  }
+
+  const backBtn = document.getElementById("debug-back-btn");
+  if (backBtn) {
+    backBtn.addEventListener("click", () => {
+      showDebug = false;
+      renderMainContent();
+    });
+  }
+
+  const leaveBtn = document.getElementById("settings-leave-btn");
+  if (leaveBtn) {
+    leaveBtn.addEventListener("click", async () => {
+      if (!confirm("Leave this network? Local data will be cleared.")) return;
+      await app.leave();
+      await app.reset();
+    });
+  }
+}
+
 function renderDebug(): string {
   const sections: string[] = [];
+
+  sections.push(`<button class="secondary" id="debug-back-btn" style="margin-bottom:12px">&larr; Back to Settings</button>`);
 
   // Device config
   if (app.config) {

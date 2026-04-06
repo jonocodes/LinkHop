@@ -27,9 +27,10 @@ export class App {
   state: LocalState = createEmptyState();
   screen: AppScreen = "setup";
   connection: ConnectionStatus = "disconnected";
-  ntfyUrl = "http://localhost:8080";
+  ntfyUrl = "https://ntfy.sh";
   encryptionEnabled = false;
   encryptionKey: CryptoKey | null = null;
+  selfSendEnabled = false;
 
   private callbacks: AppCallbacks;
   private cleanupSSE: (() => void)[] = [];
@@ -45,8 +46,9 @@ export class App {
       this.config = saved.device;
       this.ntfyUrl = saved.ntfy_url;
       this.encryptionEnabled = saved.encryption_enabled ?? false;
-      if (saved.password) {
-        this.encryptionKey = await deriveEncryptionKey(saved.password);
+      this.selfSendEnabled = saved.self_send_enabled ?? false;
+      if (saved.pool && saved.password) {
+        this.encryptionKey = await deriveEncryptionKey(saved.pool, saved.password);
       }
       this.state = await loadState();
       this.screen = "main";
@@ -57,11 +59,11 @@ export class App {
     }
   }
 
-  async setup(name: string, password: string, ntfyUrl: string): Promise<void> {
-    const networkId = await deriveNetworkId(password);
+  async setup(name: string, pool: string, password: string, ntfyUrl: string): Promise<void> {
+    const networkId = await deriveNetworkId(pool, password);
     this.ntfyUrl = ntfyUrl;
-    this.encryptionKey = await deriveEncryptionKey(password);
-    this.encryptionEnabled = true;
+    this.encryptionKey = await deriveEncryptionKey(pool, password);
+    this.encryptionEnabled = false;
 
     this.config = {
       device_id: generateDeviceId(),
@@ -73,8 +75,9 @@ export class App {
     await saveConfig({
       device: this.config,
       ntfy_url: this.ntfyUrl,
+      pool,
       password,
-      encryption_enabled: true,
+      encryption_enabled: false,
     });
     await requestPermission();
     this.state = createEmptyState();
@@ -139,6 +142,29 @@ export class App {
     }
     this.callbacks.onStateChange();
     // Re-announce so peers see updated capabilities
+    await this.announce();
+  }
+
+  async toggleSelfSend(): Promise<void> {
+    this.selfSendEnabled = !this.selfSendEnabled;
+    const saved = await loadConfig();
+    if (saved) {
+      saved.self_send_enabled = this.selfSendEnabled;
+      await saveConfig(saved);
+    }
+    this.callbacks.onStateChange();
+  }
+
+  async updateServer(url: string): Promise<void> {
+    this.ntfyUrl = url;
+    const saved = await loadConfig();
+    if (saved) {
+      saved.ntfy_url = url;
+      await saveConfig(saved);
+    }
+    // Reconnect with the new server
+    this.disconnect();
+    this.connect();
     await this.announce();
   }
 
