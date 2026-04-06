@@ -69,17 +69,18 @@ bun src/cli/index.ts replay fixtures/device-announce.json
 
 ## Integration tests
 
-Integration tests run against a real ntfy binary (downloaded to `./ntfy`). They auto-skip if the binary isn't present.
+Integration tests run against a real ntfy binary. They auto-skip if the binary isn't present, so `bun test` always works.
 
 ```bash
-# Download ntfy binary (linux amd64)
-curl -sL https://github.com/binwiederhier/ntfy/releases/download/v2.11.0/ntfy_2.11.0_linux_amd64.tar.gz | tar -xz --strip-components=1 -C . ntfy_2.11.0_linux_amd64/ntfy
+# Download ntfy for your platform and run all tests
+bun run test:integration
 
-# Run all tests (unit + integration)
+# Or download manually (detects OS and arch)
+bash scripts/download-ntfy.sh
 bun test
 ```
 
-The harness starts ntfy on a random port, runs the tests, then stops it.
+Supports linux and macOS on amd64/arm64. The harness starts ntfy on a local port, runs the tests, then stops it.
 
 ## Spec documents
 
