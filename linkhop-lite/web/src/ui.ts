@@ -231,11 +231,11 @@ function renderDevices(): string {
       const isSelf = d.device_id === app.config?.device_id;
       const badgeClass = isSelf ? "badge self" : d.is_removed ? "badge removed" : "badge";
       const badgeText = isSelf ? "you" : d.is_removed ? "left" : "active";
-      const hasEncryption = d.capabilities?.includes("encryption");
+      const encryptionActive = app.encryptionEnabled && app.encryptionKey !== null && d.capabilities?.includes("encryption");
       return `
         <div class="device-item">
           <div>
-            <div class="name">${esc(d.device_name)}${hasEncryption ? ' <span class="capability-badge">E2E</span>' : ""}</div>
+            <div class="name">${esc(d.device_name)}${encryptionActive ? ' <span class="capability-badge">E2E</span>' : ""}</div>
             <div class="meta">${esc(d.device_id)}</div>
           </div>
           <span class="${badgeClass}">${badgeText}</span>
