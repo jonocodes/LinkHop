@@ -15,14 +15,25 @@ function ensureDir(): void {
 
 // --- Config persistence ---
 
-export function saveConfig(config: DeviceConfig): void {
+export interface CLIConfig {
+  device: DeviceConfig;
+  password?: string;
+  encryption_enabled?: boolean;
+}
+
+export function saveConfig(config: CLIConfig): void {
   ensureDir();
   writeFileSync(CONFIG_FILE, JSON.stringify(config, null, 2));
 }
 
-export function loadConfig(): DeviceConfig | null {
+export function loadConfig(): CLIConfig | null {
   if (!existsSync(CONFIG_FILE)) return null;
-  return JSON.parse(readFileSync(CONFIG_FILE, "utf-8")) as DeviceConfig;
+  const raw = JSON.parse(readFileSync(CONFIG_FILE, "utf-8"));
+  // Migrate legacy format (bare DeviceConfig without wrapper)
+  if (raw.device_id && !raw.device) {
+    return { device: raw as DeviceConfig };
+  }
+  return raw as CLIConfig;
 }
 
 // --- State persistence ---

@@ -10,7 +10,7 @@ import { actionAnnounce, actionLeave, actionSend } from "../../src/engine/action
 import type { Effect } from "../../src/engine/reducer.js";
 import { loadConfig, saveConfig, loadState, saveState, clearAll, type BrowserConfig } from "./db.js";
 import { subscribeSSE, publishHTTP } from "./sse.js";
-import { requestPermission, showMessageNotification } from "./notifications.js";
+import { requestPermission, showMessageNotification, subscribeWebPush, unsubscribeWebPush } from "./notifications.js";
 
 export type AppScreen = "setup" | "main";
 export type ConnectionStatus = "disconnected" | "connecting" | "connected";
@@ -100,6 +100,9 @@ export class App {
         // Re-announce on reconnect so peers see us
         if (this.wasConnected) {
           this.announce();
+        } else {
+          // First connection — try web push subscription (best effort, async)
+          this.subscribeWebPush();
         }
         this.wasConnected = true;
       }
@@ -153,6 +156,7 @@ export class App {
     if (!this.config) return;
     const effect = actionLeave(this.config);
     await this.executeEffect(effect);
+    await this.unsubscribeWebPush();
   }
 
   async reset(): Promise<void> {
@@ -236,6 +240,27 @@ export class App {
     for (const effect of effects) {
       await this.executeEffect(effect);
     }
+  }
+
+  private async subscribeWebPush(): Promise<void> {
+    if (!this.config) return;
+    const regTopic = registryTopicFromConfig(this.config);
+    const devTopic = deviceTopicFromConfig(this.config);
+    // Best effort — silently fails if ntfy doesn't have web push configured
+    await Promise.all([
+      subscribeWebPush(this.ntfyUrl, regTopic),
+      subscribeWebPush(this.ntfyUrl, devTopic),
+    ]);
+  }
+
+  private async unsubscribeWebPush(): Promise<void> {
+    if (!this.config) return;
+    const regTopic = registryTopicFromConfig(this.config);
+    const devTopic = deviceTopicFromConfig(this.config);
+    await Promise.all([
+      unsubscribeWebPush(this.ntfyUrl, regTopic),
+      unsubscribeWebPush(this.ntfyUrl, devTopic),
+    ]);
   }
 
   private async executeEffect(effect: Effect): Promise<void> {
