@@ -148,6 +148,8 @@ Integration and e2e tests run against a real ntfy binary. They auto-skip if the 
 - [x] `body.kind: "encrypted"` wire format (ciphertext + IV, base64)
 - [x] `capabilities: ["encryption"]` in device.announce
 - [x] Encryption toggle persisted in browser config
+- [x] CLI: `init --password --encrypt` enables encryption
+- [x] CLI: send/inbox/pending/watch encrypt/decrypt transparently
 
 ### Local actions
 
@@ -165,15 +167,15 @@ Integration and e2e tests run against a real ntfy binary. They auto-skip if the 
 
 ### Reference CLI
 
-- [x] `init` — create device identity and network config
-- [x] `whoami` — print local identity and topics
-- [x] `announce` — emit device.announce
+- [x] `init` — create device identity and network config (with `--password --encrypt`)
+- [x] `whoami` — print local identity, topics, encryption status
+- [x] `announce` — emit device.announce (with capabilities)
 - [x] `leave` — emit device.leave
-- [x] `devices` — show known devices
-- [x] `send <id> <text>` — send a message
-- [x] `inbox` — show received messages
-- [x] `pending` — show pending outbound messages
-- [x] `watch` — live subscribe to registry + device topics
+- [x] `devices` — show known devices (with E2E badge)
+- [x] `send <id> <text>` — send a message (encrypted when enabled)
+- [x] `inbox` — show received messages (decrypted when possible)
+- [x] `pending` — show pending outbound messages (decrypted when possible)
+- [x] `watch` — live subscribe, decrypt, and display events
 - [x] `events` — print event log as JSON
 - [x] `export-state` — dump full local state
 - [x] `replay <file>` — replay fixture/event log into engine
@@ -206,6 +208,12 @@ Integration and e2e tests run against a real ntfy binary. They auto-skip if the 
 - [x] E2e: cross-device messaging with ack
 - [x] E2e: IndexedDB persistence across reload
 - [x] E2e: leave network and reset
+- [x] CLI e2e: init, whoami, double init guard
+- [x] CLI e2e: announce publishes to ntfy
+- [x] CLI e2e: send to unknown device error
+- [x] CLI e2e: replay, export-state, events, pending
+- [x] CLI e2e: full two-device announce + message flow
+- [x] CLI e2e: encryption flag and capability advertising
 
 ### Browser app (PWA)
 
@@ -222,7 +230,7 @@ Integration and e2e tests run against a real ntfy binary. They auto-skip if the 
 - [x] Auto-reconnect via EventSource with re-announce
 - [x] Persistent config (ntfy URL + encryption toggle survive reload)
 - [x] Leave network and reset from UI
-- [x] Messages sorted newest-first
+- [x] Messages sorted newest-first with relative timestamps
 - [x] SVG app icon
 - [x] Notification permission request on setup
 - [x] Foreground notifications on new message (via SW showNotification)
@@ -232,6 +240,7 @@ Integration and e2e tests run against a real ntfy binary. They auto-skip if the 
 - [x] E2E capability badge on devices list
 - [x] Encrypted message fallback display ("cannot decrypt")
 - [x] Debug tab (device config, connection status, event log)
+- [x] ntfy web push subscription (auto-subscribe on connect, unsubscribe on leave)
 
 ### Deferred (per spec)
 
@@ -239,5 +248,4 @@ Integration and e2e tests run against a real ntfy binary. They auto-skip if the 
 - [ ] Password rotation
 - [ ] Heartbeat / stronger presence
 - [x] Password-derived network_id (PBKDF2 via Web Crypto)
-- [x] Encryption (AES-GCM, opt-in, mixed mode)
-- [ ] ntfy web push subscription (server-side feature; SW push handler is ready)
+- [x] Encryption (AES-GCM, opt-in, mixed mode, CLI + browser)
