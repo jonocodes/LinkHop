@@ -12,7 +12,7 @@
       {
         "device_id": "dev_recipient",
         "device_name": "Recipient",
-        "device_topic": "linkhop.test.net_test.device.dev_recipient",
+        "device_topic": "linkhop-test-net_test-device-dev_recipient",
         "last_event_at": "2026-04-04T18:00:00Z",
         "last_event_type": "device.announce",
         "is_removed": false
@@ -23,7 +23,7 @@
     {
       "kind": "action_send",
       "to_device_id": "dev_recipient",
-      "to_device_topic": "linkhop.test.net_test.device.dev_recipient",
+      "to_device_topic": "linkhop-test-net_test-device-dev_recipient",
       "body": { "kind": "text", "text": "important message" }
     }
   ],

@@ -1,11 +1,11 @@
 import type { DeviceConfig } from "./types.js";
 
 export function registryTopic(env: string, networkId: string): string {
-  return `linkhop.${env}.${networkId}.registry`;
+  return `linkhop-${env}-${networkId}-registry`;
 }
 
 export function deviceTopic(env: string, networkId: string, deviceId: string): string {
-  return `linkhop.${env}.${networkId}.device.${deviceId}`;
+  return `linkhop-${env}-${networkId}-device-${deviceId}`;
 }
 
 export function registryTopicFromConfig(config: DeviceConfig): string {

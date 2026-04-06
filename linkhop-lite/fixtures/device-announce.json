@@ -19,7 +19,7 @@
         "payload": {
           "device_id": "dev_peer",
           "device_name": "Peer Phone",
-          "device_topic": "linkhop.test.net_test.device.dev_peer",
+          "device_topic": "linkhop-test-net_test-device-dev_peer",
           "protocol_version": "lite-v1"
         }
       }

@@ -6,12 +6,12 @@ export function getNtfyBaseUrl(): string {
   return process.env["NTFY_URL"] ?? DEFAULT_BASE_URL;
 }
 
-export async function publish(topic: string, event: AnyProtocolEvent): Promise<void> {
-  const url = `${getNtfyBaseUrl()}/${topic}`;
+export async function publish(topic: string, event: AnyProtocolEvent, baseUrl?: string): Promise<void> {
+  const base = baseUrl ?? getNtfyBaseUrl();
+  const url = `${base}/${topic}`;
   const res = await fetch(url, {
     method: "POST",
     body: JSON.stringify(event),
-    headers: { "Content-Type": "application/json" },
   });
   if (!res.ok) {
     throw new Error(`ntfy publish failed: ${res.status} ${res.statusText}`);

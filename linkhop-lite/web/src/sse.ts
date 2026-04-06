@@ -60,7 +60,6 @@ export async function publishHTTP(
   const res = await fetch(url, {
     method: "POST",
     body: JSON.stringify(event),
-    headers: { "Content-Type": "application/json" },
   });
   if (!res.ok) {
     throw new Error(`ntfy publish failed: ${res.status} ${res.statusText}`);

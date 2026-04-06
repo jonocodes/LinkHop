@@ -67,6 +67,20 @@ bun src/cli/index.ts export-state
 bun src/cli/index.ts replay fixtures/device-announce.json
 ```
 
+## Integration tests
+
+Integration tests run against a real ntfy binary (downloaded to `./ntfy`). They auto-skip if the binary isn't present.
+
+```bash
+# Download ntfy binary (linux amd64)
+curl -sL https://github.com/binwiederhier/ntfy/releases/download/v2.11.0/ntfy_2.11.0_linux_amd64.tar.gz | tar -xz --strip-components=1 -C . ntfy_2.11.0_linux_amd64/ntfy
+
+# Run all tests (unit + integration)
+bun test
+```
+
+The harness starts ntfy on a random port, runs the tests, then stops it.
+
 ## Spec documents
 
 - [Implementation spec (v0)](./linkhop-lite-implementation-spec-v0.md) — source of truth for wire formats and local state
@@ -87,8 +101,8 @@ bun src/cli/index.ts replay fixtures/device-announce.json
 
 ### Topic naming and IDs
 
-- [x] Topic convention: `linkhop.<env>.<network_id>.registry`
-- [x] Topic convention: `linkhop.<env>.<network_id>.device.<device_id>`
+- [x] Topic convention: `linkhop-<env>-<network_id>-registry` (dashes, not dots — ntfy rejects dots)
+- [x] Topic convention: `linkhop-<env>-<network_id>-device-<device_id>`
 - [x] ID generation (device, event, msg, network)
 
 ### Event validation
@@ -158,6 +172,9 @@ bun src/cli/index.ts replay fixtures/device-announce.json
 - [x] Late subscriber receives retained events
 - [x] Simulation fixture format and replay
 - [x] Fixture-driven tests (all JSON fixtures auto-loaded)
+- [x] Integration: publish/subscribe roundtrip against real ntfy
+- [x] Integration: two-device discovery over real ntfy
+- [x] Integration: full send/receive/ack flow over real ntfy
 - [x] Fixture runner assertion failure detection
 
 ### Deferred (per spec)

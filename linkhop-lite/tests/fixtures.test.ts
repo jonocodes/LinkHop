@@ -44,7 +44,7 @@ describe("fixture runner assertions catch failures", () => {
         devices: [{
           device_id: "dev_peer",
           device_name: "P",
-          device_topic: "linkhop.test.net_test.device.dev_peer",
+          device_topic: "linkhop-test-net_test-device-dev_peer",
           last_event_at: "2026-04-04T18:00:00Z",
           last_event_type: "device.announce",
           is_removed: false,
