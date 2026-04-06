@@ -1,12 +1,12 @@
 import { describe, it, expect, beforeAll } from "vitest";
+import { publish } from "../src/transport/ntfy.js";
 import { createEmptyState, getDevices, getInbox, getPending } from "../src/engine/state.js";
 import { processEvent } from "../src/engine/reducer.js";
 import { actionSend } from "../src/engine/actions.js";
 import { validateEvent } from "../src/protocol/validate.js";
 import { createDeviceAnnounce } from "../src/protocol/events.js";
 import { deviceTopic, registryTopic } from "../src/protocol/topics.js";
-import type { DeviceConfig } from "../src/protocol/types.js";
-import { httpGet, publishViaProxy, collectEventsViaProxy } from "./proxy-fetch.js";
+import type { AnyProtocolEvent, DeviceConfig } from "../src/protocol/types.js";
 
 const NTFY_SH = "https://ntfy.sh";
 
@@ -24,11 +24,85 @@ function makeConfig(id: string, name: string, networkId: string): DeviceConfig {
   };
 }
 
-/** Check if ntfy.sh is reachable (proxy-aware) */
+/** Collect N events from an ntfy topic via NDJSON streaming */
+function collectEvents(
+  topic: string,
+  count: number,
+  timeoutMs = 15000,
+): Promise<AnyProtocolEvent[]> {
+  return new Promise((resolve, reject) => {
+    const events: AnyProtocolEvent[] = [];
+    const controller = new AbortController();
+    const timer = setTimeout(() => {
+      controller.abort();
+      resolve(events);
+    }, timeoutMs);
+
+    const url = `${NTFY_SH}/${topic}/json?poll=0`;
+
+    (async () => {
+      try {
+        const res = await fetch(url, {
+          signal: controller.signal,
+          headers: { Accept: "application/x-ndjson" },
+        });
+
+        if (!res.ok || !res.body) {
+          clearTimeout(timer);
+          reject(new Error(`subscribe failed: ${res.status}`));
+          return;
+        }
+
+        const reader = res.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = "";
+
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+
+          buffer += decoder.decode(value, { stream: true });
+          const lines = buffer.split("\n");
+          buffer = lines.pop()!;
+
+          for (const line of lines) {
+            if (!line.trim()) continue;
+            try {
+              const ntfyMsg = JSON.parse(line);
+              if (ntfyMsg.event === "message" && ntfyMsg.message) {
+                try {
+                  events.push(JSON.parse(ntfyMsg.message));
+                } catch {
+                  // not JSON message body
+                }
+              }
+            } catch {
+              // not JSON
+            }
+          }
+
+          if (events.length >= count) {
+            clearTimeout(timer);
+            controller.abort();
+            resolve(events);
+            return;
+          }
+        }
+      } catch (err) {
+        if (!(err instanceof Error && err.name === "AbortError")) {
+          clearTimeout(timer);
+          reject(err);
+        }
+      }
+    })();
+  });
+}
+
+/** Check if ntfy.sh is reachable */
 async function ntfyShReachable(): Promise<boolean> {
   try {
-    const raw = await httpGet(`${NTFY_SH}/v1/health`, 5000);
-    const body = JSON.parse(raw) as { healthy: boolean };
+    const res = await fetch(`${NTFY_SH}/v1/health`, { signal: AbortSignal.timeout(5000) });
+    const body = (await res.json()) as { healthy: boolean };
     return body.healthy === true;
   } catch {
     return false;
@@ -51,10 +125,12 @@ describe("integration: ntfy.sh public server", { timeout: 30000 }, () => {
     const config = makeConfig("dev_rt", "Roundtrip", netId);
     const event = createDeviceAnnounce(config);
 
-    await publishViaProxy(topic, event, NTFY_SH);
+    const collected = collectEvents(topic, 1);
     await new Promise((r) => setTimeout(r, 500));
 
-    const events = await collectEventsViaProxy(NTFY_SH, topic, 1);
+    await publish(topic, event, NTFY_SH);
+
+    const events = await collected;
     expect(events.length).toBeGreaterThanOrEqual(1);
     expect(events[0].type).toBe("device.announce");
     expect(events[0].from_device_id).toBe("dev_rt");
@@ -68,11 +144,13 @@ describe("integration: ntfy.sh public server", { timeout: 30000 }, () => {
     const desktopConfig = makeConfig("dev_dk", "Desktop", netId);
     const regTopic = registryTopic("test", netId);
 
-    await publishViaProxy(regTopic, createDeviceAnnounce(phoneConfig), NTFY_SH);
-    await publishViaProxy(regTopic, createDeviceAnnounce(desktopConfig), NTFY_SH);
+    const collected = collectEvents(regTopic, 2);
     await new Promise((r) => setTimeout(r, 500));
 
-    const events = await collectEventsViaProxy(NTFY_SH, regTopic, 2);
+    await publish(regTopic, createDeviceAnnounce(phoneConfig), NTFY_SH);
+    await publish(regTopic, createDeviceAnnounce(desktopConfig), NTFY_SH);
+
+    const events = await collected;
     expect(events.length).toBe(2);
 
     const phoneState = createEmptyState();
@@ -103,11 +181,13 @@ describe("integration: ntfy.sh public server", { timeout: 30000 }, () => {
     const recipientDevTopic = deviceTopic("test", netId, recipient.device_id);
 
     // Step 1: Both announce
-    await publishViaProxy(regTopic, createDeviceAnnounce(sender), NTFY_SH);
-    await publishViaProxy(regTopic, createDeviceAnnounce(recipient), NTFY_SH);
+    const regCollected = collectEvents(regTopic, 2);
     await new Promise((r) => setTimeout(r, 500));
 
-    const regEvents = await collectEventsViaProxy(NTFY_SH, regTopic, 2);
+    await publish(regTopic, createDeviceAnnounce(sender), NTFY_SH);
+    await publish(regTopic, createDeviceAnnounce(recipient), NTFY_SH);
+
+    const regEvents = await regCollected;
     for (const raw of regEvents) {
       const result = validateEvent(raw, netId);
       if (result.valid) {
@@ -127,12 +207,14 @@ describe("integration: ntfy.sh public server", { timeout: 30000 }, () => {
     const msgId = getPending(senderState, sender.device_id)[0].msg_id;
 
     // Step 3: Publish message, collect on recipient topic
-    if (sendEffect.type === "publish") {
-      await publishViaProxy(sendEffect.topic, sendEffect.event, NTFY_SH);
-    }
-    await new Promise((r) => setTimeout(r, 1000));
+    const msgCollected = collectEvents(recipientDevTopic, 1);
+    await new Promise((r) => setTimeout(r, 500));
 
-    const msgEvents = await collectEventsViaProxy(NTFY_SH, recipientDevTopic, 1);
+    if (sendEffect.type === "publish") {
+      await publish(sendEffect.topic, sendEffect.event, NTFY_SH);
+    }
+
+    const msgEvents = await msgCollected;
     expect(msgEvents.length).toBe(1);
 
     // Step 4: Recipient processes
@@ -148,12 +230,14 @@ describe("integration: ntfy.sh public server", { timeout: 30000 }, () => {
     expect(ackEffect).toBeDefined();
 
     // Step 5: Publish ack, collect on sender topic
-    if (ackEffect?.type === "publish") {
-      await publishViaProxy(ackEffect.topic, ackEffect.event, NTFY_SH);
-    }
-    await new Promise((r) => setTimeout(r, 1000));
+    const ackCollected = collectEvents(senderDevTopic, 1);
+    await new Promise((r) => setTimeout(r, 500));
 
-    const ackEvents = await collectEventsViaProxy(NTFY_SH, senderDevTopic, 1);
+    if (ackEffect?.type === "publish") {
+      await publish(ackEffect.topic, ackEffect.event, NTFY_SH);
+    }
+
+    const ackEvents = await ackCollected;
     expect(ackEvents.length).toBe(1);
 
     // Step 6: Sender processes ack
