@@ -189,4 +189,4 @@ bun src/cli/index.ts replay fixtures/device-announce.json
 - [x] Foreground notifications on new message (via SW showNotification)
 - [x] Custom service worker with push event handler
 - [x] Notification click opens/focuses app
-- [ ] ntfy web push subscription (requires VAPID key from ntfy server)
+- [ ] ntfy web push subscription (server-side feature; SW push handler is ready)
