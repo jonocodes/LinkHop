@@ -204,12 +204,18 @@ button.secondary {
 /* Send form */
 .send-form {
   display: flex;
+  flex-direction: column;
   gap: 8px;
   margin-top: auto;
   padding-top: 12px;
 }
 
-.send-form input {
+.send-row {
+  display: flex;
+  gap: 8px;
+}
+
+.send-row input {
   flex: 1;
 }
 

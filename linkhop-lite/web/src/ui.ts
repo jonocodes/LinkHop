@@ -69,8 +69,10 @@ function renderMainScreen(): string {
 
       <div class="send-form" id="send-form" style="display:none">
         <select id="send-target"></select>
-        <input id="send-text" type="text" placeholder="Message..." />
-        <button id="send-btn">Send</button>
+        <div class="send-row">
+          <input id="send-text" type="text" placeholder="Message..." />
+          <button id="send-btn">Send</button>
+        </div>
       </div>
     </div>
   `;
