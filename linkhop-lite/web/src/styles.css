@@ -201,10 +201,33 @@ button.secondary {
   margin-bottom: 8px;
 }
 
+.msg-item-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 4px;
+}
+
 .msg-item .msg-from {
   font-size: 0.8rem;
   color: var(--text-dim);
-  margin-bottom: 4px;
+}
+
+.msg-dismiss {
+  background: none;
+  border: none;
+  color: var(--text-dim);
+  font-size: 1.1rem;
+  line-height: 1;
+  padding: 0 2px;
+  cursor: pointer;
+  opacity: 0.5;
+  flex-shrink: 0;
+}
+
+.msg-dismiss:hover {
+  opacity: 1;
+  color: var(--text);
 }
 
 .msg-item .msg-body {
@@ -479,4 +502,33 @@ button.secondary {
 .debug-event-time {
   color: var(--text-dim);
   white-space: nowrap;
+}
+
+.debug-topic-row {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 6px 12px;
+  background: var(--surface);
+  border-radius: 4px;
+  margin-bottom: 2px;
+  font-size: 0.75rem;
+  font-family: monospace;
+}
+
+.debug-topic-label {
+  color: var(--text-dim);
+  min-width: 56px;
+}
+
+.debug-topic-link {
+  color: var(--accent);
+  text-decoration: none;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.debug-topic-link:hover {
+  text-decoration: underline;
 }

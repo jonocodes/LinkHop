@@ -1,5 +1,6 @@
 import { App, type AppScreen, type ConnectionStatus } from "./app.js";
 import { getDevices, getInbox, getPending, getSent } from "../../src/engine/state.js";
+import { registryTopicFromConfig, deviceTopicFromConfig } from "../../src/protocol/topics.js";
 import type { MessageBody } from "../../src/protocol/types.js";
 
 declare const __BUILD_TIME__: string;
@@ -183,7 +184,8 @@ function renderStatus(status: ConnectionStatus): void {
   dot.className = `status-dot ${status === "connected" ? "connected" : status === "connecting" ? "connecting" : ""}`;
 
   const label = status === "connected" ? "Connected" : status === "connecting" ? "Reconnecting..." : "Disconnected";
-  const deviceInfo = app.config ? ` \u00b7 ${app.config.device_name}` : "";
+  const poolSuffix = app.pool ? ` @ ${app.pool}` : "";
+  const deviceInfo = app.config ? ` \u00b7 ${app.config.device_name}${poolSuffix}` : "";
   text.textContent = label + deviceInfo;
 
   if (banner) {
@@ -215,6 +217,12 @@ function renderMainContent(): void {
       break;
     case "inbox":
       container.innerHTML = renderInbox();
+      container.querySelectorAll<HTMLElement>(".msg-dismiss").forEach((btn) => {
+        btn.addEventListener("click", async () => {
+          const msgId = btn.dataset.msgId;
+          if (msgId) await app.dismissMessage(msgId);
+        });
+      });
       updateSendTargets();
       updateSendFormVisibility();
       break;
@@ -281,7 +289,10 @@ function renderInbox(): string {
       const bodyHtml = renderMessageBody(m.body);
       return `
         <div class="msg-item received">
-          <div class="msg-from">From ${esc(fromLabel)}</div>
+          <div class="msg-item-header">
+            <span class="msg-from">From ${esc(fromLabel)}</span>
+            <button class="msg-dismiss" data-msg-id="${esc(m.msg_id)}" title="Dismiss">&times;</button>
+          </div>
           <div class="msg-body">${bodyHtml}</div>
           <div class="msg-time">${formatTime(m.created_at)}</div>
         </div>
@@ -448,10 +459,14 @@ function renderDebug(): string {
   sections.push(`<button class="secondary" id="debug-back-btn" style="margin-bottom:12px">&larr; Back to Settings</button>`);
 
   // Build info
+  const deployedLocal = new Date(__BUILD_TIME__).toLocaleString(undefined, { timeZoneName: "short" });
+  const isStandalone =
+    window.matchMedia("(display-mode: standalone)").matches ||
+    (navigator as Navigator & { standalone?: boolean }).standalone === true;
   sections.push(`
     <div class="debug-section">
       <div class="debug-title">Build</div>
-      <pre class="debug-pre">${esc(JSON.stringify({ deployed: __BUILD_TIME__ }, null, 2))}</pre>
+      <pre class="debug-pre">${esc(JSON.stringify({ deployed: deployedLocal, pwa_installed: isStandalone }, null, 2))}</pre>
     </div>
   `);
 
@@ -482,6 +497,26 @@ function renderDebug(): string {
       }, null, 2))}</pre>
     </div>
   `);
+
+  // Topic links
+  if (app.config) {
+    const regTopic = registryTopicFromConfig(app.config);
+    const devTopic = deviceTopicFromConfig(app.config);
+    const base = app.ntfyUrl;
+    sections.push(`
+      <div class="debug-section">
+        <div class="debug-title">Topics</div>
+        <div class="debug-topic-row">
+          <span class="debug-topic-label">registry</span>
+          <a class="debug-topic-link" href="${esc(base)}/${esc(regTopic)}" target="_blank" rel="noopener">${esc(regTopic)}</a>
+        </div>
+        <div class="debug-topic-row">
+          <span class="debug-topic-label">device</span>
+          <a class="debug-topic-link" href="${esc(base)}/${esc(devTopic)}" target="_blank" rel="noopener">${esc(devTopic)}</a>
+        </div>
+      </div>
+    `);
+  }
 
   // Event log (most recent 50)
   const log = app.state.eventLog.slice(-50).reverse();
