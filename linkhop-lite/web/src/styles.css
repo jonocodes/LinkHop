@@ -214,20 +214,20 @@ button.secondary {
 }
 
 .msg-dismiss {
-  background: none;
+  background: var(--border);
   border: none;
   color: var(--text-dim);
-  font-size: 1.1rem;
+  font-size: 1rem;
   line-height: 1;
-  padding: 0 2px;
+  padding: 4px 10px;
+  border-radius: 4px;
   cursor: pointer;
-  opacity: 0.5;
   flex-shrink: 0;
 }
 
 .msg-dismiss:hover {
-  opacity: 1;
-  color: var(--text);
+  background: var(--accent);
+  color: white;
 }
 
 .msg-item .msg-body {
