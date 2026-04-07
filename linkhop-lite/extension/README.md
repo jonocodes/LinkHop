@@ -4,54 +4,76 @@ Keep your LinkHop Lite subscriptions alive when the web app tab is closed.
 
 ## How it works
 
-LinkHop Lite uses SSE connections to ntfy for real-time messaging. When the browser tab is closed or backgrounded, those connections die and the device goes offline. This extension maintains those connections in a persistent background page so the device stays online and messages are received.
+LinkHop Lite uses SSE connections to ntfy for real-time messaging. When the browser tab is closed, those connections die and the device goes offline. This extension watches for incoming messages and wakes up the web app tab when something arrives.
+
+The extension does **not** process events, manage state, send acks, or show notifications itself. It is a thin watcher that delegates everything to the web app.
+
+### Tab-aware behavior
+
+- **Tab is open** — extension is idle. The web app handles its own SSE connections and notifications.
+- **Tab is closed** — extension holds SSE connections to ntfy. When a `msg.send` event arrives addressed to the local device, it opens/focuses the linkhop-lite tab. The tab boots up, reconnects with `?since=30s`, processes the message, shows the notification, sends the ack.
+
+This avoids all state duplication, notification dedup, and ack coordination issues.
 
 ### Config sharing (no separate login)
 
-The extension reads config directly from the linkhop-lite web app — there is no separate account or login. A content script running on the app page reads the IndexedDB config (`network_id`, `device_id`, `ntfy_url`, encryption keys) and passes it to the extension background page.
+The extension reads config directly from the linkhop-lite web app — there is no separate account or login. A content script injected on the app page (via `chrome.tabs.executeScript`) reads the IndexedDB config and sends it to the background page. The extension only needs:
 
-### What the extension does
+- `ntfy_url` — which ntfy server to connect to
+- `device_id` — to filter messages addressed to this device
+- Registry and device topic names
+- App URL
 
-- Holds persistent SSE connections to the **registry topic** and **device topic** on ntfy
-- Processes incoming events (validate, decrypt, reduce state)
-- Shows browser notifications for new incoming messages
-- Periodically re-announces the device so peers see it as online
-- Syncs state back when the web app tab is reopened
+No encryption keys or engine state needed.
 
-### When it stops
-
-- User does "leave network" in the web app — content script notifies extension, which closes connections and clears config
-- Extension popup disconnect button
-
-## Default app URL
+### App URL
 
 The extension defaults to the deployed GitHub Pages site:
 
     https://jonocodes.github.io/LinkHop/
 
-This is configurable in the extension popup.
+This is configurable in the extension popup. The content script is injected programmatically on the configured URL (no broad match patterns needed).
+
+### When it stops
+
+- User clicks "Disconnect" in the extension popup — closes SSE, clears config
+- User does "leave network" in the web app — content script notifies extension to disconnect
 
 ## Architecture
 
 ```
-Background Page (persistent)
+Background Page (persistent, MV2)
   - SSE connections to ntfy (registry + device topics)
-  - Event processing (validate, decrypt, engine reduce)
-  - chrome.notifications for incoming messages
-  - Periodic re-announce (heartbeat)
-  - Stores config + state in chrome.storage
+  - Watches for msg.send events addressed to local device_id
+  - Opens/focuses the web app tab when a message arrives
+  - Idle when the web app tab is already open
 
-Content Script (runs on linkhop-lite page)
+Content Script (injected on app page via chrome.tabs.executeScript)
   - Reads config from web app's IndexedDB
-  - Sends config to background page
-  - Relays leave/disconnect events
+  - Sends config to background page on page load
+  - Notifies background page on leave/disconnect
 
 Popup
-  - Connection status display
-  - Device info
+  - Status display (watching / tab open / disconnected / not configured)
+  - Device name
+  - App URL field (editable, defaults to GitHub Pages)
+  - Open App button (focuses existing tab or opens new one)
   - Disconnect button
-  - App URL configuration
 ```
+
+## Popup UI States
+
+### Not configured
+No device linked yet. Shows app URL field and "Open App" button so the user can open the app and connect.
+
+### Tab open, extension idle
+Shows device name and indicates the app is handling messages directly.
+
+### Tab closed, extension watching
+Shows device name and indicates the extension is watching for messages. SSE connections are active.
+
+### Disconnected
+User chose to stop. Shows reconnect option.
 
 ## Manifest V3 Migration Notes
 
