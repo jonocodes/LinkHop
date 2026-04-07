@@ -253,7 +253,7 @@ function renderDevices(): string {
       const badgeText = isSelf ? "you" : d.is_removed ? "left" : "active";
       const encryptionActive = app.encryptionEnabled && app.encryptionKey !== null && d.capabilities?.includes("encryption");
       return `
-        <div class="device-item${isClickable ? " device-item-clickable" : ""}"${isClickable ? ` data-device-id="${esc(d.device_id)}"` : ""}>
+        <div class="device-item${isClickable ? " device-item-clickable" : ""}${d.is_removed ? " device-item-removed" : ""}"${isClickable ? ` data-device-id="${esc(d.device_id)}"` : ""}>
           <div>
             <div class="name">${esc(d.device_name)}${encryptionActive ? ' <span class="capability-badge">encrypted</span>' : ""}</div>
             <div class="meta">${esc(d.device_id)}</div>

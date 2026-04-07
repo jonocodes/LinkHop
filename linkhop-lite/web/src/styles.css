@@ -174,7 +174,12 @@ button.secondary {
 }
 
 .device-item .badge.removed {
-  opacity: 0.5;
+  background: var(--surface-2);
+  color: var(--text-dim);
+}
+
+.device-item-removed {
+  opacity: 0.45;
 }
 
 /* Section headers */
