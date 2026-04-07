@@ -15,7 +15,7 @@ export function subscribeSSE(
   topic: string,
   callbacks: SSECallbacks,
 ): () => void {
-  const url = `${baseUrl}/${topic}/sse?since=30s`;
+  const url = `${baseUrl}/${topic}/sse?since=12h`;
   const source = new EventSource(url);
 
   source.onopen = () => {

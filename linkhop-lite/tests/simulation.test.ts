@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from "vitest";
+import { describe, it, expect, beforeEach, vi } from "vitest";
 import { InMemoryRelay } from "../src/engine/relay.js";
 import { SimulatedDevice } from "../src/engine/simulated-device.js";
 import { getDevices, getInbox, getPending } from "../src/engine/state.js";
@@ -175,6 +175,33 @@ describe("late subscriber receives retained events", () => {
 
     const devices = getDevices(desktop.state);
     expect(devices.find((d) => d.device_id === "dev_phone")).toBeDefined();
+  });
+
+  it("device misses peer announce if relay retention window has expired", () => {
+    // Simulates the real ntfy ?since=30s window: events older than the retention
+    // period are NOT delivered to late subscribers.
+    vi.useFakeTimers();
+    try {
+      const relay = new InMemoryRelay({ retentionMs: 1_000 }); // 1 second window
+      const phoneConfig = makeDevice("dev_phone", "Phone");
+      const desktopConfig = makeDevice("dev_desktop", "Desktop");
+
+      const phone = new SimulatedDevice(phoneConfig, relay);
+      phone.connect();
+      phone.announce(); // published at T=0
+
+      vi.advanceTimersByTime(2_000); // jump 2 seconds past the 1s retention window
+
+      // Desktop connects after the retention window has expired
+      const desktop = new SimulatedDevice(desktopConfig, relay);
+      desktop.connect();
+
+      // Desktop should NOT discover phone — the announce is outside the retention window
+      const devices = getDevices(desktop.state);
+      expect(devices.find((d) => d.device_id === "dev_phone")).toBeUndefined();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });
 
