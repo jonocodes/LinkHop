@@ -449,10 +449,14 @@ function renderDebug(): string {
   sections.push(`<button class="secondary" id="debug-back-btn" style="margin-bottom:12px">&larr; Back to Settings</button>`);
 
   // Build info
+  const deployedLocal = new Date(__BUILD_TIME__).toLocaleString(undefined, { timeZoneName: "short" });
+  const isStandalone =
+    window.matchMedia("(display-mode: standalone)").matches ||
+    (navigator as Navigator & { standalone?: boolean }).standalone === true;
   sections.push(`
     <div class="debug-section">
       <div class="debug-title">Build</div>
-      <pre class="debug-pre">${esc(JSON.stringify({ deployed: __BUILD_TIME__ }, null, 2))}</pre>
+      <pre class="debug-pre">${esc(JSON.stringify({ deployed: deployedLocal, pwa_installed: isStandalone }, null, 2))}</pre>
     </div>
   `);
 

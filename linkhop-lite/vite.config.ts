@@ -26,8 +26,10 @@ export default defineConfig({
         description: "Device-to-device messaging via ntfy",
         theme_color: "#1a1a2e",
         background_color: "#1a1a2e",
+        id: ".",
         display: "standalone",
         start_url: ".",
+        scope: ".",
         icons: [
           {
             src: "icon-192.png",
@@ -38,6 +40,7 @@ export default defineConfig({
             src: "icon-512.png",
             sizes: "512x512",
             type: "image/png",
+            purpose: "any maskable",
           },
           {
             src: "icon.svg",
