@@ -37,7 +37,7 @@ self.addEventListener("push", (event) => {
           if (protoEvent.type === "msg.send" && protoEvent.payload?.body?.text) {
             title = `LinkHop: ${protoEvent.from_device_id}`;
             body = protoEvent.payload.body.text;
-            data = protoEvent;
+            data = { msg_id: protoEvent.payload.msg_id };
           }
         } catch {
           // Not a protocol event, use raw message
@@ -56,23 +56,48 @@ self.addEventListener("push", (event) => {
       tag: "linkhop-push",
       renotify: true,
       data,
+      actions: [
+        { action: "mark-viewed", title: "Mark as Read" },
+        { action: "open", title: "Open" },
+      ],
     }),
   );
 });
 
-// Open app when notification is clicked
+// Handle notification clicks and action buttons
 self.addEventListener("notificationclick", (event) => {
   event.notification.close();
+  const msgId: string | undefined = event.notification.data?.msg_id;
+
+  if (event.action === "mark-viewed") {
+    // Mark viewed without opening the app — postMessage any open window
+    event.waitUntil(
+      self.clients.matchAll({ type: "window", includeUncontrolled: true }).then((clients) => {
+        for (const client of clients) {
+          if (client.url.includes(self.location.origin)) {
+            client.postMessage({ type: "mark-viewed", msg_id: msgId });
+            return;
+          }
+        }
+        // No open window — nothing to do; message stays "received" until next open
+      }),
+    );
+    return;
+  }
+
+  // Default click or "open" action: focus/open the app and navigate to the message
   event.waitUntil(
     self.clients.matchAll({ type: "window", includeUncontrolled: true }).then((clients) => {
-      // Focus existing window if open
       for (const client of clients) {
         if (client.url.includes(self.location.origin) && "focus" in client) {
-          return client.focus();
+          return (client as WindowClient).focus().then((c) => {
+            c.postMessage({ type: "open-message", msg_id: msgId });
+          });
         }
       }
-      // Otherwise open new window
-      return self.clients.openWindow("/");
+      // No existing window — open with msg param so app can pick it up on load
+      const url = msgId ? `/?msg=${encodeURIComponent(msgId)}` : "/";
+      return self.clients.openWindow(url);
     }),
   );
 });

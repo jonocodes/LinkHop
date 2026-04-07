@@ -275,7 +275,7 @@ export class App {
       const bodyText = result.event.payload.body.kind === "text"
         ? result.event.payload.body.text
         : "[Encrypted message]";
-      showMessageNotification(fromName, bodyText);
+      showMessageNotification(fromName, bodyText, result.event.payload.msg_id);
     }
 
     for (const effect of effects) {

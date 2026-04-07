@@ -8,9 +8,17 @@ declare const __BUILD_TIME__: string;
 let app: App;
 let currentTab: "devices" | "inbox" | "pending" | "settings" = "devices";
 let currentMessageId: string | null = null;
+let pendingOpenMsgId: string | null = null;
 let showDebug = false;
 
 export function mount(root: HTMLElement): void {
+  // Check if opened from a background notification with a msg param
+  const urlMsg = new URLSearchParams(window.location.search).get("msg");
+  if (urlMsg) {
+    pendingOpenMsgId = urlMsg;
+    history.replaceState(null, "", "/");
+  }
+
   app = new App({
     onStateChange: () => renderMainContent(),
     onScreenChange: (screen) => showScreen(screen),
@@ -24,7 +32,26 @@ export function mount(root: HTMLElement): void {
   `;
 
   bindSetupEvents();
+
+  // Listen for messages from the service worker (notification clicks)
+  navigator.serviceWorker?.addEventListener("message", (event) => {
+    const { type, msg_id } = event.data ?? {};
+    if (type === "open-message" && msg_id) {
+      openMessageById(msg_id as string);
+    } else if (type === "mark-viewed" && msg_id) {
+      app.markMessageViewed(msg_id as string);
+    }
+  });
+
   app.init();
+}
+
+function openMessageById(msgId: string): void {
+  currentTab = "inbox";
+  currentMessageId = msgId;
+  document.querySelectorAll(".tab-bar button[data-tab]").forEach((b) => b.classList.remove("active"));
+  document.querySelector('.tab-bar button[data-tab="inbox"]')?.classList.add("active");
+  app.markMessageViewed(msgId);
 }
 
 function renderSetupScreen(): string {
@@ -173,7 +200,13 @@ function showScreen(screen: AppScreen): void {
 
   if (screen === "main") {
     bindMainEvents();
-    renderMainContent();
+    if (pendingOpenMsgId) {
+      const msgId = pendingOpenMsgId;
+      pendingOpenMsgId = null;
+      openMessageById(msgId);
+    } else {
+      renderMainContent();
+    }
   }
 }
 
