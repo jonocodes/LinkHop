@@ -480,3 +480,32 @@ button.secondary {
   color: var(--text-dim);
   white-space: nowrap;
 }
+
+.debug-topic-row {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 6px 12px;
+  background: var(--surface);
+  border-radius: 4px;
+  margin-bottom: 2px;
+  font-size: 0.75rem;
+  font-family: monospace;
+}
+
+.debug-topic-label {
+  color: var(--text-dim);
+  min-width: 56px;
+}
+
+.debug-topic-link {
+  color: var(--accent);
+  text-decoration: none;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.debug-topic-link:hover {
+  text-decoration: underline;
+}

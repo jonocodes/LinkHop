@@ -1,5 +1,6 @@
 import { App, type AppScreen, type ConnectionStatus } from "./app.js";
 import { getDevices, getInbox, getPending, getSent } from "../../src/engine/state.js";
+import { registryTopicFromConfig, deviceTopicFromConfig } from "../../src/protocol/topics.js";
 import type { MessageBody } from "../../src/protocol/types.js";
 
 declare const __BUILD_TIME__: string;
@@ -487,6 +488,26 @@ function renderDebug(): string {
       }, null, 2))}</pre>
     </div>
   `);
+
+  // Topic links
+  if (app.config) {
+    const regTopic = registryTopicFromConfig(app.config);
+    const devTopic = deviceTopicFromConfig(app.config);
+    const base = app.ntfyUrl;
+    sections.push(`
+      <div class="debug-section">
+        <div class="debug-title">Topics</div>
+        <div class="debug-topic-row">
+          <span class="debug-topic-label">registry</span>
+          <a class="debug-topic-link" href="${esc(base)}/${esc(regTopic)}" target="_blank" rel="noopener">${esc(regTopic)}</a>
+        </div>
+        <div class="debug-topic-row">
+          <span class="debug-topic-label">device</span>
+          <a class="debug-topic-link" href="${esc(base)}/${esc(devTopic)}" target="_blank" rel="noopener">${esc(devTopic)}</a>
+        </div>
+      </div>
+    `);
+  }
 
   // Event log (most recent 50)
   const log = app.state.eventLog.slice(-50).reverse();
