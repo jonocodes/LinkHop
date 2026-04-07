@@ -24,6 +24,7 @@ export interface AppCallbacks {
 
 export class App {
   config: DeviceConfig | null = null;
+  pool: string | null = null;
   state: LocalState = createEmptyState();
   screen: AppScreen = "setup";
   connection: ConnectionStatus = "disconnected";
@@ -44,6 +45,7 @@ export class App {
     const saved = await loadConfig();
     if (saved) {
       this.config = saved.device;
+      this.pool = saved.pool ?? null;
       this.ntfyUrl = saved.ntfy_url;
       this.encryptionEnabled = saved.encryption_enabled ?? false;
       this.selfSendEnabled = saved.self_send_enabled ?? false;
@@ -61,6 +63,7 @@ export class App {
 
   async setup(name: string, pool: string, password: string, ntfyUrl: string): Promise<void> {
     const networkId = await deriveNetworkId(pool, password);
+    this.pool = pool;
     this.ntfyUrl = ntfyUrl;
     this.encryptionKey = await deriveEncryptionKey(pool, password);
     this.encryptionEnabled = false;

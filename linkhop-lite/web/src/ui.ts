@@ -183,7 +183,8 @@ function renderStatus(status: ConnectionStatus): void {
   dot.className = `status-dot ${status === "connected" ? "connected" : status === "connecting" ? "connecting" : ""}`;
 
   const label = status === "connected" ? "Connected" : status === "connecting" ? "Reconnecting..." : "Disconnected";
-  const deviceInfo = app.config ? ` \u00b7 ${app.config.device_name}` : "";
+  const poolSuffix = app.pool ? ` @ ${app.pool}` : "";
+  const deviceInfo = app.config ? ` \u00b7 ${app.config.device_name}${poolSuffix}` : "";
   text.textContent = label + deviceInfo;
 
   if (banner) {
