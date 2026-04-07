@@ -4,9 +4,9 @@ import { registryTopicFromConfig, deviceTopicFromConfig } from "../../src/protoc
 import { generateDeviceId } from "../../src/protocol/ids.js";
 import { deriveNetworkId } from "../../src/protocol/network.js";
 import { deriveEncryptionKey, encryptBody, decryptBody } from "../../src/protocol/crypto.js";
-import { createEmptyState } from "../../src/engine/state.js";
+import { createEmptyState, getInbox } from "../../src/engine/state.js";
 import { processEvent } from "../../src/engine/reducer.js";
-import { actionAnnounce, actionLeave, actionSend } from "../../src/engine/actions.js";
+import { actionAnnounce, actionLeave, actionSend, actionMarkViewed } from "../../src/engine/actions.js";
 import type { Effect } from "../../src/engine/reducer.js";
 import { loadConfig, saveConfig, loadState, saveState, clearAll, type BrowserConfig } from "./db.js";
 import { subscribeSSE, publishHTTP } from "./sse.js";
@@ -200,6 +200,19 @@ export class App {
 
   async dismissMessage(msgId: string): Promise<void> {
     this.state.messages.delete(msgId);
+    await saveState(this.state);
+    this.callbacks.onStateChange();
+  }
+
+  async markInboxViewed(): Promise<void> {
+    if (!this.config) return;
+    const unread = getInbox(this.state, this.config.device_id).filter(
+      (m) => m.state === "received",
+    );
+    if (unread.length === 0) return;
+    for (const m of unread) {
+      actionMarkViewed(this.state, m.msg_id);
+    }
     await saveState(this.state);
     this.callbacks.onStateChange();
   }

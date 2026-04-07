@@ -111,6 +111,7 @@ function handleMsgSend(
       last_attempt_id: attempt_id,
       last_attempt_at: event.timestamp,
       received_at: event.timestamp,
+      viewed_at: null,
     };
     state.messages.set(msg_id, record);
   } else {

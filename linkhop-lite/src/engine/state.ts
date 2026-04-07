@@ -18,8 +18,14 @@ export function getMessage(state: LocalState, msgId: string): MessageRecord | un
 
 export function getInbox(state: LocalState, localDeviceId: string): MessageRecord[] {
   return [...state.messages.values()].filter(
-    (m) => m.to_device_id === localDeviceId && m.state === "received",
+    (m) => m.to_device_id === localDeviceId && (m.state === "received" || m.state === "viewed"),
   );
+}
+
+export function getUnreadCount(state: LocalState, localDeviceId: string): number {
+  return [...state.messages.values()].filter(
+    (m) => m.to_device_id === localDeviceId && m.state === "received",
+  ).length;
 }
 
 export function getPending(state: LocalState, localDeviceId: string): MessageRecord[] {

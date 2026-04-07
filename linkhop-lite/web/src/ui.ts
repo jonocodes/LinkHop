@@ -1,5 +1,5 @@
 import { App, type AppScreen, type ConnectionStatus } from "./app.js";
-import { getDevices, getInbox, getPending, getSent } from "../../src/engine/state.js";
+import { getDevices, getInbox, getPending, getSent, getUnreadCount } from "../../src/engine/state.js";
 import { registryTopicFromConfig, deviceTopicFromConfig } from "../../src/protocol/topics.js";
 import type { MessageBody } from "../../src/protocol/types.js";
 
@@ -205,6 +205,8 @@ function renderMainContent(): void {
   const container = document.getElementById("main-content");
   if (!container) return;
 
+  renderTabBar();
+
   switch (currentTab) {
     case "devices":
       container.innerHTML = renderDevices();
@@ -216,6 +218,7 @@ function renderMainContent(): void {
       });
       break;
     case "inbox":
+      app.markInboxViewed();
       container.innerHTML = renderInbox();
       container.querySelectorAll<HTMLElement>(".msg-dismiss").forEach((btn) => {
         btn.addEventListener("click", async () => {
@@ -235,6 +238,17 @@ function renderMainContent(): void {
       bindSettingsEvents();
       updateSendFormVisibility();
       break;
+  }
+}
+
+function renderTabBar(): void {
+  const unread = app.config ? getUnreadCount(app.state, app.config.device_id) : 0;
+  const inboxBtn = document.querySelector<HTMLElement>('.tab-bar button[data-tab="inbox"]');
+  if (inboxBtn) {
+    const badge = unread > 0 && currentTab !== "inbox"
+      ? ` <span class="tab-badge">${unread}</span>`
+      : "";
+    inboxBtn.innerHTML = `Inbox${badge}`;
   }
 }
 
@@ -287,8 +301,9 @@ function renderInbox(): string {
       const from = app.state.devices.get(m.from_device_id);
       const fromLabel = from ? from.device_name : m.from_device_id;
       const bodyHtml = renderMessageBody(m.body);
+      const stateClass = m.state === "received" ? "received" : "viewed";
       return `
-        <div class="msg-item received">
+        <div class="msg-item ${stateClass}">
           <div class="msg-item-header">
             <span class="msg-from">From ${esc(fromLabel)}</span>
             <button class="msg-dismiss" data-msg-id="${esc(m.msg_id)}" title="Dismiss">&times;</button>

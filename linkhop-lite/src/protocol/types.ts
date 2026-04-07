@@ -71,7 +71,7 @@ export type AnyProtocolEvent =
 
 // --- Local record shapes ---
 
-export type MessageState = "pending" | "received";
+export type MessageState = "pending" | "received" | "viewed";
 
 export interface DeviceRecord {
   device_id: string;
@@ -93,6 +93,7 @@ export interface MessageRecord {
   last_attempt_id: number;
   last_attempt_at: string;
   received_at: string | null;
+  viewed_at: string | null;
 }
 
 export interface EventLogEntry {

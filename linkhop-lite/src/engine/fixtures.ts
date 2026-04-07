@@ -42,7 +42,7 @@ export interface ExpectedDevice {
 
 export interface ExpectedMessage {
   msg_id: string;
-  state?: "pending" | "received";
+  state?: "pending" | "received" | "viewed";
   from_device_id?: string;
   to_device_id?: string;
 }

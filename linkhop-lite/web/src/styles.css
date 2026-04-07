@@ -246,6 +246,30 @@ button.secondary {
 
 .msg-item.received {
   border-left: 3px solid var(--success);
+  font-weight: 500;
+}
+
+.msg-item.viewed {
+  border-left: 3px solid var(--surface-alt, #3a3a4a);
+  opacity: 0.8;
+}
+
+/* Unread badge on tab bar */
+.tab-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 4px;
+  background: var(--accent);
+  color: white;
+  border-radius: 8px;
+  font-size: 0.65rem;
+  font-weight: 700;
+  line-height: 1;
+  vertical-align: middle;
+  margin-left: 4px;
 }
 
 /* Send form */
