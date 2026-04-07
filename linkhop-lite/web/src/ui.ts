@@ -1,5 +1,5 @@
 import { App, type AppScreen, type ConnectionStatus } from "./app.js";
-import { getDevices, getInbox, getPending } from "../../src/engine/state.js";
+import { getDevices, getInbox, getPending, getSent } from "../../src/engine/state.js";
 import type { MessageBody } from "../../src/protocol/types.js";
 
 declare const __BUILD_TIME__: string;
@@ -245,7 +245,8 @@ function renderDevices(): string {
     return `<div class="empty-state">No devices discovered yet.<br>Other devices on the same network will appear here.</div>`;
   }
 
-  return devices
+  return [...devices]
+    .sort((a, b) => Number(a.is_removed) - Number(b.is_removed))
     .map((d) => {
       const isSelf = d.device_id === app.config?.device_id;
       const isClickable = !isSelf && !d.is_removed;
@@ -253,7 +254,7 @@ function renderDevices(): string {
       const badgeText = isSelf ? "you" : d.is_removed ? "left" : "active";
       const encryptionActive = app.encryptionEnabled && app.encryptionKey !== null && d.capabilities?.includes("encryption");
       return `
-        <div class="device-item${isClickable ? " device-item-clickable" : ""}"${isClickable ? ` data-device-id="${esc(d.device_id)}"` : ""}>
+        <div class="device-item${isClickable ? " device-item-clickable" : ""}${d.is_removed ? " device-item-removed" : ""}"${isClickable ? ` data-device-id="${esc(d.device_id)}"` : ""}>
           <div>
             <div class="name">${esc(d.device_name)}${encryptionActive ? ' <span class="capability-badge">encrypted</span>' : ""}</div>
             <div class="meta">${esc(d.device_id)}</div>
@@ -292,25 +293,44 @@ function renderInbox(): string {
 function renderPending(): string {
   if (!app.config) return "";
   const pending = getPending(app.state, app.config.device_id);
-  if (pending.length === 0) {
-    return `<div class="empty-state">No pending messages.<br>All sent messages have been acknowledged.</div>`;
-  }
+  const sent = getSent(app.state, app.config.device_id);
 
-  return [...pending]
-    .sort((a, b) => b.created_at.localeCompare(a.created_at))
-    .map((m) => {
-      const to = app.state.devices.get(m.to_device_id);
-      const toLabel = to ? to.device_name : m.to_device_id;
-      const bodyHtml = renderMessageBody(m.body);
-      return `
-        <div class="msg-item pending">
-          <div class="msg-from">To ${esc(toLabel)}</div>
-          <div class="msg-body">${bodyHtml}</div>
-          <div class="msg-time">${formatTime(m.created_at)} \u00b7 attempt ${m.last_attempt_id}</div>
-        </div>
-      `;
-    })
-    .join("");
+  const renderMsg = (m: (typeof pending)[0], isPending: boolean): string => {
+    const to = app.state.devices.get(m.to_device_id);
+    const toLabel = to ? to.device_name : m.to_device_id;
+    const bodyHtml = renderMessageBody(m.body);
+    const timeStr = isPending
+      ? `${formatTime(m.created_at)} \u00b7 attempt ${m.last_attempt_id}`
+      : formatTime(m.created_at);
+    return `
+      <div class="msg-item ${isPending ? "pending" : "received"}">
+        <div class="msg-from">To ${esc(toLabel)}</div>
+        <div class="msg-body">${bodyHtml}</div>
+        <div class="msg-time">${timeStr}</div>
+      </div>
+    `;
+  };
+
+  const pendingSection = pending.length === 0
+    ? `<div class="empty-state" style="font-size:0.85rem">No pending messages.</div>`
+    : [...pending]
+        .sort((a, b) => b.created_at.localeCompare(a.created_at))
+        .map((m) => renderMsg(m, true))
+        .join("");
+
+  const sentSection = sent.length === 0
+    ? `<div class="empty-state" style="font-size:0.85rem">No sent messages.</div>`
+    : [...sent]
+        .sort((a, b) => b.created_at.localeCompare(a.created_at))
+        .map((m) => renderMsg(m, false))
+        .join("");
+
+  return `
+    <div class="section-header">Pending</div>
+    ${pendingSection}
+    <div class="section-header">Sent</div>
+    ${sentSection}
+  `;
 }
 
 function updateSendTargets(): void {

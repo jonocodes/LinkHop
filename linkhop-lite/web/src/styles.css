@@ -174,7 +174,23 @@ button.secondary {
 }
 
 .device-item .badge.removed {
-  opacity: 0.5;
+  background: var(--surface-2);
+  color: var(--text-dim);
+}
+
+.device-item-removed {
+  opacity: 0.45;
+}
+
+/* Section headers */
+.section-header {
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-dim);
+  padding: 8px 0 4px;
+  margin-top: 4px;
 }
 
 /* Messages */

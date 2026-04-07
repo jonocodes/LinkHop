@@ -57,6 +57,7 @@
 
     <div class="section">
       <h3>Browser &amp; service worker</h3>
+      <div class="row"><span class="label">Pool name</span><span class="val" id="b-pool">checking&hellip;</span></div>
       <div class="row"><span class="label">serviceWorker</span><span class="val" id="b-sw">checking&hellip;</span></div>
       <div class="row"><span class="label">PushManager</span><span class="val" id="b-push">checking&hellip;</span></div>
       <div class="row"><span class="label">Notification API</span><span class="val" id="b-notif">checking&hellip;</span></div>
@@ -100,6 +101,19 @@
   function result(id, text, type) { var el = document.getElementById(id); el.className = 'result ' + type; el.textContent = text; el.style.display = ''; log('[' + id + '] ' + type.toUpperCase() + ': ' + text); }
   function set(id, text, cls) { var el = document.getElementById(id); el.textContent = text; if (cls) el.className = 'val ' + cls; }
   function urlBase64ToUint8Array(base64String) { var padding = '='.repeat((4 - base64String.length % 4) % 4); var base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/'); var rawData = window.atob(base64); var a = new Uint8Array(rawData.length); for (var i = 0; i < rawData.length; i++) a[i] = rawData.charCodeAt(i); return a; }
+
+  (function () {
+    var req = indexedDB.open('linkhop-lite', 1);
+    req.onsuccess = function () {
+      var db = req.result;
+      if (!db.objectStoreNames.contains('config')) { set('b-pool', 'not set', 'warn'); return; }
+      var t = db.transaction('config', 'readonly');
+      var r = t.objectStore('config').get('browser');
+      r.onsuccess = function () { set('b-pool', (r.result && r.result.pool) ? r.result.pool : 'not set', (r.result && r.result.pool) ? 'ok' : 'warn'); };
+      r.onerror = function () { set('b-pool', 'error', 'err'); };
+    };
+    req.onerror = function () { set('b-pool', 'IndexedDB error', 'err'); };
+  })();
 
   set('b-sw', 'serviceWorker' in navigator ? 'yes' : 'NO', 'serviceWorker' in navigator ? 'ok' : 'err');
   set('b-push', 'PushManager' in window ? 'yes' : 'NO', 'PushManager' in window ? 'ok' : 'err');

@@ -28,6 +28,12 @@ export function getPending(state: LocalState, localDeviceId: string): MessageRec
   );
 }
 
+export function getSent(state: LocalState, localDeviceId: string): MessageRecord[] {
+  return [...state.messages.values()].filter(
+    (m) => m.from_device_id === localDeviceId && m.state === "received",
+  );
+}
+
 export function getDevices(state: LocalState): DeviceRecord[] {
   return [...state.devices.values()];
 }
