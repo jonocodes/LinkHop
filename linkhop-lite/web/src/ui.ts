@@ -2,6 +2,8 @@ import { App, type AppScreen, type ConnectionStatus } from "./app.js";
 import { getDevices, getInbox, getPending } from "../../src/engine/state.js";
 import type { MessageBody } from "../../src/protocol/types.js";
 
+declare const __BUILD_TIME__: string;
+
 let app: App;
 let currentTab: "devices" | "inbox" | "pending" | "settings" = "devices";
 let showDebug = false;
@@ -39,10 +41,6 @@ function renderSetupScreen(): string {
         <label for="setup-password">Password</label>
         <input id="setup-password" type="password" placeholder="shared secret" />
       </div>
-      <div class="form-group">
-        <label for="setup-ntfy">ntfy server</label>
-        <input id="setup-ntfy" type="url" value="https://ntfy.sh" />
-      </div>
       <button id="setup-btn">Join network</button>
       <button class="secondary setup-settings-link" id="setup-settings-btn" type="button">Settings</button>
     </div>
@@ -73,8 +71,10 @@ function renderMainScreen(): string {
 
       <div class="send-form" id="send-form" style="display:none">
         <select id="send-target"></select>
-        <input id="send-text" type="text" placeholder="Message..." />
-        <button id="send-btn">Send</button>
+        <div class="send-row">
+          <input id="send-text" type="text" placeholder="Message..." />
+          <button id="send-btn">Send</button>
+        </div>
       </div>
     </div>
   `;
@@ -85,7 +85,8 @@ function bindSetupEvents(): void {
     const name = (document.getElementById("setup-name") as HTMLInputElement).value.trim();
     const pool = (document.getElementById("setup-pool") as HTMLInputElement).value.trim();
     const password = (document.getElementById("setup-password") as HTMLInputElement).value;
-    const ntfyUrl = (document.getElementById("setup-ntfy") as HTMLInputElement).value.trim();
+    const serverInput = document.getElementById("setup-settings-server") as HTMLInputElement | null;
+    const ntfyUrl = serverInput?.value.trim() || "https://ntfy.sh";
 
     if (!name || !pool || !password) {
       showError("Name, pool, and password are required");
@@ -106,16 +107,15 @@ function bindSetupEvents(): void {
   });
 
   document.getElementById("setup-settings-btn")!.addEventListener("click", () => {
-    const setupNtfy = document.getElementById("setup-ntfy") as HTMLInputElement;
     const setupForm = document.getElementById("screen-setup")!;
     const settingsPanel = document.getElementById("setup-settings-panel");
 
     if (settingsPanel) {
-      // Toggle off
       settingsPanel.remove();
       return;
     }
 
+    const existingUrl = (document.getElementById("setup-settings-server") as HTMLInputElement | null)?.value || "https://ntfy.sh";
     const panel = document.createElement("div");
     panel.id = "setup-settings-panel";
     panel.className = "settings-panel";
@@ -123,18 +123,12 @@ function bindSetupEvents(): void {
       <div class="settings-section">
         <div class="settings-label">Server</div>
         <div class="settings-row">
-          <input id="setup-settings-server" type="url" value="${setupNtfy.value}" />
+          <input id="setup-settings-server" type="url" value="${existingUrl}" />
         </div>
         <div class="settings-hint">Change the ntfy server URL used for messaging</div>
       </div>
     `;
     setupForm.appendChild(panel);
-
-    // Sync the server field back to the setup form
-    document.getElementById("setup-settings-server")!.addEventListener("input", () => {
-      const val = (document.getElementById("setup-settings-server") as HTMLInputElement).value;
-      setupNtfy.value = val;
-    });
   });
 }
 
@@ -212,6 +206,12 @@ function renderMainContent(): void {
   switch (currentTab) {
     case "devices":
       container.innerHTML = renderDevices();
+      container.querySelectorAll<HTMLElement>(".device-item-clickable").forEach((el) => {
+        el.addEventListener("click", () => {
+          const deviceId = el.dataset.deviceId;
+          if (deviceId) switchToInbox(deviceId);
+        });
+      });
       break;
     case "inbox":
       container.innerHTML = renderInbox();
@@ -230,6 +230,15 @@ function renderMainContent(): void {
   }
 }
 
+function switchToInbox(deviceId: string): void {
+  currentTab = "inbox";
+  document.querySelectorAll(".tab-bar button[data-tab]").forEach((b) => b.classList.remove("active"));
+  document.querySelector(`.tab-bar button[data-tab="inbox"]`)?.classList.add("active");
+  renderMainContent();
+  const select = document.getElementById("send-target") as HTMLSelectElement | null;
+  if (select) select.value = deviceId;
+}
+
 function renderDevices(): string {
   const devices = getDevices(app.state);
   if (devices.length === 0) {
@@ -239,13 +248,14 @@ function renderDevices(): string {
   return devices
     .map((d) => {
       const isSelf = d.device_id === app.config?.device_id;
+      const isClickable = !isSelf && !d.is_removed;
       const badgeClass = isSelf ? "badge self" : d.is_removed ? "badge removed" : "badge";
       const badgeText = isSelf ? "you" : d.is_removed ? "left" : "active";
-      const hasEncryption = d.capabilities?.includes("encryption");
+      const encryptionActive = app.encryptionEnabled && app.encryptionKey !== null && d.capabilities?.includes("encryption");
       return `
-        <div class="device-item">
+        <div class="device-item${isClickable ? " device-item-clickable" : ""}"${isClickable ? ` data-device-id="${esc(d.device_id)}"` : ""}>
           <div>
-            <div class="name">${esc(d.device_name)}${hasEncryption ? ' <span class="capability-badge">E2E</span>' : ""}</div>
+            <div class="name">${esc(d.device_name)}${encryptionActive ? ' <span class="capability-badge">encrypted</span>' : ""}</div>
             <div class="meta">${esc(d.device_id)}</div>
           </div>
           <span class="${badgeClass}">${badgeText}</span>
@@ -356,10 +366,7 @@ function renderSettings(): string {
 
     <div class="settings-section">
       <div class="settings-label">Server</div>
-      <div class="settings-row">
-        <input id="settings-server" type="url" value="${esc(app.ntfyUrl)}" />
-        <button class="secondary" id="settings-server-save" style="width:auto;padding:10px 16px">Save</button>
-      </div>
+      <div class="settings-hint">${esc(app.ntfyUrl)}</div>
     </div>
 
     <div class="settings-section">
@@ -386,20 +393,6 @@ function bindSettingsEvents(): void {
     selfSendToggle.addEventListener("click", async () => {
       await app.toggleSelfSend();
       renderMainContent();
-    });
-  }
-
-  const serverSave = document.getElementById("settings-server-save");
-  if (serverSave) {
-    serverSave.addEventListener("click", async () => {
-      const input = document.getElementById("settings-server") as HTMLInputElement;
-      const url = input.value.trim();
-      if (!url) {
-        showError("Server URL is required");
-        return;
-      }
-      await app.updateServer(url);
-      showError("Server updated — reconnecting...");
     });
   }
 
@@ -433,6 +426,14 @@ function renderDebug(): string {
   const sections: string[] = [];
 
   sections.push(`<button class="secondary" id="debug-back-btn" style="margin-bottom:12px">&larr; Back to Settings</button>`);
+
+  // Build info
+  sections.push(`
+    <div class="debug-section">
+      <div class="debug-title">Build</div>
+      <pre class="debug-pre">${esc(JSON.stringify({ deployed: __BUILD_TIME__ }, null, 2))}</pre>
+    </div>
+  `);
 
   // Device config
   if (app.config) {

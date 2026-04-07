@@ -6,6 +6,14 @@ declare const self: ServiceWorkerGlobalScope;
 // Workbox injects the precache manifest here
 precacheAndRoute(self.__WB_MANIFEST);
 
+// Activate immediately and take control of all open tabs so that a
+// newly deployed version is used on next reload rather than waiting
+// for all tabs to close first.
+self.addEventListener("install", () => self.skipWaiting());
+self.addEventListener("activate", (event) => {
+  event.waitUntil(self.clients.claim());
+});
+
 // Handle push events (from ntfy web push or future integrations)
 self.addEventListener("push", (event) => {
   let title = "LinkHop Lite";
