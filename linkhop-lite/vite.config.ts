@@ -4,6 +4,9 @@ import { VitePWA } from "vite-plugin-pwa";
 export default defineConfig({
   root: "web",
   base: process.env.VITE_BASE ?? "/",
+  define: {
+    __BUILD_TIME__: JSON.stringify(new Date().toISOString()),
+  },
   build: {
     outDir: "../dist-web",
     emptyOutDir: true,

@@ -2,6 +2,8 @@ import { App, type AppScreen, type ConnectionStatus } from "./app.js";
 import { getDevices, getInbox, getPending } from "../../src/engine/state.js";
 import type { MessageBody } from "../../src/protocol/types.js";
 
+declare const __BUILD_TIME__: string;
+
 let app: App;
 let currentTab: "devices" | "inbox" | "pending" | "settings" = "devices";
 let showDebug = false;
@@ -424,6 +426,14 @@ function renderDebug(): string {
   const sections: string[] = [];
 
   sections.push(`<button class="secondary" id="debug-back-btn" style="margin-bottom:12px">&larr; Back to Settings</button>`);
+
+  // Build info
+  sections.push(`
+    <div class="debug-section">
+      <div class="debug-title">Build</div>
+      <pre class="debug-pre">${esc(JSON.stringify({ deployed: __BUILD_TIME__ }, null, 2))}</pre>
+    </div>
+  `);
 
   // Device config
   if (app.config) {
