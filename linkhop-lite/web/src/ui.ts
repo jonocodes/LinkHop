@@ -11,6 +11,7 @@ let currentMessageId: string | null = null;
 let pendingOpenMsgId: string | null = null;
 let pendingShareUrl: string | null = null;
 let pendingShareTitle: string | null = null;
+let sendMode: "text" | "url" = "text";
 let showDebug = false;
 
 export function mount(root: HTMLElement): void {
@@ -68,17 +69,21 @@ function openMessageById(msgId: string): void {
   app.markMessageViewed(msgId);
 }
 
-function prefillShareData(url: string, title: string | null): void {
-  // Switch to inbox tab so the send form is visible
+function prefillShareData(url: string, _title: string | null): void {
   currentTab = "inbox";
   currentMessageId = null;
   document.querySelectorAll(".tab-bar button[data-tab]").forEach((b) => b.classList.remove("active"));
   document.querySelector('.tab-bar button[data-tab="inbox"]')?.classList.add("active");
   renderMainContent();
   const input = document.getElementById("send-text") as HTMLInputElement | null;
-  if (input) {
+  const toggle = document.getElementById("send-mode-toggle");
+  if (input && toggle) {
+    sendMode = "url";
     input.value = url;
-    input.dispatchEvent(new Event("input"));
+    input.placeholder = "Paste a URL...";
+    toggle.textContent = "Link";
+    toggle.classList.add("active");
+    input.focus();
   }
 }
 
@@ -136,10 +141,12 @@ function renderMainScreen(): string {
       <div id="main-content"></div>
 
       <div class="send-form" id="send-form" style="display:none">
-        <select id="send-target"></select>
-        <div id="send-url-hint" class="send-url-hint" style="display:none">Sending as link</div>
+        <div class="send-top-row">
+          <select id="send-target"></select>
+          <button id="send-mode-toggle" class="send-mode-btn" title="Switch between text and link mode">Text</button>
+        </div>
         <div class="send-row">
-          <input id="send-text" type="text" placeholder="Message or paste a URL..." />
+          <input id="send-text" type="text" placeholder="Message..." />
           <button id="send-btn">Send</button>
         </div>
       </div>
@@ -212,11 +219,22 @@ function bindMainEvents(): void {
     });
   });
 
-  // URL detection — show hint when input looks like a URL
-  document.getElementById("send-text")!.addEventListener("input", () => {
+  // Mode toggle: switch between Text and Link
+  document.getElementById("send-mode-toggle")!.addEventListener("click", () => {
+    sendMode = sendMode === "text" ? "url" : "text";
     const input = document.getElementById("send-text") as HTMLInputElement;
-    const hint = document.getElementById("send-url-hint");
-    if (hint) hint.style.display = isUrl(input.value.trim()) ? "block" : "none";
+    const toggle = document.getElementById("send-mode-toggle")!;
+    input.value = "";
+    if (sendMode === "url") {
+      input.placeholder = "Paste a URL...";
+      toggle.textContent = "Link";
+      toggle.classList.add("active");
+    } else {
+      input.placeholder = "Message...";
+      toggle.textContent = "Text";
+      toggle.classList.remove("active");
+    }
+    input.focus();
   });
 
   // Send
@@ -226,14 +244,19 @@ function bindMainEvents(): void {
     const text = input.value.trim();
     if (!target || !text) return;
 
-    if (isUrl(text)) {
+    if (sendMode === "url") {
+      if (!isUrl(text)) { showError("That doesn't look like a valid URL"); return; }
       await app.sendUrl(target, text);
     } else {
       await app.send(target, text);
     }
     input.value = "";
-    const hint = document.getElementById("send-url-hint");
-    if (hint) hint.style.display = "none";
+    // Reset to text mode after sending
+    sendMode = "text";
+    input.placeholder = "Message...";
+    const toggle = document.getElementById("send-mode-toggle")!;
+    toggle.textContent = "Text";
+    toggle.classList.remove("active");
   });
 
   // Enter to send

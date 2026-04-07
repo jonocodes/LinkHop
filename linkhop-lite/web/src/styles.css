@@ -348,11 +348,32 @@ button.secondary {
   word-break: break-all;
 }
 
-/* Send form URL hint */
-.send-url-hint {
-  font-size: 0.75rem;
-  color: var(--success);
-  padding: 2px 4px;
+/* Send form mode toggle */
+.send-top-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.send-top-row select {
+  flex: 1;
+}
+
+.send-mode-btn {
+  flex-shrink: 0;
+  padding: 6px 12px;
+  background: var(--border);
+  border: none;
+  border-radius: var(--radius);
+  color: var(--text-dim);
+  font-size: 0.8rem;
+  cursor: pointer;
+}
+
+.send-mode-btn.active {
+  background: var(--success);
+  color: #000;
+  font-weight: 600;
 }
 
 /* Unread badge on tab bar */
