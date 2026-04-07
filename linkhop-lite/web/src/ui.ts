@@ -204,6 +204,12 @@ function renderMainContent(): void {
   switch (currentTab) {
     case "devices":
       container.innerHTML = renderDevices();
+      container.querySelectorAll<HTMLElement>(".device-item-clickable").forEach((el) => {
+        el.addEventListener("click", () => {
+          const deviceId = el.dataset.deviceId;
+          if (deviceId) switchToInbox(deviceId);
+        });
+      });
       break;
     case "inbox":
       container.innerHTML = renderInbox();
@@ -222,6 +228,15 @@ function renderMainContent(): void {
   }
 }
 
+function switchToInbox(deviceId: string): void {
+  currentTab = "inbox";
+  document.querySelectorAll(".tab-bar button[data-tab]").forEach((b) => b.classList.remove("active"));
+  document.querySelector(`.tab-bar button[data-tab="inbox"]`)?.classList.add("active");
+  renderMainContent();
+  const select = document.getElementById("send-target") as HTMLSelectElement | null;
+  if (select) select.value = deviceId;
+}
+
 function renderDevices(): string {
   const devices = getDevices(app.state);
   if (devices.length === 0) {
@@ -231,11 +246,12 @@ function renderDevices(): string {
   return devices
     .map((d) => {
       const isSelf = d.device_id === app.config?.device_id;
+      const isClickable = !isSelf && !d.is_removed;
       const badgeClass = isSelf ? "badge self" : d.is_removed ? "badge removed" : "badge";
       const badgeText = isSelf ? "you" : d.is_removed ? "left" : "active";
       const encryptionActive = app.encryptionEnabled && app.encryptionKey !== null && d.capabilities?.includes("encryption");
       return `
-        <div class="device-item">
+        <div class="device-item${isClickable ? " device-item-clickable" : ""}"${isClickable ? ` data-device-id="${esc(d.device_id)}"` : ""}>
           <div>
             <div class="name">${esc(d.device_name)}${encryptionActive ? ' <span class="capability-badge">encrypted</span>' : ""}</div>
             <div class="meta">${esc(d.device_id)}</div>

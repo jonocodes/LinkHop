@@ -145,6 +145,14 @@ button.secondary {
   align-items: center;
 }
 
+.device-item-clickable {
+  cursor: pointer;
+}
+
+.device-item-clickable:active {
+  opacity: 0.7;
+}
+
 .device-item .name {
   font-weight: 600;
 }
