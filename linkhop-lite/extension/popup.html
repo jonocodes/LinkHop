@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      width: 300px;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background: #1a1a2e;
+      color: #eee;
+      padding: 16px;
+    }
+
+    h1 {
+      font-size: 14px;
+      margin-bottom: 12px;
+      color: #999;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    .status {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 12px;
+      font-size: 13px;
+    }
+
+    .dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      flex-shrink: 0;
+    }
+
+    .dot.watching { background: #4ade80; }
+    .dot.idle { background: #60a5fa; }
+    .dot.disconnected { background: #999; }
+    .dot.unconfigured { background: #e94560; }
+
+    .device-name {
+      font-size: 15px;
+      font-weight: 500;
+      margin-bottom: 12px;
+    }
+
+    .field {
+      margin-bottom: 12px;
+    }
+
+    .field label {
+      display: block;
+      font-size: 11px;
+      color: #999;
+      margin-bottom: 4px;
+      text-transform: uppercase;
+      letter-spacing: 0.3px;
+    }
+
+    .field input {
+      width: 100%;
+      padding: 6px 8px;
+      border: 1px solid #2a2a4a;
+      border-radius: 6px;
+      background: #16213e;
+      color: #eee;
+      font-size: 13px;
+      outline: none;
+    }
+
+    .field input:focus {
+      border-color: #0f3460;
+    }
+
+    .buttons {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    button {
+      flex: 1;
+      padding: 8px 12px;
+      border: 1px solid #2a2a4a;
+      border-radius: 6px;
+      background: #16213e;
+      color: #eee;
+      font-size: 13px;
+      cursor: pointer;
+      min-width: 80px;
+    }
+
+    button:hover {
+      background: #0f3460;
+    }
+
+    button.primary {
+      background: #0f3460;
+      border-color: #0f3460;
+    }
+
+    button.primary:hover {
+      background: #1a4a7a;
+    }
+  </style>
+</head>
+<body>
+  <h1>LinkHop Lite</h1>
+
+  <div class="status" id="status">
+    <span class="dot unconfigured" id="status-dot"></span>
+    <span id="status-text">Loading...</span>
+  </div>
+
+  <div class="device-name" id="device-name" hidden></div>
+
+  <div class="field">
+    <label>App URL</label>
+    <input type="text" id="app-url" placeholder="https://jonocodes.github.io/LinkHop/">
+  </div>
+
+  <div class="buttons">
+    <button class="primary" id="btn-open">Open App</button>
+    <button id="btn-disconnect" hidden>Disconnect</button>
+    <button id="btn-reconnect" hidden>Reconnect</button>
+  </div>
+
+  <script src="popup.js"></script>
+</body>
+</html>
