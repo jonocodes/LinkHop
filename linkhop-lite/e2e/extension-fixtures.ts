@@ -56,14 +56,27 @@ async function launchWithExtension(): Promise<BrowserContext> {
 
 /**
  * Get the extension's background page from the context.
+ * Tries backgroundPages() first, then serviceWorkers() for newer Chromium.
  */
-async function getBackgroundPage(context: BrowserContext): Promise<Page> {
-  // The background page may already be open or we need to wait for it
+async function getBackgroundPage(context: BrowserContext): Promise<Page | Worker> {
+  // Try background page first (classic MV2)
   let bg = context.backgroundPages()[0];
-  if (!bg) {
-    bg = await context.waitForEvent("backgroundpage", { timeout: 5000 });
+  if (bg) return bg;
+
+  // Wait briefly for it to appear
+  try {
+    bg = await context.waitForEvent("backgroundpage", { timeout: 3000 });
+    if (bg) return bg;
+  } catch {
+    // Not available as background page
   }
-  return bg;
+
+  // Try service workers (newer Chromium may treat MV2 bg pages this way)
+  const workers = context.serviceWorkers();
+  if (workers.length > 0) return workers[0];
+
+  const worker = await context.waitForEvent("serviceworker", { timeout: 5000 });
+  return worker;
 }
 
 /**
