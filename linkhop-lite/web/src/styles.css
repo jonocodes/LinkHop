@@ -201,10 +201,33 @@ button.secondary {
   margin-bottom: 8px;
 }
 
+.msg-item-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 4px;
+}
+
 .msg-item .msg-from {
   font-size: 0.8rem;
   color: var(--text-dim);
-  margin-bottom: 4px;
+}
+
+.msg-dismiss {
+  background: none;
+  border: none;
+  color: var(--text-dim);
+  font-size: 1.1rem;
+  line-height: 1;
+  padding: 0 2px;
+  cursor: pointer;
+  opacity: 0.5;
+  flex-shrink: 0;
+}
+
+.msg-dismiss:hover {
+  opacity: 1;
+  color: var(--text);
 }
 
 .msg-item .msg-body {

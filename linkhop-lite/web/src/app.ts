@@ -198,6 +198,12 @@ export class App {
     this.callbacks.onScreenChange("setup");
   }
 
+  async dismissMessage(msgId: string): Promise<void> {
+    this.state.messages.delete(msgId);
+    await saveState(this.state);
+    this.callbacks.onStateChange();
+  }
+
   async send(toDeviceId: string, text: string): Promise<void> {
     if (!this.config) return;
     const device = this.state.devices.get(toDeviceId);

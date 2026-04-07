@@ -217,6 +217,12 @@ function renderMainContent(): void {
       break;
     case "inbox":
       container.innerHTML = renderInbox();
+      container.querySelectorAll<HTMLElement>(".msg-dismiss").forEach((btn) => {
+        btn.addEventListener("click", async () => {
+          const msgId = btn.dataset.msgId;
+          if (msgId) await app.dismissMessage(msgId);
+        });
+      });
       updateSendTargets();
       updateSendFormVisibility();
       break;
@@ -283,7 +289,10 @@ function renderInbox(): string {
       const bodyHtml = renderMessageBody(m.body);
       return `
         <div class="msg-item received">
-          <div class="msg-from">From ${esc(fromLabel)}</div>
+          <div class="msg-item-header">
+            <span class="msg-from">From ${esc(fromLabel)}</span>
+            <button class="msg-dismiss" data-msg-id="${esc(m.msg_id)}" title="Dismiss">&times;</button>
+          </div>
           <div class="msg-body">${bodyHtml}</div>
           <div class="msg-time">${formatTime(m.created_at)}</div>
         </div>
