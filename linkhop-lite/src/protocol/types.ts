@@ -36,13 +36,19 @@ export interface TextBody {
   text: string;
 }
 
+export interface UrlBody {
+  kind: "url";
+  url: string;
+  title?: string;
+}
+
 export interface EncryptedBody {
   kind: "encrypted";
   ciphertext: string;
   iv: string;
 }
 
-export type MessageBody = TextBody | EncryptedBody;
+export type MessageBody = TextBody | UrlBody | EncryptedBody;
 
 export interface MsgSendPayload {
   msg_id: string;

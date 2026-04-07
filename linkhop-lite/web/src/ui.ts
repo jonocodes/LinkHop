@@ -9,13 +9,27 @@ let app: App;
 let currentTab: "devices" | "inbox" | "pending" | "settings" = "devices";
 let currentMessageId: string | null = null;
 let pendingOpenMsgId: string | null = null;
+let pendingShareUrl: string | null = null;
+let pendingShareTitle: string | null = null;
 let showDebug = false;
 
 export function mount(root: HTMLElement): void {
+  const params = new URLSearchParams(window.location.search);
+
   // Check if opened from a background notification with a msg param
-  const urlMsg = new URLSearchParams(window.location.search).get("msg");
+  const urlMsg = params.get("msg");
   if (urlMsg) {
     pendingOpenMsgId = urlMsg;
+  }
+
+  // Check if opened from Web Share Target
+  const shareUrl = params.get("share-url");
+  if (shareUrl) {
+    pendingShareUrl = shareUrl;
+    pendingShareTitle = params.get("share-title");
+  }
+
+  if (urlMsg || shareUrl) {
     history.replaceState(null, "", "/");
   }
 
@@ -52,6 +66,29 @@ function openMessageById(msgId: string): void {
   document.querySelectorAll(".tab-bar button[data-tab]").forEach((b) => b.classList.remove("active"));
   document.querySelector('.tab-bar button[data-tab="inbox"]')?.classList.add("active");
   app.markMessageViewed(msgId);
+}
+
+function prefillShareData(url: string, title: string | null): void {
+  // Switch to inbox tab so the send form is visible
+  currentTab = "inbox";
+  currentMessageId = null;
+  document.querySelectorAll(".tab-bar button[data-tab]").forEach((b) => b.classList.remove("active"));
+  document.querySelector('.tab-bar button[data-tab="inbox"]')?.classList.add("active");
+  renderMainContent();
+  const input = document.getElementById("send-text") as HTMLInputElement | null;
+  if (input) {
+    input.value = url;
+    input.dispatchEvent(new Event("input"));
+  }
+}
+
+function isUrl(value: string): boolean {
+  try {
+    const u = new URL(value);
+    return u.protocol === "http:" || u.protocol === "https:";
+  } catch {
+    return false;
+  }
 }
 
 function renderSetupScreen(): string {
@@ -100,8 +137,9 @@ function renderMainScreen(): string {
 
       <div class="send-form" id="send-form" style="display:none">
         <select id="send-target"></select>
+        <div id="send-url-hint" class="send-url-hint" style="display:none">Sending as link</div>
         <div class="send-row">
-          <input id="send-text" type="text" placeholder="Message..." />
+          <input id="send-text" type="text" placeholder="Message or paste a URL..." />
           <button id="send-btn">Send</button>
         </div>
       </div>
@@ -174,6 +212,13 @@ function bindMainEvents(): void {
     });
   });
 
+  // URL detection — show hint when input looks like a URL
+  document.getElementById("send-text")!.addEventListener("input", () => {
+    const input = document.getElementById("send-text") as HTMLInputElement;
+    const hint = document.getElementById("send-url-hint");
+    if (hint) hint.style.display = isUrl(input.value.trim()) ? "block" : "none";
+  });
+
   // Send
   document.getElementById("send-btn")!.addEventListener("click", async () => {
     const target = (document.getElementById("send-target") as HTMLSelectElement).value;
@@ -181,8 +226,14 @@ function bindMainEvents(): void {
     const text = input.value.trim();
     if (!target || !text) return;
 
-    await app.send(target, text);
+    if (isUrl(text)) {
+      await app.sendUrl(target, text);
+    } else {
+      await app.send(target, text);
+    }
     input.value = "";
+    const hint = document.getElementById("send-url-hint");
+    if (hint) hint.style.display = "none";
   });
 
   // Enter to send
@@ -206,6 +257,13 @@ function showScreen(screen: AppScreen): void {
       openMessageById(msgId);
     } else {
       renderMainContent();
+    }
+    if (pendingShareUrl) {
+      const shareUrl = pendingShareUrl;
+      const shareTitle = pendingShareTitle;
+      pendingShareUrl = null;
+      pendingShareTitle = null;
+      prefillShareData(shareUrl, shareTitle);
     }
   }
 }
@@ -479,6 +537,13 @@ function updateSendTargets(): void {
 function renderMessageBody(body: MessageBody): string {
   if (body.kind === "text") {
     return esc(body.text);
+  }
+  if (body.kind === "url") {
+    const safe = isUrl(body.url) ? body.url : "#";
+    const inner = body.title
+      ? `<div class="url-card-title">${esc(body.title)}</div><div class="url-card-url">${esc(body.url)}</div>`
+      : `<div class="url-card-url">${esc(body.url)}</div>`;
+    return `<a class="url-card" href="${safe}" target="_blank" rel="noopener noreferrer">${inner}</a>`;
   }
   return `<span class="encrypted-msg">Encrypted message — cannot decrypt</span>`;
 }

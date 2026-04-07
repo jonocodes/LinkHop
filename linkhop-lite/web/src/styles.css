@@ -320,6 +320,41 @@ button.secondary {
   margin-top: 4px;
 }
 
+/* URL card in message body */
+.url-card {
+  display: block;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 10px 12px;
+  color: var(--text);
+  text-decoration: none;
+  margin-top: 2px;
+}
+
+.url-card:hover {
+  border-color: var(--success);
+}
+
+.url-card-title {
+  font-size: 0.9rem;
+  font-weight: 500;
+  margin-bottom: 4px;
+}
+
+.url-card-url {
+  font-size: 0.75rem;
+  color: var(--success);
+  word-break: break-all;
+}
+
+/* Send form URL hint */
+.send-url-hint {
+  font-size: 0.75rem;
+  color: var(--success);
+  padding: 2px 4px;
+}
+
 /* Unread badge on tab bar */
 .tab-badge {
   display: inline-flex;
