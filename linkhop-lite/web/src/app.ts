@@ -4,7 +4,7 @@ import { registryTopicFromConfig, deviceTopicFromConfig } from "../../src/protoc
 import { generateDeviceId } from "../../src/protocol/ids.js";
 import { deriveNetworkId } from "../../src/protocol/network.js";
 import { deriveEncryptionKey, encryptBody, decryptBody } from "../../src/protocol/crypto.js";
-import { createEmptyState, getInbox } from "../../src/engine/state.js";
+import { createEmptyState } from "../../src/engine/state.js";
 import { processEvent } from "../../src/engine/reducer.js";
 import { actionAnnounce, actionLeave, actionSend, actionMarkViewed } from "../../src/engine/actions.js";
 import type { Effect } from "../../src/engine/reducer.js";
@@ -204,15 +204,8 @@ export class App {
     this.callbacks.onStateChange();
   }
 
-  async markInboxViewed(): Promise<void> {
-    if (!this.config) return;
-    const unread = getInbox(this.state, this.config.device_id).filter(
-      (m) => m.state === "received",
-    );
-    if (unread.length === 0) return;
-    for (const m of unread) {
-      actionMarkViewed(this.state, m.msg_id);
-    }
+  async markMessageViewed(msgId: string): Promise<void> {
+    actionMarkViewed(this.state, msgId);
     await saveState(this.state);
     this.callbacks.onStateChange();
   }

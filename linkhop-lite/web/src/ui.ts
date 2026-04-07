@@ -7,6 +7,7 @@ declare const __BUILD_TIME__: string;
 
 let app: App;
 let currentTab: "devices" | "inbox" | "pending" | "settings" = "devices";
+let currentMessageId: string | null = null;
 let showDebug = false;
 
 export function mount(root: HTMLElement): void {
@@ -138,6 +139,7 @@ function bindMainEvents(): void {
   document.querySelectorAll(".tab-bar button[data-tab]").forEach((btn) => {
     btn.addEventListener("click", () => {
       currentTab = (btn as HTMLElement).dataset.tab as typeof currentTab;
+      currentMessageId = null;
       document.querySelectorAll(".tab-bar button[data-tab]").forEach((b) => b.classList.remove("active"));
       btn.classList.add("active");
       renderMainContent();
@@ -218,15 +220,38 @@ function renderMainContent(): void {
       });
       break;
     case "inbox":
-      app.markInboxViewed();
-      container.innerHTML = renderInbox();
-      container.querySelectorAll<HTMLElement>(".msg-dismiss").forEach((btn) => {
-        btn.addEventListener("click", async () => {
-          const msgId = btn.dataset.msgId;
+      if (currentMessageId) {
+        container.innerHTML = renderMessageDetail(currentMessageId);
+        container.querySelector<HTMLElement>("#msg-detail-back")?.addEventListener("click", () => {
+          currentMessageId = null;
+          renderMainContent();
+        });
+        container.querySelector<HTMLElement>(".msg-dismiss")?.addEventListener("click", async () => {
+          const msgId = currentMessageId;
+          currentMessageId = null;
           if (msgId) await app.dismissMessage(msgId);
         });
-      });
-      updateSendTargets();
+      } else {
+        container.innerHTML = renderInbox();
+        container.querySelectorAll<HTMLElement>(".msg-item-clickable").forEach((el) => {
+          el.addEventListener("click", async (e) => {
+            if ((e.target as HTMLElement).closest(".msg-dismiss")) return;
+            const msgId = el.dataset.msgId;
+            if (msgId) {
+              currentMessageId = msgId;
+              await app.markMessageViewed(msgId);
+            }
+          });
+        });
+        container.querySelectorAll<HTMLElement>(".msg-dismiss").forEach((btn) => {
+          btn.addEventListener("click", async (e) => {
+            e.stopPropagation();
+            const msgId = btn.dataset.msgId;
+            if (msgId) await app.dismissMessage(msgId);
+          });
+        });
+        updateSendTargets();
+      }
       updateSendFormVisibility();
       break;
     case "pending":
@@ -301,12 +326,19 @@ function renderInbox(): string {
       const from = app.state.devices.get(m.from_device_id);
       const fromLabel = from ? from.device_name : m.from_device_id;
       const bodyHtml = renderMessageBody(m.body);
-      const stateClass = m.state === "received" ? "received" : "viewed";
+      const isUnread = m.state === "received";
+      const stateClass = isUnread ? "received" : "viewed";
+      const stateBadge = isUnread
+        ? `<span class="msg-state-badge new">New</span>`
+        : `<span class="msg-state-badge viewed">Viewed</span>`;
       return `
-        <div class="msg-item ${stateClass}">
+        <div class="msg-item ${stateClass} msg-item-clickable" data-msg-id="${esc(m.msg_id)}">
           <div class="msg-item-header">
             <span class="msg-from">From ${esc(fromLabel)}</span>
-            <button class="msg-dismiss" data-msg-id="${esc(m.msg_id)}" title="Dismiss">&times;</button>
+            <div class="msg-item-actions">
+              ${stateBadge}
+              <button class="msg-dismiss" data-msg-id="${esc(m.msg_id)}" title="Dismiss">&times;</button>
+            </div>
           </div>
           <div class="msg-body">${bodyHtml}</div>
           <div class="msg-time">${formatTime(m.created_at)}</div>
@@ -314,6 +346,38 @@ function renderInbox(): string {
       `;
     })
     .join("");
+}
+
+function renderMessageDetail(msgId: string): string {
+  if (!app.config) return "";
+  const m = app.state.messages.get(msgId);
+  if (!m) {
+    return `
+      <button class="secondary" id="msg-detail-back" style="margin-bottom:12px">&larr; Back</button>
+      <div class="empty-state">Message not found.</div>
+    `;
+  }
+  const from = app.state.devices.get(m.from_device_id);
+  const fromLabel = from ? from.device_name : m.from_device_id;
+  const bodyHtml = renderMessageBody(m.body);
+  const stateLabel = m.state === "received" ? "New" : "Viewed";
+  const stateClass = m.state === "received" ? "new" : "viewed";
+  const viewedLine = m.viewed_at
+    ? `<div class="msg-detail-meta">Viewed ${formatTime(m.viewed_at)}</div>`
+    : "";
+  return `
+    <button class="secondary" id="msg-detail-back" style="margin-bottom:12px">&larr; Back to Inbox</button>
+    <div class="msg-detail">
+      <div class="msg-detail-header">
+        <div class="msg-detail-from">From ${esc(fromLabel)}</div>
+        <span class="msg-state-badge ${stateClass}">${stateLabel}</span>
+      </div>
+      <div class="msg-detail-body">${bodyHtml}</div>
+      <div class="msg-detail-meta">Received ${formatTime(m.created_at)}</div>
+      ${viewedLine}
+      <button class="msg-dismiss secondary" data-msg-id="${esc(m.msg_id)}" style="margin-top:16px">Dismiss message</button>
+    </div>
+  `;
 }
 
 function renderPending(): string {

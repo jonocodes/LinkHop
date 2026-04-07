@@ -246,12 +246,78 @@ button.secondary {
 
 .msg-item.received {
   border-left: 3px solid var(--success);
-  font-weight: 500;
 }
 
 .msg-item.viewed {
-  border-left: 3px solid var(--surface-alt, #3a3a4a);
-  opacity: 0.8;
+  border-left: 3px solid var(--border);
+  opacity: 0.75;
+}
+
+.msg-item-clickable {
+  cursor: pointer;
+}
+
+.msg-item-clickable:hover {
+  background: var(--surface-2);
+}
+
+.msg-item-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+/* State badges */
+.msg-state-badge {
+  font-size: 0.65rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+
+.msg-state-badge.new {
+  background: var(--success);
+  color: #000;
+}
+
+.msg-state-badge.viewed {
+  background: var(--border);
+  color: var(--text-dim);
+}
+
+/* Message detail view */
+.msg-detail {
+  background: var(--surface);
+  border-radius: var(--radius);
+  padding: 16px;
+}
+
+.msg-detail-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+}
+
+.msg-detail-from {
+  font-size: 0.85rem;
+  color: var(--text-dim);
+}
+
+.msg-detail-body {
+  font-size: 1rem;
+  line-height: 1.5;
+  margin-bottom: 12px;
+  word-break: break-word;
+}
+
+.msg-detail-meta {
+  font-size: 0.75rem;
+  color: var(--text-dim);
+  margin-top: 4px;
 }
 
 /* Unread badge on tab bar */
