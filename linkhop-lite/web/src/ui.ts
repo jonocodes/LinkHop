@@ -245,7 +245,8 @@ function renderDevices(): string {
     return `<div class="empty-state">No devices discovered yet.<br>Other devices on the same network will appear here.</div>`;
   }
 
-  return devices
+  return [...devices]
+    .sort((a, b) => Number(a.is_removed) - Number(b.is_removed))
     .map((d) => {
       const isSelf = d.device_id === app.config?.device_id;
       const isClickable = !isSelf && !d.is_removed;
