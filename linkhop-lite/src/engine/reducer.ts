@@ -99,6 +99,13 @@ function handleMsgSend(
   const existing = state.messages.get(msg_id);
   const isDuplicate = existing !== undefined;
 
+  // Determine if we need to send an ACK:
+  // - New message: always ACK
+  // - Genuine retry (higher attempt_id): re-ACK in case previous ACK was lost
+  // - Replayed duplicate (same attempt_id from SSE reconnect): skip ACK to avoid
+  //   burning through ntfy message limits
+  const shouldAck = !isDuplicate || (isDuplicate && attempt_id > existing.last_attempt_id);
+
   if (!isDuplicate) {
     // Store new message as received
     const record: MessageRecord = {
@@ -115,9 +122,15 @@ function handleMsgSend(
     };
     state.messages.set(msg_id, record);
   } else {
-    // Update attempt tracking on duplicate
-    existing.last_attempt_id = attempt_id;
-    existing.last_attempt_at = event.timestamp;
+    // Update attempt tracking on genuine retry
+    if (attempt_id > existing.last_attempt_id) {
+      existing.last_attempt_id = attempt_id;
+      existing.last_attempt_at = event.timestamp;
+    }
+  }
+
+  if (!shouldAck) {
+    return { effects: [] };
   }
 
   // Look up sender device to find their topic for the ack
@@ -131,7 +144,6 @@ function handleMsgSend(
     };
   }
 
-  // Emit msg.received (even on duplicate, per spec)
   const ack = createMsgReceived(config, msg_id, event.from_device_id, senderDevice.device_topic);
 
   return {

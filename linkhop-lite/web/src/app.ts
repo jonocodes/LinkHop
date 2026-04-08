@@ -8,7 +8,7 @@ import { createEmptyState } from "../../src/engine/state.js";
 import { processEvent } from "../../src/engine/reducer.js";
 import { actionAnnounce, actionLeave, actionSend, actionMarkViewed } from "../../src/engine/actions.js";
 import type { Effect } from "../../src/engine/reducer.js";
-import { loadConfig, saveConfig, loadState, saveState, clearAll, type BrowserConfig } from "./db.js";
+import { loadConfig, saveConfig, loadState, saveState, clearAll, loadSeenEventIds, type BrowserConfig } from "./db.js";
 import { subscribeSSE, publishHTTP } from "./sse.js";
 import { requestPermission, showMessageNotification, subscribeWebPush, unsubscribeWebPush } from "./notifications.js";
 
@@ -36,6 +36,7 @@ export class App {
   private callbacks: AppCallbacks;
   private cleanupSSE: (() => void)[] = [];
   private wasConnected = false;
+  private seenEventIds: Set<string> = new Set();
 
   constructor(callbacks: AppCallbacks) {
     this.callbacks = callbacks;
@@ -53,6 +54,7 @@ export class App {
         this.encryptionKey = await deriveEncryptionKey(saved.pool, saved.password);
       }
       this.state = await loadState();
+      this.seenEventIds = await loadSeenEventIds();
       this.screen = "main";
       this.callbacks.onScreenChange("main");
       this.connect();
@@ -193,6 +195,7 @@ export class App {
     await clearAll();
     this.config = null;
     this.state = createEmptyState();
+    this.seenEventIds = new Set();
     this.wasConnected = false;
     this.screen = "setup";
     this.callbacks.onScreenChange("setup");
@@ -244,6 +247,10 @@ export class App {
     if (!this.config) return;
     const result = validateEvent(event, this.config.network_id);
     if (!result.valid) return;
+
+    // Skip events we've already processed (e.g. replayed by SSE reconnect with ?since=12h)
+    if (this.seenEventIds.has(result.event.event_id)) return;
+    this.seenEventIds.add(result.event.event_id);
 
     // Try to decrypt encrypted message bodies before processing
     if (result.event.type === "msg.send" && result.event.payload.body.kind === "encrypted") {

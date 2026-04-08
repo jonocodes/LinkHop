@@ -119,7 +119,7 @@ describe("msg.send handling", () => {
     expect(result.effects.some((e) => e.type === "log")).toBe(true);
   });
 
-  it("deduplicates by msg_id and re-acks", () => {
+  it("re-acks on genuine retry with higher attempt_id", () => {
     const send1 = makeMsgSend(peerConfig, localConfig.device_id, { msgId: "msg_dup", attemptId: 1 });
     const send2 = makeMsgSend(peerConfig, localConfig.device_id, {
       msgId: "msg_dup",
@@ -135,9 +135,29 @@ describe("msg.send handling", () => {
     expect(inbox).toHaveLength(1);
     expect(inbox[0].last_attempt_id).toBe(2);
 
-    // But still emits ack
+    // Re-acks because attempt_id increased (genuine retry)
     const publishes = result2.effects.filter((e) => e.type === "publish");
     expect(publishes).toHaveLength(1);
+  });
+
+  it("skips ack on replayed duplicate with same attempt_id", () => {
+    const send1 = makeMsgSend(peerConfig, localConfig.device_id, { msgId: "msg_replay", attemptId: 1 });
+    const send2 = makeMsgSend(peerConfig, localConfig.device_id, {
+      msgId: "msg_replay",
+      attemptId: 1,
+      ts: "2026-04-04T18:15:00Z",
+    });
+
+    processEvent(state, send1, localConfig);
+    const result2 = processEvent(state, send2, localConfig);
+
+    // Still only one inbox entry
+    const inbox = getInbox(state, localConfig.device_id);
+    expect(inbox).toHaveLength(1);
+
+    // No ack — this is a replay, not a retry
+    const publishes = result2.effects.filter((e) => e.type === "publish");
+    expect(publishes).toHaveLength(0);
   });
 });
 
