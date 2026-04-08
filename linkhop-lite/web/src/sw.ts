@@ -9,8 +9,12 @@ self.addEventListener("fetch", (event) => {
   if (url.pathname === "/share" && event.request.method === "GET") {
     const shareUrl = url.searchParams.get("url") ?? "";
     const shareTitle = url.searchParams.get("title") ?? "";
-    const redirect = `/?share-url=${encodeURIComponent(shareUrl)}&share-title=${encodeURIComponent(shareTitle)}`;
-    event.respondWith(Response.redirect(redirect, 303));
+    const shareText = url.searchParams.get("text") ?? "";
+    const params = new URLSearchParams();
+    if (shareUrl) params.set("share-url", shareUrl);
+    if (shareTitle) params.set("share-title", shareTitle);
+    if (shareText) params.set("share-text", shareText);
+    event.respondWith(Response.redirect(`/?${params}`, 303));
   }
 });
 

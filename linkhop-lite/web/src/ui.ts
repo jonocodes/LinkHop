@@ -11,6 +11,7 @@ let currentMessageId: string | null = null;
 let pendingOpenMsgId: string | null = null;
 let pendingShareUrl: string | null = null;
 let pendingShareTitle: string | null = null;
+let pendingShareText: string | null = null;
 let sendMode: "text" | "url" = "text";
 let showDebug = false;
 
@@ -25,12 +26,15 @@ export function mount(root: HTMLElement): void {
 
   // Check if opened from Web Share Target
   const shareUrl = params.get("share-url");
+  const shareText = params.get("share-text");
   if (shareUrl) {
     pendingShareUrl = shareUrl;
     pendingShareTitle = params.get("share-title");
+  } else if (shareText) {
+    pendingShareText = shareText;
   }
 
-  if (urlMsg || shareUrl) {
+  if (urlMsg || shareUrl || shareText) {
     history.replaceState(null, "", "/");
   }
 
@@ -83,6 +87,20 @@ function prefillShareData(url: string, _title: string | null): void {
     input.placeholder = "Paste a URL...";
     toggle.textContent = "Link";
     toggle.classList.add("active");
+    input.focus();
+  }
+}
+
+function prefillShareText(text: string): void {
+  currentTab = "inbox";
+  currentMessageId = null;
+  document.querySelectorAll(".tab-bar button[data-tab]").forEach((b) => b.classList.remove("active"));
+  document.querySelector('.tab-bar button[data-tab="inbox"]')?.classList.add("active");
+  renderMainContent();
+  const input = document.getElementById("send-text") as HTMLInputElement | null;
+  if (input) {
+    sendMode = "text";
+    input.value = text;
     input.focus();
   }
 }
@@ -287,6 +305,10 @@ function showScreen(screen: AppScreen): void {
       pendingShareUrl = null;
       pendingShareTitle = null;
       prefillShareData(shareUrl, shareTitle);
+    } else if (pendingShareText) {
+      const shareText = pendingShareText;
+      pendingShareText = null;
+      prefillShareText(shareText);
     }
   }
 }
