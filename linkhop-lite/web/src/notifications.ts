@@ -21,10 +21,13 @@ export async function showMessageNotification(
   fromName: string,
   bodyText: string,
   msgId?: string,
+  url?: string,
 ): Promise<void> {
   if (!hasPermission()) return;
 
-  const data = msgId ? { msg_id: msgId } : {};
+  const data: Record<string, string> = {};
+  if (msgId) data.msg_id = msgId;
+  if (url) data.url = url;
   const reg = await navigator.serviceWorker?.ready;
   if (reg) {
     await reg.showNotification(`LinkHop: ${fromName}`, {
