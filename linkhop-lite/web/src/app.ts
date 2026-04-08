@@ -1,4 +1,4 @@
-import type { AnyProtocolEvent, DeviceConfig, LocalState, MessageBody, TextBody } from "../../src/protocol/types.js";
+import type { AnyProtocolEvent, DeviceConfig, LocalState, MessageBody, TextBody, UrlBody } from "../../src/protocol/types.js";
 import { validateEvent } from "../../src/protocol/validate.js";
 import { registryTopicFromConfig, deviceTopicFromConfig } from "../../src/protocol/topics.js";
 import { generateDeviceId } from "../../src/protocol/ids.js";
@@ -6,7 +6,7 @@ import { deriveNetworkId } from "../../src/protocol/network.js";
 import { deriveEncryptionKey, encryptBody, decryptBody } from "../../src/protocol/crypto.js";
 import { createEmptyState } from "../../src/engine/state.js";
 import { processEvent } from "../../src/engine/reducer.js";
-import { actionAnnounce, actionLeave, actionSend } from "../../src/engine/actions.js";
+import { actionAnnounce, actionLeave, actionSend, actionMarkViewed } from "../../src/engine/actions.js";
 import type { Effect } from "../../src/engine/reducer.js";
 import { loadConfig, saveConfig, loadState, saveState, clearAll, type BrowserConfig } from "./db.js";
 import { subscribeSSE, publishHTTP } from "./sse.js";
@@ -204,7 +204,21 @@ export class App {
     this.callbacks.onStateChange();
   }
 
+  async markMessageViewed(msgId: string): Promise<void> {
+    actionMarkViewed(this.state, msgId);
+    await saveState(this.state);
+    this.callbacks.onStateChange();
+  }
+
   async send(toDeviceId: string, text: string): Promise<void> {
+    await this.sendBody(toDeviceId, { kind: "text", text });
+  }
+
+  async sendUrl(toDeviceId: string, url: string, title?: string): Promise<void> {
+    await this.sendBody(toDeviceId, { kind: "url", url, title });
+  }
+
+  private async sendBody(toDeviceId: string, inner: TextBody | UrlBody): Promise<void> {
     if (!this.config) return;
     const device = this.state.devices.get(toDeviceId);
     if (!device) {
@@ -214,11 +228,10 @@ export class App {
 
     let body: MessageBody;
     if (this.encryptionEnabled && this.encryptionKey) {
-      const inner: TextBody = { kind: "text", text };
       const { ciphertext, iv } = await encryptBody(this.encryptionKey, JSON.stringify(inner));
       body = { kind: "encrypted", ciphertext, iv };
     } else {
-      body = { kind: "text", text };
+      body = inner;
     }
 
     const effect = actionSend(this.state, this.config, toDeviceId, device.device_topic, body);
@@ -239,8 +252,10 @@ export class App {
         const plaintext = await decryptBody(this.encryptionKey, encrypted.ciphertext, encrypted.iv);
         if (plaintext) {
           try {
-            const inner = JSON.parse(plaintext) as TextBody;
+            const inner = JSON.parse(plaintext) as TextBody | UrlBody;
             if (inner.kind === "text" && typeof inner.text === "string") {
+              result.event.payload.body = inner;
+            } else if (inner.kind === "url" && typeof inner.url === "string") {
               result.event.payload.body = inner;
             }
           } catch {
@@ -266,10 +281,13 @@ export class App {
     if (isNewMessage && result.event.type === "msg.send") {
       const fromDevice = this.state.devices.get(result.event.from_device_id);
       const fromName = fromDevice?.device_name ?? result.event.from_device_id;
-      const bodyText = result.event.payload.body.kind === "text"
-        ? result.event.payload.body.text
-        : "[Encrypted message]";
-      showMessageNotification(fromName, bodyText);
+      const b = result.event.payload.body;
+      const bodyText = b.kind === "text"
+        ? b.text
+        : b.kind === "url"
+          ? `Shared a link: ${b.title ?? b.url}`
+          : "[Encrypted message]";
+      showMessageNotification(fromName, bodyText, result.event.payload.msg_id);
     }
 
     for (const effect of effects) {

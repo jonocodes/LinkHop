@@ -27,6 +27,14 @@ export function actionLeave(config: DeviceConfig): Effect {
   return { type: "publish", topic: registryTopicFromConfig(config), event };
 }
 
+export function actionMarkViewed(state: LocalState, msgId: string): void {
+  const msg = state.messages.get(msgId);
+  if (msg && msg.state === "received") {
+    msg.state = "viewed";
+    msg.viewed_at = new Date().toISOString();
+  }
+}
+
 export function actionSend(
   state: LocalState,
   config: DeviceConfig,
@@ -47,6 +55,7 @@ export function actionSend(
     last_attempt_id: event.payload.attempt_id,
     last_attempt_at: event.timestamp,
     received_at: null,
+    viewed_at: null,
   };
   state.messages.set(record.msg_id, record);
 

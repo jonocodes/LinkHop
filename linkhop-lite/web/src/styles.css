@@ -214,20 +214,20 @@ button.secondary {
 }
 
 .msg-dismiss {
-  background: none;
+  background: var(--border);
   border: none;
   color: var(--text-dim);
-  font-size: 1.1rem;
+  font-size: 1rem;
   line-height: 1;
-  padding: 0 2px;
+  padding: 4px 10px;
+  border-radius: 4px;
   cursor: pointer;
-  opacity: 0.5;
   flex-shrink: 0;
 }
 
 .msg-dismiss:hover {
-  opacity: 1;
-  color: var(--text);
+  background: var(--accent);
+  color: white;
 }
 
 .msg-item .msg-body {
@@ -246,6 +246,152 @@ button.secondary {
 
 .msg-item.received {
   border-left: 3px solid var(--success);
+}
+
+.msg-item.viewed {
+  border-left: 3px solid var(--border);
+  opacity: 0.75;
+}
+
+.msg-item-clickable {
+  cursor: pointer;
+}
+
+.msg-item-clickable:hover {
+  background: var(--surface-2);
+}
+
+.msg-item-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+/* State badges */
+.msg-state-badge {
+  font-size: 0.65rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+
+.msg-state-badge.new {
+  background: var(--success);
+  color: #000;
+}
+
+.msg-state-badge.viewed {
+  background: var(--border);
+  color: var(--text-dim);
+}
+
+/* Message detail view */
+.msg-detail {
+  background: var(--surface);
+  border-radius: var(--radius);
+  padding: 16px;
+}
+
+.msg-detail-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+}
+
+.msg-detail-from {
+  font-size: 0.85rem;
+  color: var(--text-dim);
+}
+
+.msg-detail-body {
+  font-size: 1rem;
+  line-height: 1.5;
+  margin-bottom: 12px;
+  word-break: break-word;
+}
+
+.msg-detail-meta {
+  font-size: 0.75rem;
+  color: var(--text-dim);
+  margin-top: 4px;
+}
+
+/* URL card in message body */
+.url-card {
+  display: block;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 10px 12px;
+  color: var(--text);
+  text-decoration: none;
+  margin-top: 2px;
+}
+
+.url-card:hover {
+  border-color: var(--success);
+}
+
+.url-card-title {
+  font-size: 0.9rem;
+  font-weight: 500;
+  margin-bottom: 4px;
+}
+
+.url-card-url {
+  font-size: 0.75rem;
+  color: var(--success);
+  word-break: break-all;
+}
+
+/* Send form mode toggle */
+.send-top-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.send-top-row select {
+  flex: 1;
+}
+
+.send-mode-btn {
+  flex-shrink: 0;
+  padding: 6px 12px;
+  background: var(--border);
+  border: none;
+  border-radius: var(--radius);
+  color: var(--text-dim);
+  font-size: 0.8rem;
+  cursor: pointer;
+}
+
+.send-mode-btn.active {
+  background: var(--success);
+  color: #000;
+  font-weight: 600;
+}
+
+/* Unread badge on tab bar */
+.tab-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 4px;
+  background: var(--accent);
+  color: white;
+  border-radius: 8px;
+  font-size: 0.65rem;
+  font-weight: 700;
+  line-height: 1;
+  vertical-align: middle;
+  margin-left: 4px;
 }
 
 /* Send form */

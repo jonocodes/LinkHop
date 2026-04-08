@@ -20,9 +20,11 @@ export function hasPermission(): boolean {
 export async function showMessageNotification(
   fromName: string,
   bodyText: string,
+  msgId?: string,
 ): Promise<void> {
   if (!hasPermission()) return;
 
+  const data = msgId ? { msg_id: msgId } : {};
   const reg = await navigator.serviceWorker?.ready;
   if (reg) {
     await reg.showNotification(`LinkHop: ${fromName}`, {
@@ -30,11 +32,17 @@ export async function showMessageNotification(
       icon: "/icon.svg",
       tag: "linkhop-msg",
       renotify: true,
+      data,
+      actions: [
+        { action: "mark-viewed", title: "Mark as Read" },
+        { action: "open", title: "Open" },
+      ],
     });
   } else {
     new Notification(`LinkHop: ${fromName}`, {
       body: bodyText,
       icon: "/icon.svg",
+      data,
     });
   }
 }

@@ -36,13 +36,19 @@ export interface TextBody {
   text: string;
 }
 
+export interface UrlBody {
+  kind: "url";
+  url: string;
+  title?: string;
+}
+
 export interface EncryptedBody {
   kind: "encrypted";
   ciphertext: string;
   iv: string;
 }
 
-export type MessageBody = TextBody | EncryptedBody;
+export type MessageBody = TextBody | UrlBody | EncryptedBody;
 
 export interface MsgSendPayload {
   msg_id: string;
@@ -71,7 +77,7 @@ export type AnyProtocolEvent =
 
 // --- Local record shapes ---
 
-export type MessageState = "pending" | "received";
+export type MessageState = "pending" | "received" | "viewed";
 
 export interface DeviceRecord {
   device_id: string;
@@ -93,6 +99,7 @@ export interface MessageRecord {
   last_attempt_id: number;
   last_attempt_at: string;
   received_at: string | null;
+  viewed_at: string | null;
 }
 
 export interface EventLogEntry {

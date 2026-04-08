@@ -1,5 +1,5 @@
 import { App, type AppScreen, type ConnectionStatus } from "./app.js";
-import { getDevices, getInbox, getPending, getSent } from "../../src/engine/state.js";
+import { getDevices, getInbox, getPending, getSent, getUnreadCount } from "../../src/engine/state.js";
 import { registryTopicFromConfig, deviceTopicFromConfig } from "../../src/protocol/topics.js";
 import type { MessageBody } from "../../src/protocol/types.js";
 
@@ -7,9 +7,37 @@ declare const __BUILD_TIME__: string;
 
 let app: App;
 let currentTab: "devices" | "inbox" | "pending" | "settings" = "devices";
+let currentMessageId: string | null = null;
+let pendingOpenMsgId: string | null = null;
+let pendingShareUrl: string | null = null;
+let pendingShareTitle: string | null = null;
+let pendingShareText: string | null = null;
+let sendMode: "text" | "url" = "text";
 let showDebug = false;
 
 export function mount(root: HTMLElement): void {
+  const params = new URLSearchParams(window.location.search);
+
+  // Check if opened from a background notification with a msg param
+  const urlMsg = params.get("msg");
+  if (urlMsg) {
+    pendingOpenMsgId = urlMsg;
+  }
+
+  // Check if opened from Web Share Target
+  const shareUrl = params.get("share-url");
+  const shareText = params.get("share-text");
+  if (shareUrl) {
+    pendingShareUrl = shareUrl;
+    pendingShareTitle = params.get("share-title");
+  } else if (shareText) {
+    pendingShareText = shareText;
+  }
+
+  if (urlMsg || shareUrl || shareText) {
+    history.replaceState(null, "", "/");
+  }
+
   app = new App({
     onStateChange: () => renderMainContent(),
     onScreenChange: (screen) => showScreen(screen),
@@ -23,7 +51,67 @@ export function mount(root: HTMLElement): void {
   `;
 
   bindSetupEvents();
+
+  // Listen for messages from the service worker (notification clicks)
+  navigator.serviceWorker?.addEventListener("message", (event) => {
+    const { type, msg_id } = event.data ?? {};
+    if (type === "open-message" && msg_id) {
+      openMessageById(msg_id as string);
+    } else if (type === "mark-viewed" && msg_id) {
+      app.markMessageViewed(msg_id as string);
+    }
+  });
+
   app.init();
+}
+
+function openMessageById(msgId: string): void {
+  currentTab = "inbox";
+  currentMessageId = msgId;
+  document.querySelectorAll(".tab-bar button[data-tab]").forEach((b) => b.classList.remove("active"));
+  document.querySelector('.tab-bar button[data-tab="inbox"]')?.classList.add("active");
+  app.markMessageViewed(msgId);
+}
+
+function prefillShareData(url: string, _title: string | null): void {
+  currentTab = "inbox";
+  currentMessageId = null;
+  document.querySelectorAll(".tab-bar button[data-tab]").forEach((b) => b.classList.remove("active"));
+  document.querySelector('.tab-bar button[data-tab="inbox"]')?.classList.add("active");
+  renderMainContent();
+  const input = document.getElementById("send-text") as HTMLInputElement | null;
+  const toggle = document.getElementById("send-mode-toggle");
+  if (input && toggle) {
+    sendMode = "url";
+    input.value = url;
+    input.placeholder = "Paste a URL...";
+    toggle.textContent = "Link";
+    toggle.classList.add("active");
+    input.focus();
+  }
+}
+
+function prefillShareText(text: string): void {
+  currentTab = "inbox";
+  currentMessageId = null;
+  document.querySelectorAll(".tab-bar button[data-tab]").forEach((b) => b.classList.remove("active"));
+  document.querySelector('.tab-bar button[data-tab="inbox"]')?.classList.add("active");
+  renderMainContent();
+  const input = document.getElementById("send-text") as HTMLInputElement | null;
+  if (input) {
+    sendMode = "text";
+    input.value = text;
+    input.focus();
+  }
+}
+
+function isUrl(value: string): boolean {
+  try {
+    const u = new URL(value);
+    return u.protocol === "http:" || u.protocol === "https:";
+  } catch {
+    return false;
+  }
 }
 
 function renderSetupScreen(): string {
@@ -71,7 +159,10 @@ function renderMainScreen(): string {
       <div id="main-content"></div>
 
       <div class="send-form" id="send-form" style="display:none">
-        <select id="send-target"></select>
+        <div class="send-top-row">
+          <select id="send-target"></select>
+          <button id="send-mode-toggle" class="send-mode-btn" title="Switch between text and link mode">Text</button>
+        </div>
         <div class="send-row">
           <input id="send-text" type="text" placeholder="Message..." />
           <button id="send-btn">Send</button>
@@ -138,11 +229,30 @@ function bindMainEvents(): void {
   document.querySelectorAll(".tab-bar button[data-tab]").forEach((btn) => {
     btn.addEventListener("click", () => {
       currentTab = (btn as HTMLElement).dataset.tab as typeof currentTab;
+      currentMessageId = null;
       document.querySelectorAll(".tab-bar button[data-tab]").forEach((b) => b.classList.remove("active"));
       btn.classList.add("active");
       renderMainContent();
       updateSendFormVisibility();
     });
+  });
+
+  // Mode toggle: switch between Text and Link
+  document.getElementById("send-mode-toggle")!.addEventListener("click", () => {
+    sendMode = sendMode === "text" ? "url" : "text";
+    const input = document.getElementById("send-text") as HTMLInputElement;
+    const toggle = document.getElementById("send-mode-toggle")!;
+    input.value = "";
+    if (sendMode === "url") {
+      input.placeholder = "Paste a URL...";
+      toggle.textContent = "Link";
+      toggle.classList.add("active");
+    } else {
+      input.placeholder = "Message...";
+      toggle.textContent = "Text";
+      toggle.classList.remove("active");
+    }
+    input.focus();
   });
 
   // Send
@@ -152,8 +262,19 @@ function bindMainEvents(): void {
     const text = input.value.trim();
     if (!target || !text) return;
 
-    await app.send(target, text);
+    if (sendMode === "url") {
+      if (!isUrl(text)) { showError("That doesn't look like a valid URL"); return; }
+      await app.sendUrl(target, text);
+    } else {
+      await app.send(target, text);
+    }
     input.value = "";
+    // Reset to text mode after sending
+    sendMode = "text";
+    input.placeholder = "Message...";
+    const toggle = document.getElementById("send-mode-toggle")!;
+    toggle.textContent = "Text";
+    toggle.classList.remove("active");
   });
 
   // Enter to send
@@ -171,7 +292,24 @@ function showScreen(screen: AppScreen): void {
 
   if (screen === "main") {
     bindMainEvents();
-    renderMainContent();
+    if (pendingOpenMsgId) {
+      const msgId = pendingOpenMsgId;
+      pendingOpenMsgId = null;
+      openMessageById(msgId);
+    } else {
+      renderMainContent();
+    }
+    if (pendingShareUrl) {
+      const shareUrl = pendingShareUrl;
+      const shareTitle = pendingShareTitle;
+      pendingShareUrl = null;
+      pendingShareTitle = null;
+      prefillShareData(shareUrl, shareTitle);
+    } else if (pendingShareText) {
+      const shareText = pendingShareText;
+      pendingShareText = null;
+      prefillShareText(shareText);
+    }
   }
 }
 
@@ -205,6 +343,8 @@ function renderMainContent(): void {
   const container = document.getElementById("main-content");
   if (!container) return;
 
+  renderTabBar();
+
   switch (currentTab) {
     case "devices":
       container.innerHTML = renderDevices();
@@ -216,14 +356,38 @@ function renderMainContent(): void {
       });
       break;
     case "inbox":
-      container.innerHTML = renderInbox();
-      container.querySelectorAll<HTMLElement>(".msg-dismiss").forEach((btn) => {
-        btn.addEventListener("click", async () => {
-          const msgId = btn.dataset.msgId;
+      if (currentMessageId) {
+        container.innerHTML = renderMessageDetail(currentMessageId);
+        container.querySelector<HTMLElement>("#msg-detail-back")?.addEventListener("click", () => {
+          currentMessageId = null;
+          renderMainContent();
+        });
+        container.querySelector<HTMLElement>(".msg-dismiss")?.addEventListener("click", async () => {
+          const msgId = currentMessageId;
+          currentMessageId = null;
           if (msgId) await app.dismissMessage(msgId);
         });
-      });
-      updateSendTargets();
+      } else {
+        container.innerHTML = renderInbox();
+        container.querySelectorAll<HTMLElement>(".msg-item-clickable").forEach((el) => {
+          el.addEventListener("click", async (e) => {
+            if ((e.target as HTMLElement).closest(".msg-dismiss")) return;
+            const msgId = el.dataset.msgId;
+            if (msgId) {
+              currentMessageId = msgId;
+              await app.markMessageViewed(msgId);
+            }
+          });
+        });
+        container.querySelectorAll<HTMLElement>(".msg-dismiss").forEach((btn) => {
+          btn.addEventListener("click", async (e) => {
+            e.stopPropagation();
+            const msgId = btn.dataset.msgId;
+            if (msgId) await app.dismissMessage(msgId);
+          });
+        });
+        updateSendTargets();
+      }
       updateSendFormVisibility();
       break;
     case "pending":
@@ -235,6 +399,17 @@ function renderMainContent(): void {
       bindSettingsEvents();
       updateSendFormVisibility();
       break;
+  }
+}
+
+function renderTabBar(): void {
+  const unread = app.config ? getUnreadCount(app.state, app.config.device_id) : 0;
+  const inboxBtn = document.querySelector<HTMLElement>('.tab-bar button[data-tab="inbox"]');
+  if (inboxBtn) {
+    const badge = unread > 0 && currentTab !== "inbox"
+      ? ` <span class="tab-badge">${unread}</span>`
+      : "";
+    inboxBtn.innerHTML = `Inbox${badge}`;
   }
 }
 
@@ -287,11 +462,19 @@ function renderInbox(): string {
       const from = app.state.devices.get(m.from_device_id);
       const fromLabel = from ? from.device_name : m.from_device_id;
       const bodyHtml = renderMessageBody(m.body);
+      const isUnread = m.state === "received";
+      const stateClass = isUnread ? "received" : "viewed";
+      const stateBadge = isUnread
+        ? `<span class="msg-state-badge new">New</span>`
+        : `<span class="msg-state-badge viewed">Viewed</span>`;
       return `
-        <div class="msg-item received">
+        <div class="msg-item ${stateClass} msg-item-clickable" data-msg-id="${esc(m.msg_id)}">
           <div class="msg-item-header">
             <span class="msg-from">From ${esc(fromLabel)}</span>
-            <button class="msg-dismiss" data-msg-id="${esc(m.msg_id)}" title="Dismiss">&times;</button>
+            <div class="msg-item-actions">
+              ${stateBadge}
+              <button class="msg-dismiss" data-msg-id="${esc(m.msg_id)}" title="Dismiss">&times;</button>
+            </div>
           </div>
           <div class="msg-body">${bodyHtml}</div>
           <div class="msg-time">${formatTime(m.created_at)}</div>
@@ -299,6 +482,38 @@ function renderInbox(): string {
       `;
     })
     .join("");
+}
+
+function renderMessageDetail(msgId: string): string {
+  if (!app.config) return "";
+  const m = app.state.messages.get(msgId);
+  if (!m) {
+    return `
+      <button class="secondary" id="msg-detail-back" style="margin-bottom:12px">&larr; Back</button>
+      <div class="empty-state">Message not found.</div>
+    `;
+  }
+  const from = app.state.devices.get(m.from_device_id);
+  const fromLabel = from ? from.device_name : m.from_device_id;
+  const bodyHtml = renderMessageBody(m.body);
+  const stateLabel = m.state === "received" ? "New" : "Viewed";
+  const stateClass = m.state === "received" ? "new" : "viewed";
+  const viewedLine = m.viewed_at
+    ? `<div class="msg-detail-meta">Viewed ${formatTime(m.viewed_at)}</div>`
+    : "";
+  return `
+    <button class="secondary" id="msg-detail-back" style="margin-bottom:12px">&larr; Back to Inbox</button>
+    <div class="msg-detail">
+      <div class="msg-detail-header">
+        <div class="msg-detail-from">From ${esc(fromLabel)}</div>
+        <span class="msg-state-badge ${stateClass}">${stateLabel}</span>
+      </div>
+      <div class="msg-detail-body">${bodyHtml}</div>
+      <div class="msg-detail-meta">Received ${formatTime(m.created_at)}</div>
+      ${viewedLine}
+      <button class="msg-dismiss secondary" data-msg-id="${esc(m.msg_id)}" style="margin-top:16px">Dismiss message</button>
+    </div>
+  `;
 }
 
 function renderPending(): string {
@@ -367,6 +582,13 @@ function updateSendTargets(): void {
 function renderMessageBody(body: MessageBody): string {
   if (body.kind === "text") {
     return esc(body.text);
+  }
+  if (body.kind === "url") {
+    const safe = isUrl(body.url) ? body.url : "#";
+    const inner = body.title
+      ? `<div class="url-card-title">${esc(body.title)}</div><div class="url-card-url">${esc(body.url)}</div>`
+      : `<div class="url-card-url">${esc(body.url)}</div>`;
+    return `<a class="url-card" href="${safe}" target="_blank" rel="noopener noreferrer">${inner}</a>`;
   }
   return `<span class="encrypted-msg">Encrypted message — cannot decrypt</span>`;
 }
