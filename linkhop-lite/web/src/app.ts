@@ -287,7 +287,8 @@ export class App {
         : b.kind === "url"
           ? `Shared a link: ${b.title ?? b.url}`
           : "[Encrypted message]";
-      showMessageNotification(fromName, bodyText, result.event.payload.msg_id);
+      const notifUrl = b.kind === "url" ? b.url : undefined;
+      showMessageNotification(fromName, bodyText, result.event.payload.msg_id, notifUrl);
     }
 
     for (const effect of effects) {

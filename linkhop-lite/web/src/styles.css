@@ -223,6 +223,7 @@ button.secondary {
   border-radius: 4px;
   cursor: pointer;
   flex-shrink: 0;
+  width: auto;
 }
 
 .msg-dismiss:hover {
@@ -399,8 +400,7 @@ button.secondary {
   display: flex;
   flex-direction: column;
   gap: 8px;
-  margin-top: auto;
-  padding-top: 12px;
+  margin-bottom: 12px;
 }
 
 .send-row {

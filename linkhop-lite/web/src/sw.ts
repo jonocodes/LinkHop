@@ -59,7 +59,7 @@ self.addEventListener("push", (event) => {
             } else if (msgBody?.kind === "url") {
               title = `LinkHop: ${protoEvent.from_device_id} shared a link`;
               body = msgBody.title ?? msgBody.url;
-              data = { msg_id: msgId };
+              data = { msg_id: msgId, url: msgBody.url };
             }
           }
         } catch {
@@ -108,6 +108,25 @@ self.addEventListener("notificationclick", (event) => {
     return;
   }
 
+  const targetUrl: string | undefined = event.notification.data?.url;
+
+  // If this is a URL message, open the URL directly and mark it viewed
+  if (targetUrl) {
+    event.waitUntil(
+      self.clients.matchAll({ type: "window", includeUncontrolled: true }).then((clients) => {
+        // Notify any open app window to mark the message as viewed
+        for (const client of clients) {
+          if (client.url.includes(self.location.origin)) {
+            client.postMessage({ type: "mark-viewed", msg_id: msgId });
+            break;
+          }
+        }
+        return self.clients.openWindow(targetUrl);
+      }),
+    );
+    return;
+  }
+
   // Default click or "open" action: focus/open the app and navigate to the message
   event.waitUntil(
     self.clients.matchAll({ type: "window", includeUncontrolled: true }).then((clients) => {
@@ -119,8 +138,8 @@ self.addEventListener("notificationclick", (event) => {
         }
       }
       // No existing window — open with msg param so app can pick it up on load
-      const url = msgId ? `/?msg=${encodeURIComponent(msgId)}` : "/";
-      return self.clients.openWindow(url);
+      const appUrl = msgId ? `/?msg=${encodeURIComponent(msgId)}` : "/";
+      return self.clients.openWindow(appUrl);
     }),
   );
 });

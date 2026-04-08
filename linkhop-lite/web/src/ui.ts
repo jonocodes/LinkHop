@@ -6,7 +6,7 @@ import type { MessageBody } from "../../src/protocol/types.js";
 declare const __BUILD_TIME__: string;
 
 let app: App;
-let currentTab: "devices" | "inbox" | "pending" | "settings" = "devices";
+let currentTab: "devices" | "inbox" | "outbox" | "settings" = "devices";
 let currentMessageId: string | null = null;
 let pendingOpenMsgId: string | null = null;
 let pendingShareUrl: string | null = null;
@@ -85,7 +85,7 @@ function prefillShareData(url: string, _title: string | null): void {
     sendMode = "url";
     input.value = url;
     input.placeholder = "Paste a URL...";
-    toggle.textContent = "Link";
+    toggle.textContent = "URL";
     toggle.classList.add("active");
     input.focus();
   }
@@ -152,22 +152,22 @@ function renderMainScreen(): string {
       <div class="tab-bar">
         <button class="active" data-tab="devices">Devices</button>
         <button data-tab="inbox">Inbox</button>
-        <button data-tab="pending">Pending</button>
+        <button data-tab="outbox">Outbox</button>
         <button data-tab="settings">Settings</button>
       </div>
-
-      <div id="main-content"></div>
 
       <div class="send-form" id="send-form" style="display:none">
         <div class="send-top-row">
           <select id="send-target"></select>
-          <button id="send-mode-toggle" class="send-mode-btn" title="Switch between text and link mode">Text</button>
+          <button id="send-mode-toggle" class="send-mode-btn" title="Switch between text and URL mode">Text</button>
         </div>
         <div class="send-row">
           <input id="send-text" type="text" placeholder="Message..." />
           <button id="send-btn">Send</button>
         </div>
       </div>
+
+      <div id="main-content"></div>
     </div>
   `;
 }
@@ -237,7 +237,7 @@ function bindMainEvents(): void {
     });
   });
 
-  // Mode toggle: switch between Text and Link
+  // Mode toggle: switch between Text and URL
   document.getElementById("send-mode-toggle")!.addEventListener("click", () => {
     sendMode = sendMode === "text" ? "url" : "text";
     const input = document.getElementById("send-text") as HTMLInputElement;
@@ -245,7 +245,7 @@ function bindMainEvents(): void {
     input.value = "";
     if (sendMode === "url") {
       input.placeholder = "Paste a URL...";
-      toggle.textContent = "Link";
+      toggle.textContent = "URL";
       toggle.classList.add("active");
     } else {
       input.placeholder = "Message...";
@@ -263,7 +263,6 @@ function bindMainEvents(): void {
     if (!target || !text) return;
 
     if (sendMode === "url") {
-      if (!isUrl(text)) { showError("That doesn't look like a valid URL"); return; }
       await app.sendUrl(target, text);
     } else {
       await app.send(target, text);
@@ -335,7 +334,7 @@ function renderStatus(status: ConnectionStatus): void {
 function updateSendFormVisibility(): void {
   const sendForm = document.getElementById("send-form");
   if (sendForm) {
-    sendForm.style.display = currentTab === "inbox" ? "flex" : "none";
+    sendForm.style.display = currentTab === "outbox" ? "flex" : "none";
   }
 }
 
@@ -390,8 +389,9 @@ function renderMainContent(): void {
       }
       updateSendFormVisibility();
       break;
-    case "pending":
+    case "outbox":
       container.innerHTML = renderPending();
+      updateSendTargets();
       updateSendFormVisibility();
       break;
     case "settings":
