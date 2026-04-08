@@ -17,7 +17,8 @@
     "dev": "vite",
     "build:web": "vite build",
     "preview": "vite preview",
-    "test:e2e": "bash scripts/download-ntfy.sh && bunx playwright test"
+    "test:e2e": "bash scripts/download-ntfy.sh && bunx playwright test",
+    "test:extension": "bash scripts/download-ntfy.sh && xvfb-run bunx playwright test --config playwright-extension.config.ts"
   },
   "keywords": [],
   "author": "",
