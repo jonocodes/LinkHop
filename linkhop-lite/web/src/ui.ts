@@ -242,7 +242,6 @@ function bindMainEvents(): void {
     sendMode = sendMode === "text" ? "url" : "text";
     const input = document.getElementById("send-text") as HTMLInputElement;
     const toggle = document.getElementById("send-mode-toggle")!;
-    input.value = "";
     if (sendMode === "url") {
       input.placeholder = "Paste a URL...";
       toggle.textContent = "URL";
