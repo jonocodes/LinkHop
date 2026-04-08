@@ -223,6 +223,7 @@ button.secondary {
   border-radius: 4px;
   cursor: pointer;
   flex-shrink: 0;
+  width: auto;
 }
 
 .msg-dismiss:hover {

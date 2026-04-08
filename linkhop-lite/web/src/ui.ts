@@ -85,7 +85,7 @@ function prefillShareData(url: string, _title: string | null): void {
     sendMode = "url";
     input.value = url;
     input.placeholder = "Paste a URL...";
-    toggle.textContent = "Link";
+    toggle.textContent = "URL";
     toggle.classList.add("active");
     input.focus();
   }
@@ -161,7 +161,7 @@ function renderMainScreen(): string {
       <div class="send-form" id="send-form" style="display:none">
         <div class="send-top-row">
           <select id="send-target"></select>
-          <button id="send-mode-toggle" class="send-mode-btn" title="Switch between text and link mode">Text</button>
+          <button id="send-mode-toggle" class="send-mode-btn" title="Switch between text and URL mode">Text</button>
         </div>
         <div class="send-row">
           <input id="send-text" type="text" placeholder="Message..." />
@@ -237,7 +237,7 @@ function bindMainEvents(): void {
     });
   });
 
-  // Mode toggle: switch between Text and Link
+  // Mode toggle: switch between Text and URL
   document.getElementById("send-mode-toggle")!.addEventListener("click", () => {
     sendMode = sendMode === "text" ? "url" : "text";
     const input = document.getElementById("send-text") as HTMLInputElement;
@@ -245,7 +245,7 @@ function bindMainEvents(): void {
     input.value = "";
     if (sendMode === "url") {
       input.placeholder = "Paste a URL...";
-      toggle.textContent = "Link";
+      toggle.textContent = "URL";
       toggle.classList.add("active");
     } else {
       input.placeholder = "Message...";
@@ -263,7 +263,6 @@ function bindMainEvents(): void {
     if (!target || !text) return;
 
     if (sendMode === "url") {
-      if (!isUrl(text)) { showError("That doesn't look like a valid URL"); return; }
       await app.sendUrl(target, text);
     } else {
       await app.send(target, text);
