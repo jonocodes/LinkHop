@@ -413,12 +413,14 @@ function renderTabBar(): void {
 }
 
 function switchToInbox(deviceId: string): void {
-  currentTab = "inbox";
+  currentTab = "outbox";
   document.querySelectorAll(".tab-bar button[data-tab]").forEach((b) => b.classList.remove("active"));
-  document.querySelector(`.tab-bar button[data-tab="inbox"]`)?.classList.add("active");
+  document.querySelector(`.tab-bar button[data-tab="outbox"]`)?.classList.add("active");
   renderMainContent();
   const select = document.getElementById("send-target") as HTMLSelectElement | null;
   if (select) select.value = deviceId;
+  const input = document.getElementById("send-text") as HTMLInputElement | null;
+  if (input) input.focus();
 }
 
 function renderDevices(): string {
