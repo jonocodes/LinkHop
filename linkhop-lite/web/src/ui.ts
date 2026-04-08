@@ -6,7 +6,7 @@ import type { MessageBody } from "../../src/protocol/types.js";
 declare const __BUILD_TIME__: string;
 
 let app: App;
-let currentTab: "devices" | "inbox" | "pending" | "settings" = "devices";
+let currentTab: "devices" | "inbox" | "outbox" | "settings" = "devices";
 let currentMessageId: string | null = null;
 let pendingOpenMsgId: string | null = null;
 let pendingShareUrl: string | null = null;
@@ -152,11 +152,9 @@ function renderMainScreen(): string {
       <div class="tab-bar">
         <button class="active" data-tab="devices">Devices</button>
         <button data-tab="inbox">Inbox</button>
-        <button data-tab="pending">Pending</button>
+        <button data-tab="outbox">Outbox</button>
         <button data-tab="settings">Settings</button>
       </div>
-
-      <div id="main-content"></div>
 
       <div class="send-form" id="send-form" style="display:none">
         <div class="send-top-row">
@@ -168,6 +166,8 @@ function renderMainScreen(): string {
           <button id="send-btn">Send</button>
         </div>
       </div>
+
+      <div id="main-content"></div>
     </div>
   `;
 }
@@ -334,7 +334,7 @@ function renderStatus(status: ConnectionStatus): void {
 function updateSendFormVisibility(): void {
   const sendForm = document.getElementById("send-form");
   if (sendForm) {
-    sendForm.style.display = currentTab === "inbox" ? "flex" : "none";
+    sendForm.style.display = currentTab === "outbox" ? "flex" : "none";
   }
 }
 
@@ -389,8 +389,9 @@ function renderMainContent(): void {
       }
       updateSendFormVisibility();
       break;
-    case "pending":
+    case "outbox":
       container.innerHTML = renderPending();
+      updateSendTargets();
       updateSendFormVisibility();
       break;
     case "settings":

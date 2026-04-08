@@ -400,8 +400,7 @@ button.secondary {
   display: flex;
   flex-direction: column;
   gap: 8px;
-  margin-top: auto;
-  padding-top: 12px;
+  margin-bottom: 12px;
 }
 
 .send-row {
