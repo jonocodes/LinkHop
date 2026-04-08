@@ -35,7 +35,7 @@ export function mount(root: HTMLElement): void {
   }
 
   if (urlMsg || shareUrl || shareText) {
-    history.replaceState(null, "", "/");
+    history.replaceState(null, "", window.location.pathname);
   }
 
   app = new App({

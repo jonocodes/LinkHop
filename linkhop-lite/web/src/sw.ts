@@ -3,10 +3,14 @@ import { precacheAndRoute } from "workbox-precaching";
 
 declare const self: ServiceWorkerGlobalScope;
 
-// Handle Web Share Target: intercept GET /share and redirect to the app with params
+// Derive base path from the service worker's own location.
+// If SW is at /LinkHop/sw.js, base will be /LinkHop/
+const swBase = new URL("./", self.location.href).pathname;
+
+// Handle Web Share Target: intercept GET <base>share and redirect to the app with params
 self.addEventListener("fetch", (event) => {
   const url = new URL(event.request.url);
-  if (url.pathname === "/share" && event.request.method === "GET") {
+  if (url.pathname === `${swBase}share` && event.request.method === "GET") {
     const shareUrl = url.searchParams.get("url") ?? "";
     const shareTitle = url.searchParams.get("title") ?? "";
     const shareText = url.searchParams.get("text") ?? "";
@@ -14,7 +18,7 @@ self.addEventListener("fetch", (event) => {
     if (shareUrl) params.set("share-url", shareUrl);
     if (shareTitle) params.set("share-title", shareTitle);
     if (shareText) params.set("share-text", shareText);
-    event.respondWith(Response.redirect(`/?${params}`, 303));
+    event.respondWith(Response.redirect(`${swBase}?${params}`, 303));
   }
 });
 
@@ -75,7 +79,7 @@ self.addEventListener("push", (event) => {
   event.waitUntil(
     self.registration.showNotification(title, {
       body,
-      icon: "/icon.svg",
+      icon: `${swBase}icon.svg`,
       tag: "linkhop-push",
       renotify: true,
       data,
@@ -138,7 +142,7 @@ self.addEventListener("notificationclick", (event) => {
         }
       }
       // No existing window — open with msg param so app can pick it up on load
-      const appUrl = msgId ? `/?msg=${encodeURIComponent(msgId)}` : "/";
+      const appUrl = msgId ? `${swBase}?msg=${encodeURIComponent(msgId)}` : swBase;
       return self.clients.openWindow(appUrl);
     }),
   );
