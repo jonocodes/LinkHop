@@ -1,9 +1,11 @@
 import { defineConfig } from "vite";
 import { VitePWA } from "vite-plugin-pwa";
 
+const base = process.env.VITE_BASE ?? "/";
+
 export default defineConfig({
   root: "web",
-  base: process.env.VITE_BASE ?? "/",
+  base,
   define: {
     __BUILD_TIME__: JSON.stringify(new Date().toISOString()),
   },
@@ -26,10 +28,10 @@ export default defineConfig({
         description: "Device-to-device messaging via ntfy",
         theme_color: "#1a1a2e",
         background_color: "#1a1a2e",
-        id: "/",
+        id: base,
         display: "standalone",
-        start_url: "/",
-        scope: "/",
+        start_url: base,
+        scope: base,
         icons: [
           {
             src: "icon-192.png",
@@ -51,7 +53,7 @@ export default defineConfig({
           },
         ],
         share_target: {
-          action: "/share",
+          action: `${base}share`,
           method: "GET",
           enctype: "application/x-www-form-urlencoded",
           params: {
