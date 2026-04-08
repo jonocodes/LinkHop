@@ -114,18 +114,20 @@ self.addEventListener("notificationclick", (event) => {
 
   const targetUrl: string | undefined = event.notification.data?.url;
 
-  // If this is a URL message, open the URL directly and mark it viewed
+  // If this is a URL message, open the URL directly and mark it viewed.
+  // openWindow must be called immediately (not after async matchAll) to
+  // avoid being silently blocked as a popup on Android.
   if (targetUrl) {
+    event.waitUntil(self.clients.openWindow(targetUrl));
+    // Best-effort: notify any open app window to mark the message as viewed
     event.waitUntil(
       self.clients.matchAll({ type: "window", includeUncontrolled: true }).then((clients) => {
-        // Notify any open app window to mark the message as viewed
         for (const client of clients) {
           if (client.url.includes(self.location.origin)) {
             client.postMessage({ type: "mark-viewed", msg_id: msgId });
             break;
           }
         }
-        return self.clients.openWindow(targetUrl);
       }),
     );
     return;
