@@ -318,8 +318,11 @@ export class App {
     const { effects } = processEvent(this.state, result.event, this.config);
     await saveState(this.state);
     // Persist the new event log entry so seenEventIds survives page reload
-    const newEntry = this.state.eventLog[this.state.eventLog.length - 1];
-    if (newEntry) appendEvents([newEntry]);
+    // (sync events are not logged, so only persist for non-sync events)
+    if (result.event.type !== "sync.request" && result.event.type !== "sync.response") {
+      const newEntry = this.state.eventLog[this.state.eventLog.length - 1];
+      if (newEntry) appendEvents([newEntry]);
+    }
     this.callbacks.onStateChange();
 
     // Show notification for new incoming messages

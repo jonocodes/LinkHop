@@ -28,15 +28,18 @@ export function processEvent(
   event: AnyProtocolEvent,
   config: DeviceConfig,
 ): ReducerResult {
-  const entry: EventLogEntry = {
-    event_id: event.event_id,
-    type: event.type,
-    timestamp: event.timestamp,
-    from_device_id: event.from_device_id,
-    direction: "incoming",
-    raw_event: event,
-  };
-  state.eventLog.push(entry);
+  // Sync events are protocol housekeeping — don't log them
+  if (event.type !== "sync.request" && event.type !== "sync.response") {
+    const entry: EventLogEntry = {
+      event_id: event.event_id,
+      type: event.type,
+      timestamp: event.timestamp,
+      from_device_id: event.from_device_id,
+      direction: "incoming",
+      raw_event: event,
+    };
+    state.eventLog.push(entry);
+  }
 
   switch (event.type) {
     case "device.announce":
