@@ -10,6 +10,8 @@ import {
   makeLeave,
   makeMsgSend,
   makeMsgReceived,
+  makeSyncRequest,
+  makeSyncResponse,
   resetIds,
 } from "./helpers.js";
 import { deviceTopic } from "../src/protocol/topics.js";
@@ -232,6 +234,129 @@ describe("lost acknowledgement scenario", () => {
     processEvent(state, ack, localConfig);
 
     expect(getPending(state, localConfig.device_id)).toHaveLength(0);
+  });
+});
+
+describe("sync.request handling", () => {
+  let state: LocalState;
+
+  beforeEach(() => {
+    resetIds();
+    state = createEmptyState();
+    // Both devices must be known
+    processEvent(state, makeAnnounce(localConfig), localConfig);
+    processEvent(state, makeAnnounce(peerConfig), localConfig);
+  });
+
+  it("responds with device list when addressed to us", () => {
+    const req = makeSyncRequest(peerConfig, localConfig.device_id);
+    const result = processEvent(state, req, localConfig);
+
+    const publishes = result.effects.filter((e) => e.type === "publish");
+    expect(publishes).toHaveLength(1);
+    const resp = (publishes[0] as { type: "publish"; event: { type: string; payload: { devices: unknown[] } } }).event;
+    expect(resp.type).toBe("sync.response");
+    expect(resp.payload.devices).toHaveLength(2); // local + peer
+  });
+
+  it("ignores sync.request not addressed to us", () => {
+    const req = makeSyncRequest(peerConfig, "dev_other");
+    const result = processEvent(state, req, localConfig);
+
+    const publishes = result.effects.filter((e) => e.type === "publish");
+    expect(publishes).toHaveLength(0);
+  });
+
+  it("excludes removed devices from response", () => {
+    const thirdConfig = makePeerConfig({ device_id: "dev_third", device_name: "Third" });
+    processEvent(state, makeAnnounce(thirdConfig), localConfig);
+    processEvent(state, makeLeave(thirdConfig), localConfig);
+
+    const req = makeSyncRequest(peerConfig, localConfig.device_id);
+    const result = processEvent(state, req, localConfig);
+
+    const resp = (result.effects.find((e) => e.type === "publish") as { event: { payload: { devices: unknown[] } } }).event;
+    expect(resp.payload.devices).toHaveLength(2); // local + peer, not third
+  });
+});
+
+describe("sync.response handling", () => {
+  let state: LocalState;
+
+  beforeEach(() => {
+    resetIds();
+    state = createEmptyState();
+    processEvent(state, makeAnnounce(peerConfig), localConfig);
+  });
+
+  it("merges new devices into state", () => {
+    const unknownDevice = {
+      device_id: "dev_unknown",
+      device_name: "Unknown Device",
+      device_topic: "topic_unknown",
+      last_event_at: "2026-04-04T17:00:00Z",
+      last_event_type: "device.announce" as const,
+      is_removed: false,
+    };
+    const resp = makeSyncResponse(peerConfig, localConfig.device_id, [unknownDevice]);
+    processEvent(state, resp, localConfig);
+
+    expect(getDevice(state, "dev_unknown")).toBeDefined();
+    expect(getDevice(state, "dev_unknown")!.device_name).toBe("Unknown Device");
+  });
+
+  it("updates device if peer has newer info", () => {
+    // Peer was last seen at 18:00:00 (from announce above)
+    const newerPeer = {
+      device_id: peerConfig.device_id,
+      device_name: "Renamed Peer",
+      device_topic: peerTopic(),
+      last_event_at: "2026-04-04T19:00:00Z",
+      last_event_type: "device.announce" as const,
+      is_removed: false,
+    };
+    const resp = makeSyncResponse(
+      makePeerConfig({ device_id: "dev_other" }),
+      localConfig.device_id,
+      [newerPeer],
+    );
+    processEvent(state, resp, localConfig);
+
+    expect(getDevice(state, peerConfig.device_id)!.device_name).toBe("Renamed Peer");
+  });
+
+  it("does not overwrite with older info", () => {
+    const olderPeer = {
+      device_id: peerConfig.device_id,
+      device_name: "Old Name",
+      device_topic: peerTopic(),
+      last_event_at: "2026-04-04T17:00:00Z",
+      last_event_type: "device.announce" as const,
+      is_removed: false,
+    };
+    const resp = makeSyncResponse(
+      makePeerConfig({ device_id: "dev_other" }),
+      localConfig.device_id,
+      [olderPeer],
+    );
+    processEvent(state, resp, localConfig);
+
+    expect(getDevice(state, peerConfig.device_id)!.device_name).toBe("Peer Device");
+  });
+
+  it("ignores sync.response not addressed to us", () => {
+    const unknownDevice = {
+      device_id: "dev_unknown",
+      device_name: "Unknown",
+      device_topic: "topic_unknown",
+      last_event_at: "2026-04-04T17:00:00Z",
+      last_event_type: "device.announce" as const,
+      is_removed: false,
+    };
+    const resp = makeSyncResponse(peerConfig, "dev_other", [unknownDevice]);
+    processEvent(state, resp, localConfig);
+
+    expect(getDevice(state, "dev_unknown")).toBeUndefined();
   });
 });
 

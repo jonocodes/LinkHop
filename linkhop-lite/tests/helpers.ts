@@ -3,9 +3,12 @@ import type {
   DeviceAnnounceEvent,
   DeviceConfig,
   DeviceLeaveEvent,
+  DeviceRecord,
   MessageBody,
   MsgReceivedEvent,
   MsgSendEvent,
+  SyncRequestEvent,
+  SyncResponseEvent,
 } from "../src/protocol/types.js";
 import { deviceTopic } from "../src/protocol/topics.js";
 
@@ -102,6 +105,42 @@ export function makeMsgReceived(
     payload: {
       msg_id: msgId,
       to_device_id: toDeviceId,
+    },
+  };
+}
+
+export function makeSyncRequest(
+  fromConfig: DeviceConfig,
+  toDeviceId: string,
+  ts?: string,
+): SyncRequestEvent {
+  return {
+    type: "sync.request",
+    timestamp: ts ?? "2026-04-04T18:20:00Z",
+    network_id: fromConfig.network_id,
+    event_id: nextId("evt"),
+    from_device_id: fromConfig.device_id,
+    payload: {
+      to_device_id: toDeviceId,
+    },
+  };
+}
+
+export function makeSyncResponse(
+  fromConfig: DeviceConfig,
+  toDeviceId: string,
+  devices: DeviceRecord[],
+  ts?: string,
+): SyncResponseEvent {
+  return {
+    type: "sync.response",
+    timestamp: ts ?? "2026-04-04T18:20:01Z",
+    network_id: fromConfig.network_id,
+    event_id: nextId("evt"),
+    from_device_id: fromConfig.device_id,
+    payload: {
+      to_device_id: toDeviceId,
+      devices,
     },
   };
 }

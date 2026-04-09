@@ -9,8 +9,10 @@ import type {
   MessageRecord,
   MsgReceivedEvent,
   MsgSendEvent,
+  SyncRequestEvent,
+  SyncResponseEvent,
 } from "../protocol/types.js";
-import { createMsgReceived } from "../protocol/events.js";
+import { createMsgReceived, createSyncResponse } from "../protocol/events.js";
 
 // An effect the engine wants the transport layer to perform
 export type Effect =
@@ -45,6 +47,10 @@ export function processEvent(
       return handleMsgSend(state, event, config);
     case "msg.received":
       return handleMsgReceived(state, event, config);
+    case "sync.request":
+      return handleSyncRequest(state, event, config);
+    case "sync.response":
+      return handleSyncResponse(state, event, config);
   }
 }
 
@@ -171,6 +177,56 @@ function handleMsgReceived(
   if (existing.state === "pending") {
     existing.state = "received";
     existing.received_at = event.timestamp;
+  }
+
+  return { effects: [] };
+}
+
+function handleSyncRequest(
+  state: LocalState,
+  event: SyncRequestEvent,
+  config: DeviceConfig,
+): ReducerResult {
+  const { to_device_id } = event.payload;
+
+  if (to_device_id !== config.device_id) {
+    return { effects: [{ type: "log", message: `ignoring sync.request not for us` }] };
+  }
+
+  const requester = state.devices.get(event.from_device_id);
+  if (!requester) {
+    return { effects: [{ type: "log", message: `sync.request from unknown device ${event.from_device_id}` }] };
+  }
+
+  // Send our full device list (excluding removed devices)
+  const devices = [...state.devices.values()].filter((d) => !d.is_removed);
+  const resp = createSyncResponse(config, event.from_device_id, requester.device_topic, devices);
+
+  return {
+    effects: [{ type: "publish", topic: resp.topic, event: resp.event }],
+  };
+}
+
+function handleSyncResponse(
+  state: LocalState,
+  event: SyncResponseEvent,
+  config: DeviceConfig,
+): ReducerResult {
+  const { to_device_id, devices } = event.payload;
+
+  if (to_device_id !== config.device_id) {
+    return { effects: [{ type: "log", message: `ignoring sync.response not for us` }] };
+  }
+
+  // Merge received devices into our state — only add devices we don't
+  // already know about, or update if the peer has newer info
+  for (const d of devices) {
+    const existing = state.devices.get(d.device_id);
+    if (!existing) {
+      state.devices.set(d.device_id, { ...d });
+    } else if (d.last_event_at > existing.last_event_at) {
+      state.devices.set(d.device_id, { ...d });
+    }
   }
 
   return { effects: [] };

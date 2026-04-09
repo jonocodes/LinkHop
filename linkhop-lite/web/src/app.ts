@@ -6,7 +6,7 @@ import { deriveNetworkId } from "../../src/protocol/network.js";
 import { deriveEncryptionKey, encryptBody, decryptBody } from "../../src/protocol/crypto.js";
 import { createEmptyState } from "../../src/engine/state.js";
 import { processEvent } from "../../src/engine/reducer.js";
-import { actionAnnounce, actionLeave, actionSend, actionMarkViewed } from "../../src/engine/actions.js";
+import { actionAnnounce, actionLeave, actionSend, actionMarkViewed, actionSyncRequest } from "../../src/engine/actions.js";
 import type { Effect } from "../../src/engine/reducer.js";
 import { loadConfig, saveConfig, loadState, saveState, clearAll, loadSeenEventIds, appendEvents, type BrowserConfig } from "./db.js";
 import { subscribeSSE, publishHTTP } from "./sse.js";
@@ -37,6 +37,8 @@ export class App {
   private cleanupSSE: (() => void)[] = [];
   private wasConnected = false;
   private seenEventIds: Set<string> = new Set();
+  private hasSynced = false;
+  private syncTimer: ReturnType<typeof setTimeout> | null = null;
 
   constructor(callbacks: AppCallbacks) {
     this.callbacks = callbacks;
@@ -112,6 +114,10 @@ export class App {
         if (!this.wasConnected) {
           // First connection — also try web push subscription (best effort)
           this.subscribeWebPush();
+          // Schedule a sync request after initial SSE events have arrived,
+          // so we pick the most recently seen peer to ask for the full
+          // device list (covers the case where old announcements expired)
+          this.scheduleSyncRequest();
         }
         this.wasConnected = true;
       }
@@ -136,6 +142,7 @@ export class App {
   disconnect(): void {
     for (const cleanup of this.cleanupSSE) cleanup();
     this.cleanupSSE = [];
+    if (this.syncTimer) { clearTimeout(this.syncTimer); this.syncTimer = null; }
     this.setConnection("disconnected");
   }
 
@@ -184,6 +191,32 @@ export class App {
     await this.executeEffect(effect);
   }
 
+  private scheduleSyncRequest(): void {
+    if (this.syncTimer) clearTimeout(this.syncTimer);
+    // Wait 3 seconds for initial SSE events to arrive, then pick the
+    // most recently seen peer and request their device list
+    this.syncTimer = setTimeout(() => {
+      this.syncTimer = null;
+      this.requestSync();
+    }, 3000);
+  }
+
+  private async requestSync(): Promise<void> {
+    if (!this.config || this.hasSynced) return;
+    this.hasSynced = true;
+
+    // Find the most recently seen peer (not us, not removed)
+    const peers = [...this.state.devices.values()]
+      .filter((d) => d.device_id !== this.config!.device_id && !d.is_removed)
+      .sort((a, b) => b.last_event_at.localeCompare(a.last_event_at));
+
+    if (peers.length === 0) return;
+
+    const peer = peers[0];
+    const effect = actionSyncRequest(this.config, peer.device_id, peer.device_topic);
+    await this.executeEffect(effect);
+  }
+
   async leave(): Promise<void> {
     if (!this.config) return;
     const effect = actionLeave(this.config);
@@ -198,6 +231,7 @@ export class App {
     this.state = createEmptyState();
     this.seenEventIds = new Set();
     this.wasConnected = false;
+    this.hasSynced = false;
     this.screen = "setup";
     this.callbacks.onScreenChange("setup");
   }

@@ -8,6 +8,7 @@ import {
   createDeviceAnnounce,
   createDeviceLeave,
   createMsgSend,
+  createSyncRequest,
 } from "../protocol/events.js";
 import { registryTopicFromConfig } from "../protocol/topics.js";
 import type { Effect } from "./reducer.js";
@@ -59,5 +60,14 @@ export function actionSend(
   };
   state.messages.set(record.msg_id, record);
 
+  return { type: "publish", topic, event };
+}
+
+export function actionSyncRequest(
+  config: DeviceConfig,
+  toDeviceId: string,
+  toDeviceTopic: string,
+): Effect {
+  const { event, topic } = createSyncRequest(config, toDeviceId, toDeviceTopic);
   return { type: "publish", topic, event };
 }

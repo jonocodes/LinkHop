@@ -2,9 +2,12 @@ import type {
   DeviceAnnounceEvent,
   DeviceConfig,
   DeviceLeaveEvent,
+  DeviceRecord,
   MessageBody,
   MsgReceivedEvent,
   MsgSendEvent,
+  SyncRequestEvent,
+  SyncResponseEvent,
 } from "./types.js";
 import { generateEventId, generateMsgId } from "./ids.js";
 import { deviceTopicFromConfig } from "./topics.js";
@@ -93,5 +96,47 @@ export function createMsgReceived(
       },
     },
     topic: originalSenderDeviceTopic,
+  };
+}
+
+export function createSyncRequest(
+  config: DeviceConfig,
+  toDeviceId: string,
+  toDeviceTopic: string,
+): { event: SyncRequestEvent; topic: string } {
+  return {
+    event: {
+      type: "sync.request",
+      timestamp: now(),
+      network_id: config.network_id,
+      event_id: generateEventId(),
+      from_device_id: config.device_id,
+      payload: {
+        to_device_id: toDeviceId,
+      },
+    },
+    topic: toDeviceTopic,
+  };
+}
+
+export function createSyncResponse(
+  config: DeviceConfig,
+  toDeviceId: string,
+  toDeviceTopic: string,
+  devices: DeviceRecord[],
+): { event: SyncResponseEvent; topic: string } {
+  return {
+    event: {
+      type: "sync.response",
+      timestamp: now(),
+      network_id: config.network_id,
+      event_id: generateEventId(),
+      from_device_id: config.device_id,
+      payload: {
+        to_device_id: toDeviceId,
+        devices,
+      },
+    },
+    topic: toDeviceTopic,
   };
 }
