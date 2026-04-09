@@ -8,7 +8,7 @@ import { createEmptyState } from "../../src/engine/state.js";
 import { processEvent } from "../../src/engine/reducer.js";
 import { actionAnnounce, actionLeave, actionSend, actionMarkViewed } from "../../src/engine/actions.js";
 import type { Effect } from "../../src/engine/reducer.js";
-import { loadConfig, saveConfig, loadState, saveState, clearAll, loadSeenEventIds, type BrowserConfig } from "./db.js";
+import { loadConfig, saveConfig, loadState, saveState, clearAll, loadSeenEventIds, appendEvents, type BrowserConfig } from "./db.js";
 import { subscribeSSE, publishHTTP } from "./sse.js";
 import { requestPermission, showMessageNotification, subscribeWebPush, unsubscribeWebPush } from "./notifications.js";
 
@@ -105,11 +105,12 @@ export class App {
       openCount++;
       if (openCount >= 2) {
         this.setConnection("connected");
-        // Re-announce on reconnect so peers see us
-        if (this.wasConnected) {
-          this.announce();
-        } else {
-          // First connection — try web push subscription (best effort, async)
+        // Announce on every connect so peers discover us — critical after
+        // long offline periods where old announcements have expired from
+        // the ntfy retention window.
+        this.announce();
+        if (!this.wasConnected) {
+          // First connection — also try web push subscription (best effort)
           this.subscribeWebPush();
         }
         this.wasConnected = true;
@@ -282,6 +283,9 @@ export class App {
 
     const { effects } = processEvent(this.state, result.event, this.config);
     await saveState(this.state);
+    // Persist the new event log entry so seenEventIds survives page reload
+    const newEntry = this.state.eventLog[this.state.eventLog.length - 1];
+    if (newEntry) appendEvents([newEntry]);
     this.callbacks.onStateChange();
 
     // Show notification for new incoming messages
