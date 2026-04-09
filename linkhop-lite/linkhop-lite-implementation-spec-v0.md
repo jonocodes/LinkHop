@@ -22,7 +22,6 @@ This implementation spec does **not** define:
 - retry / offline recovery extension
 - encryption
 - password rotation
-- heartbeat
 - backend APIs
 - TUI support
 
@@ -244,14 +243,123 @@ Payload fields:
 - `msg_id`: logical message identifier being acknowledged
 - `to_device_id`: original sender device
 
+### `device.heartbeat`
+
+Published to:
+- registry topic
+
+Purpose:
+- periodic liveness signal so peers can track when a device was last active
+- enables "last seen" display in the UI
+
+```json
+{
+  "type": "device.heartbeat",
+  "timestamp": "2026-04-04T19:00:00Z",
+  "network_id": "net_f7k29m",
+  "event_id": "evt_hb_001",
+  "from_device_id": "dev_phone_123",
+  "payload": {
+    "device_id": "dev_phone_123"
+  }
+}
+```
+
+Payload fields:
+- `device_id`: stable device identifier
+
+Processing rules:
+- Updates `last_event_at` and `last_event_type` on known, non-removed devices
+- MUST NOT create a device record for an unknown device
+- MUST NOT revive a removed device
+- MUST NOT be added to the persistent event log (housekeeping event)
+
+### `sync.request`
+
+Published to:
+- target device topic
+
+Purpose:
+- request the full known device list from a peer
+- used by newly joining devices to discover peers whose announcements have expired from relay retention
+
+```json
+{
+  "type": "sync.request",
+  "timestamp": "2026-04-04T18:20:00Z",
+  "network_id": "net_f7k29m",
+  "event_id": "evt_syncreq_001",
+  "from_device_id": "dev_tablet_789",
+  "payload": {
+    "to_device_id": "dev_desktop_456"
+  }
+}
+```
+
+Payload fields:
+- `to_device_id`: device being asked to respond with its device list
+
+Processing rules:
+- MUST ignore if `to_device_id` does not match the local device
+- Responds with `sync.response` containing all known non-removed devices
+- MUST NOT be added to the persistent event log (housekeeping event)
+
+### `sync.response`
+
+Published to:
+- requester device topic
+
+Purpose:
+- respond to a `sync.request` with the full known device list
+
+```json
+{
+  "type": "sync.response",
+  "timestamp": "2026-04-04T18:20:01Z",
+  "network_id": "net_f7k29m",
+  "event_id": "evt_syncresp_001",
+  "from_device_id": "dev_desktop_456",
+  "payload": {
+    "to_device_id": "dev_tablet_789",
+    "devices": [
+      {
+        "device_id": "dev_phone_123",
+        "device_name": "Jono Phone",
+        "device_topic": "linkhop.test.net_f7k29m.device.dev_phone_123",
+        "last_event_at": "2026-04-04T18:00:00Z",
+        "last_event_type": "device.announce",
+        "is_removed": false
+      }
+    ]
+  }
+}
+```
+
+Payload fields:
+- `to_device_id`: device that requested the sync
+- `devices`: array of `DeviceRecord` objects (excluding removed devices)
+
+Processing rules:
+- MUST ignore if `to_device_id` does not match the local device
+- Merges devices into local state: adds unknown devices, updates existing ones only if the peer has a newer `last_event_at`
+- MUST NOT overwrite local device info with older data
+- MUST NOT be added to the persistent event log (housekeeping event)
+
 ## Core Processing Rules
 
 ### Device handling
 
 - A client SHOULD emit `device.announce` on startup and reconnect.
 - A client MAY emit `device.announce` when its device metadata changes.
+- A client SHOULD emit `device.heartbeat` periodically (recommended: once per hour) while connected.
 - A client MUST treat `device_name` as mutable.
 - A client MUST treat `device_id` as stable identity.
+
+### Sync handling
+
+- On first connection, a client SHOULD request a sync from the most recently seen peer after a short delay (e.g. 3 seconds) to allow initial SSE events to arrive.
+- A client MUST respond to `sync.request` addressed to it with a `sync.response` containing all known non-removed devices.
+- A client MUST merge `sync.response` data, preferring newer `last_event_at` timestamps over older ones.
 
 ### Send handling
 
@@ -271,7 +379,8 @@ Payload fields:
 
 - A recipient MUST deduplicate messages by `msg_id`.
 - Duplicate `msg.send` events with the same `msg_id` MUST NOT create duplicate inbox entries.
-- On duplicate `msg.send`, the recipient SHOULD emit `msg.received` again.
+- On genuine retry (higher `attempt_id`), the recipient SHOULD re-emit `msg.received`.
+- On replayed duplicate (same `attempt_id`), the recipient SHOULD NOT re-emit `msg.received` (avoids ack spam on SSE reconnect).
 
 ### Acknowledgement handling
 
@@ -413,5 +522,4 @@ Deferred from this implementation spec:
 - retry / offline recovery extension
 - encryption and signing
 - password rotation
-- heartbeat / stronger presence
 - protocol version compatibility guarantees before first implementation

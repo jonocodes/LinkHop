@@ -121,15 +121,72 @@ Purpose:
 
 ### Presence and device freshness
 
-Heartbeat is deprioritized for now.
+Devices emit periodic `device.heartbeat` events (recommended: once per hour) to the registry topic so peers can track liveness.
 
-In the core protocol, devices track peer freshness using the most recent observed device or message event from that device.
-
-A local device record may therefore keep:
+A local device record keeps:
 - `last_event_at`
 - `last_event_type`
 
-This is intentionally approximate. It is enough to support discovery and debugging without making the core protocol chatty.
+The UI displays a "last seen" time derived from `last_event_at` (e.g. "seen 2h ago").
+
+#### `device.heartbeat`
+
+Emitted:
+- periodically while connected (recommended: once per hour)
+
+Published to:
+- registry topic
+
+Purpose:
+- periodic liveness signal
+- enables "last seen" tracking
+
+Payload fields:
+- `device_id`
+
+Processing rules:
+- Updates `last_event_at` and `last_event_type` on known, non-removed devices
+- Does not create records for unknown devices
+- Does not revive removed devices
+- Not recorded in the persistent event log
+
+### Peer-to-peer device sync
+
+When a device connects and cannot discover all peers via retained announcements (e.g. after a long offline period beyond relay retention), it can request the full device list from a known peer.
+
+#### `sync.request`
+
+Emitted:
+- on first connection, after a short delay to allow initial SSE events to arrive
+
+Published to:
+- target peer's device topic
+
+Purpose:
+- request the full known device list from a peer
+
+Payload fields:
+- `to_device_id`
+
+#### `sync.response`
+
+Emitted:
+- in response to a `sync.request` addressed to this device
+
+Published to:
+- requester's device topic
+
+Purpose:
+- send the full known device list to the requester
+
+Payload fields:
+- `to_device_id`
+- `devices` (array of DeviceRecord, excluding removed devices)
+
+Processing rules:
+- Merges devices into local state
+- Only updates existing devices if peer has newer `last_event_at`
+- Does not overwrite with older data
 
 ### Device discovery
 
@@ -867,7 +924,6 @@ The following are explicitly out of scope for the current core protocol:
 - long-offline recovery beyond relay retention
 - encryption details
 - read/view/delete synchronization
-- heartbeat as a required presence mechanism
 - password rotation within the same logical network
 - backend APIs
 - TUI support
@@ -876,7 +932,6 @@ The following are explicitly out of scope for the current core protocol:
 ## Future Questions
 
 These questions are intentionally left open for later revisions:
-- whether heartbeat should return as an optional or core presence feature
 - whether capability advertisement belongs in `device.announce`
 - how password-derived auth should be formalized
 - how retry settings should be represented if the retry extension is implemented

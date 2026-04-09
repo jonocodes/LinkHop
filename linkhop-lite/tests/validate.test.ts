@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { validateEvent } from "../src/protocol/validate.js";
-import { makeConfig, makePeerConfig, makeAnnounce, makeMsgSend } from "./helpers.js";
+import { makeConfig, makePeerConfig, makeAnnounce, makeHeartbeat, makeMsgSend, makeSyncRequest, makeSyncResponse } from "./helpers.js";
 
 const NET = "net_test";
 
@@ -44,6 +44,55 @@ describe("validateEvent", () => {
   it("rejects msg.send with missing payload fields", () => {
     const event = makeMsgSend(makePeerConfig(), "dev_local");
     (event.payload as Record<string, unknown>).msg_id = "";
+    const result = validateEvent(event, NET);
+    expect(result.valid).toBe(false);
+  });
+
+  it("accepts a valid device.heartbeat", () => {
+    const event = makeHeartbeat(makePeerConfig());
+    const result = validateEvent(event, NET);
+    expect(result.valid).toBe(true);
+  });
+
+  it("rejects device.heartbeat with missing device_id", () => {
+    const event = makeHeartbeat(makePeerConfig());
+    (event.payload as Record<string, unknown>).device_id = "";
+    const result = validateEvent(event, NET);
+    expect(result.valid).toBe(false);
+    if (!result.valid) expect(result.reason).toContain("device.heartbeat");
+  });
+
+  it("accepts a valid sync.request", () => {
+    const event = makeSyncRequest(makePeerConfig(), "dev_local");
+    const result = validateEvent(event, NET);
+    expect(result.valid).toBe(true);
+  });
+
+  it("rejects sync.request with missing to_device_id", () => {
+    const event = makeSyncRequest(makePeerConfig(), "dev_local");
+    (event.payload as Record<string, unknown>).to_device_id = "";
+    const result = validateEvent(event, NET);
+    expect(result.valid).toBe(false);
+    if (!result.valid) expect(result.reason).toContain("sync.request");
+  });
+
+  it("accepts a valid sync.response", () => {
+    const event = makeSyncResponse(makePeerConfig(), "dev_local", []);
+    const result = validateEvent(event, NET);
+    expect(result.valid).toBe(true);
+  });
+
+  it("rejects sync.response with missing devices array", () => {
+    const event = makeSyncResponse(makePeerConfig(), "dev_local", []);
+    (event.payload as Record<string, unknown>).devices = "not-array";
+    const result = validateEvent(event, NET);
+    expect(result.valid).toBe(false);
+    if (!result.valid) expect(result.reason).toContain("sync.response");
+  });
+
+  it("rejects sync.response with missing to_device_id", () => {
+    const event = makeSyncResponse(makePeerConfig(), "dev_local", []);
+    (event.payload as Record<string, unknown>).to_device_id = "";
     const result = validateEvent(event, NET);
     expect(result.valid).toBe(false);
   });

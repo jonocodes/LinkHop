@@ -107,8 +107,11 @@ Integration and e2e tests run against a real ntfy binary. They auto-skip if the 
 - [x] Protocol event envelope (type, timestamp, network_id, event_id, from_device_id, payload)
 - [x] `device.announce` event and payload (with optional capabilities)
 - [x] `device.leave` event and payload
+- [x] `device.heartbeat` event and payload
 - [x] `msg.send` event and payload (with `body.kind: "text"` and `body.kind: "encrypted"`)
 - [x] `msg.received` event and payload
+- [x] `sync.request` event and payload
+- [x] `sync.response` event and payload
 - [x] Local device record shape (with capabilities)
 - [x] Local message record shape (with state: pending | received)
 - [x] Local event log entry shape
@@ -137,7 +140,10 @@ Integration and e2e tests run against a real ntfy binary. They auto-skip if the 
 - [x] `msg.send` duplicate re-emits `msg.received`
 - [x] `msg.received` clears pending state on sender
 - [x] `msg.received` ignores acks not addressed to local device
-- [x] Event log records all incoming events
+- [x] `device.heartbeat` updates last_event_at on known non-removed devices
+- [x] `sync.request` responds with device list when addressed to us
+- [x] `sync.response` merges new/updated devices into state
+- [x] Event log records all incoming events (excluding housekeeping)
 
 ### Encryption
 
@@ -154,8 +160,10 @@ Integration and e2e tests run against a real ntfy binary. They auto-skip if the 
 ### Local actions
 
 - [x] `actionAnnounce` — produce device.announce publish effect (with capabilities)
+- [x] `actionHeartbeat` — produce device.heartbeat publish effect
 - [x] `actionLeave` — produce device.leave publish effect
 - [x] `actionSend` — store pending message + produce msg.send publish effect
+- [x] `actionSyncRequest` — produce sync.request publish effect
 
 ### Transport
 
@@ -196,6 +204,8 @@ Integration and e2e tests run against a real ntfy binary. They auto-skip if the 
 - [x] Duplicate delivery dedup via relay
 - [x] Dropped ack scenario via relay
 - [x] Late subscriber receives retained events
+- [x] Heartbeat simulation (updates last_event_at, does not revive removed)
+- [x] Sync simulation (peer discovery after retention expiry, excludes removed)
 - [x] Simulation fixture format and replay
 - [x] Fixture-driven tests (all JSON fixtures auto-loaded)
 - [x] Integration: publish/subscribe roundtrip against real ntfy
@@ -246,6 +256,7 @@ Integration and e2e tests run against a real ntfy binary. They auto-skip if the 
 
 - [ ] Retry / offline recovery extension
 - [ ] Password rotation
-- [ ] Heartbeat / stronger presence
+- [x] Heartbeat (hourly device.heartbeat, "last seen" display)
+- [x] Peer-to-peer sync (sync.request/sync.response for device discovery)
 - [x] Password-derived network_id (PBKDF2 via Web Crypto)
 - [x] Encryption (AES-GCM, opt-in, mixed mode, CLI + browser)

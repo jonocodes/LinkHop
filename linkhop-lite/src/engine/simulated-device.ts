@@ -3,7 +3,7 @@ import { validateEvent } from "../protocol/validate.js";
 import { registryTopicFromConfig, deviceTopicFromConfig } from "../protocol/topics.js";
 import { createEmptyState } from "./state.js";
 import { processEvent } from "./reducer.js";
-import { actionAnnounce, actionLeave, actionSend } from "./actions.js";
+import { actionAnnounce, actionHeartbeat, actionLeave, actionSend, actionSyncRequest } from "./actions.js";
 import type { Effect } from "./reducer.js";
 import type { InMemoryRelay } from "./relay.js";
 
@@ -53,6 +53,18 @@ export class SimulatedDevice {
   /** Emit device.leave */
   leave(): void {
     const effect = actionLeave(this.config);
+    this.executeEffect(effect);
+  }
+
+  /** Emit device.heartbeat */
+  heartbeat(): void {
+    const effect = actionHeartbeat(this.config);
+    this.executeEffect(effect);
+  }
+
+  /** Request sync from a peer */
+  syncRequest(toDeviceId: string, toDeviceTopic: string): void {
+    const effect = actionSyncRequest(this.config, toDeviceId, toDeviceTopic);
     this.executeEffect(effect);
   }
 
