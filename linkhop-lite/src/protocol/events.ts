@@ -1,6 +1,7 @@
 import type {
   DeviceAnnounceEvent,
   DeviceConfig,
+  DeviceHeartbeatEvent,
   DeviceLeaveEvent,
   DeviceRecord,
   MessageBody,
@@ -34,6 +35,19 @@ export function createDeviceAnnounce(
       device_topic: deviceTopicFromConfig(config),
       protocol_version: PROTOCOL_VERSION,
       ...(capabilities?.length ? { capabilities } : {}),
+    },
+  };
+}
+
+export function createDeviceHeartbeat(config: DeviceConfig): DeviceHeartbeatEvent {
+  return {
+    type: "device.heartbeat",
+    timestamp: now(),
+    network_id: config.network_id,
+    event_id: generateEventId(),
+    from_device_id: config.device_id,
+    payload: {
+      device_id: config.device_id,
     },
   };
 }

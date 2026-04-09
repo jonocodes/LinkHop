@@ -6,11 +6,14 @@ import { deriveNetworkId } from "../../src/protocol/network.js";
 import { deriveEncryptionKey, encryptBody, decryptBody } from "../../src/protocol/crypto.js";
 import { createEmptyState } from "../../src/engine/state.js";
 import { processEvent } from "../../src/engine/reducer.js";
-import { actionAnnounce, actionLeave, actionSend, actionMarkViewed, actionSyncRequest } from "../../src/engine/actions.js";
+import { actionAnnounce, actionHeartbeat, actionLeave, actionSend, actionMarkViewed, actionSyncRequest } from "../../src/engine/actions.js";
 import type { Effect } from "../../src/engine/reducer.js";
 import { loadConfig, saveConfig, loadState, saveState, clearAll, loadSeenEventIds, appendEvents, type BrowserConfig } from "./db.js";
 import { subscribeSSE, publishHTTP } from "./sse.js";
 import { requestPermission, showMessageNotification, subscribeWebPush, unsubscribeWebPush } from "./notifications.js";
+
+const HEARTBEAT_INTERVAL_MS = 10 * 60 * 1000; // 10 minutes
+const STALE_THRESHOLD_MS = 30 * 60 * 1000; // 30 minutes without heartbeat → stale
 
 export type AppScreen = "setup" | "main";
 export type ConnectionStatus = "disconnected" | "connecting" | "connected";
@@ -39,6 +42,7 @@ export class App {
   private seenEventIds: Set<string> = new Set();
   private hasSynced = false;
   private syncTimer: ReturnType<typeof setTimeout> | null = null;
+  private heartbeatTimer: ReturnType<typeof setInterval> | null = null;
 
   constructor(callbacks: AppCallbacks) {
     this.callbacks = callbacks;
@@ -120,6 +124,7 @@ export class App {
           this.scheduleSyncRequest();
         }
         this.wasConnected = true;
+        this.startHeartbeat();
       }
     };
 
@@ -143,6 +148,7 @@ export class App {
     for (const cleanup of this.cleanupSSE) cleanup();
     this.cleanupSSE = [];
     if (this.syncTimer) { clearTimeout(this.syncTimer); this.syncTimer = null; }
+    this.stopHeartbeat();
     this.setConnection("disconnected");
   }
 
@@ -215,6 +221,43 @@ export class App {
     const peer = peers[0];
     const effect = actionSyncRequest(this.config, peer.device_id, peer.device_topic);
     await this.executeEffect(effect);
+  }
+
+  private startHeartbeat(): void {
+    this.stopHeartbeat();
+    this.heartbeatTimer = setInterval(() => {
+      this.sendHeartbeat();
+      this.markStaleDevices();
+    }, HEARTBEAT_INTERVAL_MS);
+  }
+
+  private stopHeartbeat(): void {
+    if (this.heartbeatTimer) { clearInterval(this.heartbeatTimer); this.heartbeatTimer = null; }
+  }
+
+  private async sendHeartbeat(): Promise<void> {
+    if (!this.config) return;
+    const effect = actionHeartbeat(this.config);
+    await this.executeEffect(effect);
+  }
+
+  private markStaleDevices(): void {
+    if (!this.config) return;
+    const now = Date.now();
+    let changed = false;
+    for (const device of this.state.devices.values()) {
+      if (device.device_id === this.config.device_id) continue;
+      if (device.is_removed) continue;
+      const age = now - new Date(device.last_event_at).getTime();
+      if (age > STALE_THRESHOLD_MS) {
+        device.is_removed = true;
+        changed = true;
+      }
+    }
+    if (changed) {
+      saveState(this.state);
+      this.callbacks.onStateChange();
+    }
   }
 
   async leave(): Promise<void> {
@@ -319,7 +362,7 @@ export class App {
     await saveState(this.state);
     // Persist the new event log entry so seenEventIds survives page reload
     // (sync events are not logged, so only persist for non-sync events)
-    if (result.event.type !== "sync.request" && result.event.type !== "sync.response") {
+    if (result.event.type !== "device.heartbeat" && result.event.type !== "sync.request" && result.event.type !== "sync.response") {
       const newEntry = this.state.eventLog[this.state.eventLog.length - 1];
       if (newEntry) appendEvents([newEntry]);
     }

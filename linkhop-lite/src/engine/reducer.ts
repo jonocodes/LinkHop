@@ -2,6 +2,7 @@ import type {
   AnyProtocolEvent,
   DeviceAnnounceEvent,
   DeviceConfig,
+  DeviceHeartbeatEvent,
   DeviceLeaveEvent,
   DeviceRecord,
   EventLogEntry,
@@ -28,8 +29,8 @@ export function processEvent(
   event: AnyProtocolEvent,
   config: DeviceConfig,
 ): ReducerResult {
-  // Sync events are protocol housekeeping — don't log them
-  if (event.type !== "sync.request" && event.type !== "sync.response") {
+  // Housekeeping events (heartbeat, sync) — don't log them
+  if (event.type !== "device.heartbeat" && event.type !== "sync.request" && event.type !== "sync.response") {
     const entry: EventLogEntry = {
       event_id: event.event_id,
       type: event.type,
@@ -46,6 +47,8 @@ export function processEvent(
       return handleDeviceAnnounce(state, event);
     case "device.leave":
       return handleDeviceLeave(state, event);
+    case "device.heartbeat":
+      return handleDeviceHeartbeat(state, event);
     case "msg.send":
       return handleMsgSend(state, event, config);
     case "msg.received":
@@ -86,6 +89,18 @@ function handleDeviceLeave(state: LocalState, event: DeviceLeaveEvent): ReducerR
 
   if (existing) {
     existing.is_removed = true;
+    existing.last_event_at = event.timestamp;
+    existing.last_event_type = event.type;
+  }
+
+  return { effects: [] };
+}
+
+function handleDeviceHeartbeat(state: LocalState, event: DeviceHeartbeatEvent): ReducerResult {
+  const { device_id } = event.payload;
+  const existing = state.devices.get(device_id);
+
+  if (existing && !existing.is_removed) {
     existing.last_event_at = event.timestamp;
     existing.last_event_type = event.type;
   }

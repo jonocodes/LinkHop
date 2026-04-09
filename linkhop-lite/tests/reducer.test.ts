@@ -7,6 +7,7 @@ import {
   makeConfig,
   makePeerConfig,
   makeAnnounce,
+  makeHeartbeat,
   makeLeave,
   makeMsgSend,
   makeMsgReceived,
@@ -82,6 +83,47 @@ describe("device.leave handling", () => {
     const dev = getDevice(state, peerConfig.device_id);
     expect(dev!.is_removed).toBe(true);
     expect(dev!.last_event_type).toBe("device.leave");
+  });
+});
+
+describe("device.heartbeat handling", () => {
+  let state: LocalState;
+
+  beforeEach(() => {
+    resetIds();
+    state = createEmptyState();
+    processEvent(state, makeAnnounce(peerConfig), localConfig);
+  });
+
+  it("updates last_event_at on known device", () => {
+    const hb = makeHeartbeat(peerConfig, "2026-04-04T19:00:00Z");
+    processEvent(state, hb, localConfig);
+
+    const dev = getDevice(state, peerConfig.device_id);
+    expect(dev!.last_event_at).toBe("2026-04-04T19:00:00Z");
+    expect(dev!.last_event_type).toBe("device.heartbeat");
+  });
+
+  it("does not create a record for unknown device", () => {
+    const unknownConfig = makePeerConfig({ device_id: "dev_unknown" });
+    const hb = makeHeartbeat(unknownConfig);
+    processEvent(state, hb, localConfig);
+
+    expect(getDevice(state, "dev_unknown")).toBeUndefined();
+  });
+
+  it("does not revive a removed device", () => {
+    processEvent(state, makeLeave(peerConfig), localConfig);
+    const hb = makeHeartbeat(peerConfig, "2026-04-04T19:00:00Z");
+    processEvent(state, hb, localConfig);
+
+    expect(getDevice(state, peerConfig.device_id)!.is_removed).toBe(true);
+  });
+
+  it("does not add to event log", () => {
+    const logBefore = state.eventLog.length;
+    processEvent(state, makeHeartbeat(peerConfig), localConfig);
+    expect(state.eventLog.length).toBe(logBefore);
   });
 });
 

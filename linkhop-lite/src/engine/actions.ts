@@ -6,6 +6,7 @@ import type {
 } from "../protocol/types.js";
 import {
   createDeviceAnnounce,
+  createDeviceHeartbeat,
   createDeviceLeave,
   createMsgSend,
   createSyncRequest,
@@ -20,6 +21,11 @@ import type { Effect } from "./reducer.js";
 
 export function actionAnnounce(config: DeviceConfig, capabilities?: string[]): Effect {
   const event = createDeviceAnnounce(config, capabilities);
+  return { type: "publish", topic: registryTopicFromConfig(config), event };
+}
+
+export function actionHeartbeat(config: DeviceConfig): Effect {
+  const event = createDeviceHeartbeat(config);
   return { type: "publish", topic: registryTopicFromConfig(config), event };
 }
 

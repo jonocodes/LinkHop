@@ -3,6 +3,7 @@
 export type EventType =
   | "device.announce"
   | "device.leave"
+  | "device.heartbeat"
   | "msg.send"
   | "msg.received"
   | "sync.request"
@@ -30,6 +31,10 @@ export interface DeviceAnnouncePayload {
 }
 
 export interface DeviceLeavePayload {
+  device_id: string;
+}
+
+export interface DeviceHeartbeatPayload {
   device_id: string;
 }
 
@@ -77,6 +82,7 @@ export interface SyncResponsePayload {
 
 export type DeviceAnnounceEvent = ProtocolEvent<"device.announce", DeviceAnnouncePayload>;
 export type DeviceLeaveEvent = ProtocolEvent<"device.leave", DeviceLeavePayload>;
+export type DeviceHeartbeatEvent = ProtocolEvent<"device.heartbeat", DeviceHeartbeatPayload>;
 export type MsgSendEvent = ProtocolEvent<"msg.send", MsgSendPayload>;
 export type MsgReceivedEvent = ProtocolEvent<"msg.received", MsgReceivedPayload>;
 export type SyncRequestEvent = ProtocolEvent<"sync.request", SyncRequestPayload>;
@@ -85,6 +91,7 @@ export type SyncResponseEvent = ProtocolEvent<"sync.response", SyncResponsePaylo
 export type AnyProtocolEvent =
   | DeviceAnnounceEvent
   | DeviceLeaveEvent
+  | DeviceHeartbeatEvent
   | MsgSendEvent
   | MsgReceivedEvent
   | SyncRequestEvent

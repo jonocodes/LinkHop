@@ -48,6 +48,12 @@ export function validateEvent(raw: unknown, expectedNetworkId: string): Validati
       }
       break;
 
+    case "device.heartbeat":
+      if (!hasString(payload, "device_id")) {
+        return { valid: false, reason: "device.heartbeat missing payload field: device_id" };
+      }
+      break;
+
     case "msg.send":
       for (const f of ["msg_id", "to_device_id"]) {
         if (!hasString(payload, f)) {
