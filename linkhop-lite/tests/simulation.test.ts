@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import { InMemoryRelay } from "../src/engine/relay.js";
 import { SimulatedDevice } from "../src/engine/simulated-device.js";
-import { getDevices, getInbox, getPending } from "../src/engine/state.js";
+import { getDevice, getDevices, getInbox, getPending } from "../src/engine/state.js";
 import { deviceTopicFromConfig } from "../src/protocol/topics.js";
 import type { DeviceConfig } from "../src/protocol/types.js";
 
@@ -229,5 +229,146 @@ describe("three-device simulation", () => {
     expect(getDevices(a.state)).toHaveLength(3);
     expect(getDevices(b.state)).toHaveLength(3);
     expect(getDevices(c.state)).toHaveLength(3);
+  });
+});
+
+describe("heartbeat simulation", () => {
+  it("heartbeat updates last_event_at on peers", () => {
+    const relay = new InMemoryRelay();
+    const phoneConfig = makeDevice("dev_phone", "Phone");
+    const desktopConfig = makeDevice("dev_desktop", "Desktop");
+
+    const phone = new SimulatedDevice(phoneConfig, relay);
+    const desktop = new SimulatedDevice(desktopConfig, relay);
+    phone.connect();
+    desktop.connect();
+    phone.announce();
+    desktop.announce();
+
+    const devBefore = getDevice(desktop.state, "dev_phone");
+    expect(devBefore).toBeDefined();
+    const tsBefore = devBefore!.last_event_at;
+
+    // Simulate heartbeat from phone
+    phone.heartbeat();
+
+    const devAfter = getDevice(desktop.state, "dev_phone");
+    expect(devAfter!.last_event_type).toBe("device.heartbeat");
+    // Heartbeat timestamp should be at least as new as the announce
+    expect(devAfter!.last_event_at >= tsBefore).toBe(true);
+  });
+
+  it("heartbeat does not revive a removed device", () => {
+    const relay = new InMemoryRelay();
+    const phoneConfig = makeDevice("dev_phone", "Phone");
+    const desktopConfig = makeDevice("dev_desktop", "Desktop");
+
+    const phone = new SimulatedDevice(phoneConfig, relay);
+    const desktop = new SimulatedDevice(desktopConfig, relay);
+    phone.connect();
+    desktop.connect();
+    phone.announce();
+    desktop.announce();
+    phone.leave();
+
+    expect(getDevice(desktop.state, "dev_phone")!.is_removed).toBe(true);
+
+    phone.heartbeat();
+
+    expect(getDevice(desktop.state, "dev_phone")!.is_removed).toBe(true);
+  });
+});
+
+describe("sync simulation", () => {
+  it("new device discovers peers via sync after retention expiry", () => {
+    vi.useFakeTimers();
+    try {
+      const relay = new InMemoryRelay({ retentionMs: 1_000 });
+      const phoneConfig = makeDevice("dev_phone", "Phone");
+      const desktopConfig = makeDevice("dev_desktop", "Desktop");
+      const tabletConfig = makeDevice("dev_tablet", "Tablet");
+
+      const phone = new SimulatedDevice(phoneConfig, relay);
+      const desktop = new SimulatedDevice(desktopConfig, relay);
+
+      phone.connect();
+      desktop.connect();
+      phone.announce();
+      desktop.announce();
+
+      // Both know each other
+      expect(getDevices(phone.state)).toHaveLength(2);
+      expect(getDevices(desktop.state)).toHaveLength(2);
+
+      // Retention expires
+      vi.advanceTimersByTime(2_000);
+
+      // Tablet joins — cannot see old announces
+      const tablet = new SimulatedDevice(tabletConfig, relay);
+      tablet.connect();
+      tablet.announce();
+
+      // Tablet only knows itself (old announces expired)
+      expect(getDevices(tablet.state)).toHaveLength(1);
+
+      // Desktop sees tablet via the new announce
+      expect(getDevices(desktop.state).find((d) => d.device_id === "dev_tablet")).toBeDefined();
+
+      // Tablet sends sync.request to desktop
+      const desktopTopic = deviceTopicFromConfig(desktopConfig);
+      tablet.syncRequest("dev_desktop", desktopTopic);
+
+      // After sync, tablet should know all three devices
+      expect(getDevices(tablet.state)).toHaveLength(3);
+      expect(getDevice(tablet.state, "dev_phone")).toBeDefined();
+      expect(getDevice(tablet.state, "dev_desktop")).toBeDefined();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("sync excludes removed devices", () => {
+    vi.useFakeTimers();
+    try {
+      const relay = new InMemoryRelay({ retentionMs: 1_000 });
+      const phoneConfig = makeDevice("dev_phone", "Phone");
+      const desktopConfig = makeDevice("dev_desktop", "Desktop");
+      const tabletConfig = makeDevice("dev_tablet", "Tablet");
+
+      const phone = new SimulatedDevice(phoneConfig, relay);
+      const desktop = new SimulatedDevice(desktopConfig, relay);
+      const tablet = new SimulatedDevice(tabletConfig, relay);
+
+      phone.connect();
+      desktop.connect();
+      tablet.connect();
+      phone.announce();
+      desktop.announce();
+      tablet.announce();
+
+      // Phone leaves
+      phone.leave();
+      expect(getDevice(desktop.state, "dev_phone")!.is_removed).toBe(true);
+
+      // Retention expires — new device won't see old events
+      vi.advanceTimersByTime(2_000);
+
+      // New device joins and syncs with desktop
+      const laptopConfig = makeDevice("dev_laptop", "Laptop");
+      const laptop = new SimulatedDevice(laptopConfig, relay);
+      laptop.connect();
+      laptop.announce();
+
+      const desktopTopic = deviceTopicFromConfig(desktopConfig);
+      laptop.syncRequest("dev_desktop", desktopTopic);
+
+      // Laptop should see desktop, tablet, and itself — but not removed phone
+      const laptopDevices = getDevices(laptop.state);
+      expect(laptopDevices.find((d) => d.device_id === "dev_phone")).toBeUndefined();
+      expect(laptopDevices.find((d) => d.device_id === "dev_desktop")).toBeDefined();
+      expect(laptopDevices.find((d) => d.device_id === "dev_tablet")).toBeDefined();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

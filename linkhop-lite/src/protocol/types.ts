@@ -3,8 +3,11 @@
 export type EventType =
   | "device.announce"
   | "device.leave"
+  | "device.heartbeat"
   | "msg.send"
-  | "msg.received";
+  | "msg.received"
+  | "sync.request"
+  | "sync.response";
 
 // --- Protocol Event Envelope ---
 
@@ -28,6 +31,10 @@ export interface DeviceAnnouncePayload {
 }
 
 export interface DeviceLeavePayload {
+  device_id: string;
+}
+
+export interface DeviceHeartbeatPayload {
   device_id: string;
 }
 
@@ -62,18 +69,33 @@ export interface MsgReceivedPayload {
   to_device_id: string;
 }
 
+export interface SyncRequestPayload {
+  to_device_id: string;
+}
+
+export interface SyncResponsePayload {
+  to_device_id: string;
+  devices: DeviceRecord[];
+}
+
 // --- Concrete event types ---
 
 export type DeviceAnnounceEvent = ProtocolEvent<"device.announce", DeviceAnnouncePayload>;
 export type DeviceLeaveEvent = ProtocolEvent<"device.leave", DeviceLeavePayload>;
+export type DeviceHeartbeatEvent = ProtocolEvent<"device.heartbeat", DeviceHeartbeatPayload>;
 export type MsgSendEvent = ProtocolEvent<"msg.send", MsgSendPayload>;
 export type MsgReceivedEvent = ProtocolEvent<"msg.received", MsgReceivedPayload>;
+export type SyncRequestEvent = ProtocolEvent<"sync.request", SyncRequestPayload>;
+export type SyncResponseEvent = ProtocolEvent<"sync.response", SyncResponsePayload>;
 
 export type AnyProtocolEvent =
   | DeviceAnnounceEvent
   | DeviceLeaveEvent
+  | DeviceHeartbeatEvent
   | MsgSendEvent
-  | MsgReceivedEvent;
+  | MsgReceivedEvent
+  | SyncRequestEvent
+  | SyncResponseEvent;
 
 // --- Local record shapes ---
 

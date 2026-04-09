@@ -48,6 +48,12 @@ export function validateEvent(raw: unknown, expectedNetworkId: string): Validati
       }
       break;
 
+    case "device.heartbeat":
+      if (!hasString(payload, "device_id")) {
+        return { valid: false, reason: "device.heartbeat missing payload field: device_id" };
+      }
+      break;
+
     case "msg.send":
       for (const f of ["msg_id", "to_device_id"]) {
         if (!hasString(payload, f)) {
@@ -67,6 +73,21 @@ export function validateEvent(raw: unknown, expectedNetworkId: string): Validati
         if (!hasString(payload, f)) {
           return { valid: false, reason: `msg.received missing payload field: ${f}` };
         }
+      }
+      break;
+
+    case "sync.request":
+      if (!hasString(payload, "to_device_id")) {
+        return { valid: false, reason: "sync.request missing payload field: to_device_id" };
+      }
+      break;
+
+    case "sync.response":
+      if (!hasString(payload, "to_device_id")) {
+        return { valid: false, reason: "sync.response missing payload field: to_device_id" };
+      }
+      if (!Array.isArray(payload.devices)) {
+        return { valid: false, reason: "sync.response missing payload field: devices" };
       }
       break;
 

@@ -35,7 +35,7 @@ export function mount(root: HTMLElement): void {
   }
 
   if (urlMsg || shareUrl || shareText) {
-    history.replaceState(null, "", "/");
+    history.replaceState(null, "", window.location.pathname);
   }
 
   app = new App({
@@ -242,7 +242,6 @@ function bindMainEvents(): void {
     sendMode = sendMode === "text" ? "url" : "text";
     const input = document.getElementById("send-text") as HTMLInputElement;
     const toggle = document.getElementById("send-mode-toggle")!;
-    input.value = "";
     if (sendMode === "url") {
       input.placeholder = "Paste a URL...";
       toggle.textContent = "URL";
@@ -414,12 +413,14 @@ function renderTabBar(): void {
 }
 
 function switchToInbox(deviceId: string): void {
-  currentTab = "inbox";
+  currentTab = "outbox";
   document.querySelectorAll(".tab-bar button[data-tab]").forEach((b) => b.classList.remove("active"));
-  document.querySelector(`.tab-bar button[data-tab="inbox"]`)?.classList.add("active");
+  document.querySelector(`.tab-bar button[data-tab="outbox"]`)?.classList.add("active");
   renderMainContent();
   const select = document.getElementById("send-target") as HTMLSelectElement | null;
   if (select) select.value = deviceId;
+  const input = document.getElementById("send-text") as HTMLInputElement | null;
+  if (input) input.focus();
 }
 
 function renderDevices(): string {
@@ -436,11 +437,12 @@ function renderDevices(): string {
       const badgeClass = isSelf ? "badge self" : d.is_removed ? "badge removed" : "badge";
       const badgeText = isSelf ? "you" : d.is_removed ? "left" : "active";
       const encryptionActive = app.encryptionEnabled && app.encryptionKey !== null && d.capabilities?.includes("encryption");
+      const lastSeen = isSelf ? "" : ` · ${timeAgo(d.last_event_at)}`;
       return `
         <div class="device-item${isClickable ? " device-item-clickable" : ""}${d.is_removed ? " device-item-removed" : ""}"${isClickable ? ` data-device-id="${esc(d.device_id)}"` : ""}>
           <div>
             <div class="name">${esc(d.device_name)}${encryptionActive ? ' <span class="capability-badge">encrypted</span>' : ""}</div>
-            <div class="meta">${esc(d.device_id)}</div>
+            <div class="meta">${esc(d.device_id)}${lastSeen}</div>
           </div>
           <span class="${badgeClass}">${badgeText}</span>
         </div>
@@ -774,6 +776,18 @@ function formatTime(iso: string): string {
     return date.toLocaleDateString();
   } catch {
     return iso;
+  }
+}
+
+function timeAgo(iso: string): string {
+  try {
+    const sec = Math.floor((Date.now() - new Date(iso).getTime()) / 1000);
+    if (sec < 60) return "seen now";
+    if (sec < 3600) return `seen ${Math.floor(sec / 60)}m ago`;
+    if (sec < 86400) return `seen ${Math.floor(sec / 3600)}h ago`;
+    return `seen ${Math.floor(sec / 86400)}d ago`;
+  } catch {
+    return "";
   }
 }
 

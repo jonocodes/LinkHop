@@ -2,6 +2,7 @@ import type {
   AnyProtocolEvent,
   DeviceAnnounceEvent,
   DeviceConfig,
+  DeviceHeartbeatEvent,
   DeviceLeaveEvent,
   DeviceRecord,
   EventLogEntry,
@@ -9,8 +10,10 @@ import type {
   MessageRecord,
   MsgReceivedEvent,
   MsgSendEvent,
+  SyncRequestEvent,
+  SyncResponseEvent,
 } from "../protocol/types.js";
-import { createMsgReceived } from "../protocol/events.js";
+import { createMsgReceived, createSyncResponse } from "../protocol/events.js";
 
 // An effect the engine wants the transport layer to perform
 export type Effect =
@@ -26,25 +29,34 @@ export function processEvent(
   event: AnyProtocolEvent,
   config: DeviceConfig,
 ): ReducerResult {
-  const entry: EventLogEntry = {
-    event_id: event.event_id,
-    type: event.type,
-    timestamp: event.timestamp,
-    from_device_id: event.from_device_id,
-    direction: "incoming",
-    raw_event: event,
-  };
-  state.eventLog.push(entry);
+  // Housekeeping events (heartbeat, sync) — don't log them
+  if (event.type !== "device.heartbeat" && event.type !== "sync.request" && event.type !== "sync.response") {
+    const entry: EventLogEntry = {
+      event_id: event.event_id,
+      type: event.type,
+      timestamp: event.timestamp,
+      from_device_id: event.from_device_id,
+      direction: "incoming",
+      raw_event: event,
+    };
+    state.eventLog.push(entry);
+  }
 
   switch (event.type) {
     case "device.announce":
       return handleDeviceAnnounce(state, event);
     case "device.leave":
       return handleDeviceLeave(state, event);
+    case "device.heartbeat":
+      return handleDeviceHeartbeat(state, event);
     case "msg.send":
       return handleMsgSend(state, event, config);
     case "msg.received":
       return handleMsgReceived(state, event, config);
+    case "sync.request":
+      return handleSyncRequest(state, event, config);
+    case "sync.response":
+      return handleSyncResponse(state, event, config);
   }
 }
 
@@ -84,6 +96,18 @@ function handleDeviceLeave(state: LocalState, event: DeviceLeaveEvent): ReducerR
   return { effects: [] };
 }
 
+function handleDeviceHeartbeat(state: LocalState, event: DeviceHeartbeatEvent): ReducerResult {
+  const { device_id } = event.payload;
+  const existing = state.devices.get(device_id);
+
+  if (existing && !existing.is_removed) {
+    existing.last_event_at = event.timestamp;
+    existing.last_event_type = event.type;
+  }
+
+  return { effects: [] };
+}
+
 function handleMsgSend(
   state: LocalState,
   event: MsgSendEvent,
@@ -98,6 +122,13 @@ function handleMsgSend(
 
   const existing = state.messages.get(msg_id);
   const isDuplicate = existing !== undefined;
+
+  // Determine if we need to send an ACK:
+  // - New message: always ACK
+  // - Genuine retry (higher attempt_id): re-ACK in case previous ACK was lost
+  // - Replayed duplicate (same attempt_id from SSE reconnect): skip ACK to avoid
+  //   burning through ntfy message limits
+  const shouldAck = !isDuplicate || (isDuplicate && attempt_id > existing.last_attempt_id);
 
   if (!isDuplicate) {
     // Store new message as received
@@ -115,9 +146,15 @@ function handleMsgSend(
     };
     state.messages.set(msg_id, record);
   } else {
-    // Update attempt tracking on duplicate
-    existing.last_attempt_id = attempt_id;
-    existing.last_attempt_at = event.timestamp;
+    // Update attempt tracking on genuine retry
+    if (attempt_id > existing.last_attempt_id) {
+      existing.last_attempt_id = attempt_id;
+      existing.last_attempt_at = event.timestamp;
+    }
+  }
+
+  if (!shouldAck) {
+    return { effects: [] };
   }
 
   // Look up sender device to find their topic for the ack
@@ -131,7 +168,6 @@ function handleMsgSend(
     };
   }
 
-  // Emit msg.received (even on duplicate, per spec)
   const ack = createMsgReceived(config, msg_id, event.from_device_id, senderDevice.device_topic);
 
   return {
@@ -159,6 +195,56 @@ function handleMsgReceived(
   if (existing.state === "pending") {
     existing.state = "received";
     existing.received_at = event.timestamp;
+  }
+
+  return { effects: [] };
+}
+
+function handleSyncRequest(
+  state: LocalState,
+  event: SyncRequestEvent,
+  config: DeviceConfig,
+): ReducerResult {
+  const { to_device_id } = event.payload;
+
+  if (to_device_id !== config.device_id) {
+    return { effects: [{ type: "log", message: `ignoring sync.request not for us` }] };
+  }
+
+  const requester = state.devices.get(event.from_device_id);
+  if (!requester) {
+    return { effects: [{ type: "log", message: `sync.request from unknown device ${event.from_device_id}` }] };
+  }
+
+  // Send our full device list (excluding removed devices)
+  const devices = [...state.devices.values()].filter((d) => !d.is_removed);
+  const resp = createSyncResponse(config, event.from_device_id, requester.device_topic, devices);
+
+  return {
+    effects: [{ type: "publish", topic: resp.topic, event: resp.event }],
+  };
+}
+
+function handleSyncResponse(
+  state: LocalState,
+  event: SyncResponseEvent,
+  config: DeviceConfig,
+): ReducerResult {
+  const { to_device_id, devices } = event.payload;
+
+  if (to_device_id !== config.device_id) {
+    return { effects: [{ type: "log", message: `ignoring sync.response not for us` }] };
+  }
+
+  // Merge received devices into our state — only add devices we don't
+  // already know about, or update if the peer has newer info
+  for (const d of devices) {
+    const existing = state.devices.get(d.device_id);
+    if (!existing) {
+      state.devices.set(d.device_id, { ...d });
+    } else if (d.last_event_at > existing.last_event_at) {
+      state.devices.set(d.device_id, { ...d });
+    }
   }
 
   return { effects: [] };

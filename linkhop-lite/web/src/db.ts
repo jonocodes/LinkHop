@@ -139,6 +139,17 @@ export async function saveState(state: LocalState): Promise<void> {
   });
 }
 
+export async function loadSeenEventIds(): Promise<Set<string>> {
+  const db = await openDB();
+  const entries: EventLogEntry[] = await new Promise((resolve, reject) => {
+    const t = tx(db, "eventLog", "readonly");
+    const req = t.objectStore("eventLog").getAll();
+    req.onsuccess = () => resolve(req.result as EventLogEntry[]);
+    req.onerror = () => reject(req.error);
+  });
+  return new Set(entries.map((e) => e.event_id));
+}
+
 export async function appendEvents(entries: EventLogEntry[]): Promise<void> {
   if (entries.length === 0) return;
   const db = await openDB();
