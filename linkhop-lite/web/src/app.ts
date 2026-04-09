@@ -12,8 +12,7 @@ import { loadConfig, saveConfig, loadState, saveState, clearAll, loadSeenEventId
 import { subscribeSSE, publishHTTP } from "./sse.js";
 import { requestPermission, showMessageNotification, subscribeWebPush, unsubscribeWebPush } from "./notifications.js";
 
-const HEARTBEAT_INTERVAL_MS = 10 * 60 * 1000; // 10 minutes
-const STALE_THRESHOLD_MS = 30 * 60 * 1000; // 30 minutes without heartbeat → stale
+const HEARTBEAT_INTERVAL_MS = 60 * 60 * 1000; // 1 hour
 
 export type AppScreen = "setup" | "main";
 export type ConnectionStatus = "disconnected" | "connecting" | "connected";
@@ -225,10 +224,7 @@ export class App {
 
   private startHeartbeat(): void {
     this.stopHeartbeat();
-    this.heartbeatTimer = setInterval(() => {
-      this.sendHeartbeat();
-      this.markStaleDevices();
-    }, HEARTBEAT_INTERVAL_MS);
+    this.heartbeatTimer = setInterval(() => this.sendHeartbeat(), HEARTBEAT_INTERVAL_MS);
   }
 
   private stopHeartbeat(): void {
@@ -239,25 +235,6 @@ export class App {
     if (!this.config) return;
     const effect = actionHeartbeat(this.config);
     await this.executeEffect(effect);
-  }
-
-  private markStaleDevices(): void {
-    if (!this.config) return;
-    const now = Date.now();
-    let changed = false;
-    for (const device of this.state.devices.values()) {
-      if (device.device_id === this.config.device_id) continue;
-      if (device.is_removed) continue;
-      const age = now - new Date(device.last_event_at).getTime();
-      if (age > STALE_THRESHOLD_MS) {
-        device.is_removed = true;
-        changed = true;
-      }
-    }
-    if (changed) {
-      saveState(this.state);
-      this.callbacks.onStateChange();
-    }
   }
 
   async leave(): Promise<void> {
