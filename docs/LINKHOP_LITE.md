@@ -554,6 +554,43 @@ Cloudflare Workers is the most appealing: zero cold start, global edge deploymen
 
 Both options share the same client-side architecture: IndexedDB for storage, password-derived encryption, client-side device management. The difference is only in the push delivery layer.
 
+### What about InstantDB (free tier)?
+
+InstantDB can work, but it shifts the architecture:
+
+- You move from a relay-style transport (topic pub/sub + push) to a hosted realtime database model.
+- Device registry becomes a first-class DB table/doc instead of an append-only topic log.
+- Catch-up semantics become easier (persistent history), but "ephemeral by default" behavior is no longer automatic.
+- You still need a push strategy for true background delivery when tabs are closed (DB realtime alone does not replace browser push on all platforms).
+- This is not a weakness specific to InstantDB: any realtime DB transport has the same browser background-delivery constraint.
+
+In practice:
+
+- **Use InstantDB-only** if you want richer sync/query semantics and are okay making the backend a stronger part of the product shape.
+- Pair InstantDB with a push provider (Web Push relay, FCM/APNs bridge, etc.) and background delivery can be as strong as the ntfy path.
+- **Keep ntfy-only** if you want the smallest system and minimal backend ownership.
+- **Support both** if you introduce a strict transport adapter boundary and keep protocol/state logic transport-agnostic.
+
+### Supporting both backends safely
+
+If dual-backend support is desired, treat it as a transport plug-in problem rather than a feature toggle sprinkled across UI code.
+
+Recommended contract:
+
+1. `publish(event)` — send one protocol event.
+2. `subscribe(topics, { since })` — stream protocol events with reconnect/catch-up.
+3. `enableBackgroundDelivery(device)` — best-effort push/subscription wiring.
+4. `health()` — endpoint/quota/latency checks for UX diagnostics.
+
+Implementation notes:
+
+- Keep event schema identical regardless of transport.
+- Normalize delivery semantics to **at-least-once** and rely on deterministic dedupe in reducer/state machine.
+- Add per-transport capability flags (`supports_push`, `supports_history_window`, `max_payload_bytes`) so UI can adapt without branching on provider name.
+- Persist selected backend per network/profile so advanced users can self-host ntfy while others use managed infra.
+
+This keeps protocol and UX stable while allowing transport evolution over time.
+
 ---
 
 ## Open Questions / Decisions
