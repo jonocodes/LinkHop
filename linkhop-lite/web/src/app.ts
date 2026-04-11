@@ -8,7 +8,7 @@ import { createEmptyState } from "../../src/engine/state.js";
 import { processEvent } from "../../src/engine/reducer.js";
 import { actionAnnounce, actionHeartbeat, actionLeave, actionSend, actionMarkViewed, actionSyncRequest } from "../../src/engine/actions.js";
 import type { Effect } from "../../src/engine/reducer.js";
-import { loadConfig, saveConfig, loadState, saveState, clearAll, loadSeenEventIds, appendEvents, type BrowserConfig } from "./db.js";
+import { loadConfig, saveConfig, loadState, saveState, clearAll, loadSeenEventIds, appendEvents, type BrowserConfig, type TransportKind } from "./db.js";
 import { subscribeSSE, publishHTTP } from "./sse.js";
 import { requestPermission, showMessageNotification, subscribeWebPush, unsubscribeWebPush } from "./notifications.js";
 
@@ -30,7 +30,8 @@ export class App {
   state: LocalState = createEmptyState();
   screen: AppScreen = "setup";
   connection: ConnectionStatus = "disconnected";
-  ntfyUrl = "https://ntfy.sh";
+  transportUrl = "https://ntfy.sh";
+  transportKind: TransportKind = "ntfy";
   encryptionEnabled = false;
   encryptionKey: CryptoKey | null = null;
   selfSendEnabled = false;
@@ -52,7 +53,8 @@ export class App {
     if (saved) {
       this.config = saved.device;
       this.pool = saved.pool ?? null;
-      this.ntfyUrl = saved.ntfy_url;
+      this.transportKind = saved.transport_kind;
+      this.transportUrl = saved.transport_url;
       this.encryptionEnabled = saved.encryption_enabled ?? false;
       this.selfSendEnabled = saved.self_send_enabled ?? false;
       if (saved.pool && saved.password) {
@@ -68,10 +70,11 @@ export class App {
     }
   }
 
-  async setup(name: string, pool: string, password: string, ntfyUrl: string): Promise<void> {
+  async setup(name: string, pool: string, password: string, transportUrl: string, transportKind: TransportKind = "ntfy"): Promise<void> {
     const networkId = await deriveNetworkId(pool, password);
     this.pool = pool;
-    this.ntfyUrl = ntfyUrl;
+    this.transportUrl = transportUrl;
+    this.transportKind = transportKind;
     this.encryptionKey = await deriveEncryptionKey(pool, password);
     this.encryptionEnabled = false;
 
@@ -84,7 +87,9 @@ export class App {
 
     await saveConfig({
       device: this.config,
-      ntfy_url: this.ntfyUrl,
+      transport_kind: this.transportKind,
+      transport_url: this.transportUrl,
+      ntfy_url: this.transportUrl,
       pool,
       password,
       encryption_enabled: false,
@@ -138,8 +143,8 @@ export class App {
     const onEvent = (event: AnyProtocolEvent) => this.handleEvent(event);
 
     this.cleanupSSE.push(
-      subscribeSSE(this.ntfyUrl, regTopic, { onEvent, onOpen, onError }),
-      subscribeSSE(this.ntfyUrl, devTopic, { onEvent, onOpen, onError }),
+      subscribeSSE(this.transportUrl, regTopic, { onEvent, onOpen, onError }),
+      subscribeSSE(this.transportUrl, devTopic, { onEvent, onOpen, onError }),
     );
   }
 
@@ -173,10 +178,13 @@ export class App {
     this.callbacks.onStateChange();
   }
 
-  async updateServer(url: string): Promise<void> {
-    this.ntfyUrl = url;
+  async updateServer(url: string, kind?: TransportKind): Promise<void> {
+    this.transportUrl = url;
+    if (kind) this.transportKind = kind;
     const saved = await loadConfig();
     if (saved) {
+      if (kind) saved.transport_kind = kind;
+      saved.transport_url = url;
       saved.ntfy_url = url;
       await saveConfig(saved);
     }
@@ -365,30 +373,30 @@ export class App {
   }
 
   private async subscribeWebPush(): Promise<void> {
-    if (!this.config) return;
+    if (!this.config || this.transportKind !== "ntfy") return;
     const regTopic = registryTopicFromConfig(this.config);
     const devTopic = deviceTopicFromConfig(this.config);
     // Best effort — silently fails if ntfy doesn't have web push configured
     await Promise.all([
-      subscribeWebPush(this.ntfyUrl, regTopic),
-      subscribeWebPush(this.ntfyUrl, devTopic),
+      subscribeWebPush(this.transportUrl, regTopic),
+      subscribeWebPush(this.transportUrl, devTopic),
     ]);
   }
 
   private async unsubscribeWebPush(): Promise<void> {
-    if (!this.config) return;
+    if (!this.config || this.transportKind !== "ntfy") return;
     const regTopic = registryTopicFromConfig(this.config);
     const devTopic = deviceTopicFromConfig(this.config);
     await Promise.all([
-      unsubscribeWebPush(this.ntfyUrl, regTopic),
-      unsubscribeWebPush(this.ntfyUrl, devTopic),
+      unsubscribeWebPush(this.transportUrl, regTopic),
+      unsubscribeWebPush(this.transportUrl, devTopic),
     ]);
   }
 
   private async executeEffect(effect: Effect): Promise<void> {
     if (effect.type === "publish") {
       try {
-        await publishHTTP(this.ntfyUrl, effect.topic, effect.event);
+        await publishHTTP(this.transportUrl, effect.topic, effect.event);
       } catch (err) {
         this.callbacks.onError(`Publish failed: ${err}`);
       }
