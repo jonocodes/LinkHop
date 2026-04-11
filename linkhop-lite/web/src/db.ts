@@ -47,9 +47,13 @@ function tx(
 
 // --- Config ---
 
+export type TransportKind = "ntfy" | "relay";
+
 export interface BrowserConfig {
   device: DeviceConfig;
-  ntfy_url: string;
+  transport_kind: TransportKind;
+  transport_url: string;
+  ntfy_url?: string; // legacy compatibility
   pool?: string;
   password?: string;
   encryption_enabled?: boolean;
@@ -66,6 +70,21 @@ export async function saveConfig(config: BrowserConfig): Promise<void> {
   });
 }
 
+function normalizeConfig(raw: Partial<BrowserConfig> & { device: DeviceConfig }): BrowserConfig {
+  const kind = raw.transport_kind ?? "ntfy";
+  const url = raw.transport_url ?? raw.ntfy_url ?? "https://ntfy.sh";
+  return {
+    device: raw.device,
+    transport_kind: kind,
+    transport_url: url,
+    ntfy_url: raw.ntfy_url,
+    pool: raw.pool,
+    password: raw.password,
+    encryption_enabled: raw.encryption_enabled,
+    self_send_enabled: raw.self_send_enabled,
+  };
+}
+
 export async function loadConfig(): Promise<BrowserConfig | null> {
   const db = await openDB();
   return new Promise((resolve, reject) => {
@@ -78,14 +97,14 @@ export async function loadConfig(): Promise<BrowserConfig | null> {
         const legacyReq = tx(db, "config", "readonly").objectStore("config").get("device");
         legacyReq.onsuccess = () => {
           if (legacyReq.result) {
-            resolve({ device: legacyReq.result as DeviceConfig, ntfy_url: "https://ntfy.sh" });
+            resolve(normalizeConfig({ device: legacyReq.result as DeviceConfig, ntfy_url: "https://ntfy.sh" }));
           } else {
             resolve(null);
           }
         };
         legacyReq.onerror = () => reject(legacyReq.error);
       } else {
-        resolve(result as BrowserConfig);
+        resolve(normalizeConfig(result as BrowserConfig));
       }
     };
     req.onerror = () => reject(req.error);

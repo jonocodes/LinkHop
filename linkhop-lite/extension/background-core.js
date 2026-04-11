@@ -64,7 +64,7 @@ const BackgroundCore = {
       device_name: browserConfig.device.device_name,
       network_id: browserConfig.device.network_id,
       env: browserConfig.device.env,
-      ntfy_url: browserConfig.ntfy_url,
+      ntfy_url: browserConfig.transport_url || browserConfig.ntfy_url,
     };
   },
 };

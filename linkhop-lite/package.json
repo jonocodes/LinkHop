@@ -18,7 +18,9 @@
     "build:web": "vite build",
     "preview": "vite preview",
     "test:e2e": "bash scripts/download-ntfy.sh && bunx playwright test",
-    "test:extension": "bash scripts/download-ntfy.sh && xvfb-run bunx playwright test --config playwright-extension.config.ts"
+    "test:extension": "bash scripts/download-ntfy.sh && xvfb-run bunx playwright test --config playwright-extension.config.ts",
+    "test:relay:local": "bun test tests/relay-memory.test.ts tests/supabase-schema.test.ts",
+    "test:relay:supabase": "SUPABASE_INTEGRATION=1 bun test tests/supabase-schema.test.ts"
   },
   "keywords": [],
   "author": "",

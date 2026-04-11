@@ -178,7 +178,9 @@ function bindSetupEvents(): void {
     const pool = (document.getElementById("setup-pool") as HTMLInputElement).value.trim();
     const password = (document.getElementById("setup-password") as HTMLInputElement).value;
     const serverInput = document.getElementById("setup-settings-server") as HTMLInputElement | null;
-    const ntfyUrl = serverInput?.value.trim() || "https://ntfy.sh";
+    const serverUrl = serverInput?.value.trim() || "https://ntfy.sh";
+    const transportSelect = document.getElementById("setup-settings-transport") as HTMLSelectElement | null;
+    const transportKind = (transportSelect?.value === "relay" ? "relay" : "ntfy") as "ntfy" | "relay";
 
     if (!name || !pool || !password) {
       showError("Name, pool, and password are required");
@@ -190,7 +192,7 @@ function bindSetupEvents(): void {
     btn.textContent = "Joining...";
 
     try {
-      await app.setup(name, pool, password, ntfyUrl);
+      await app.setup(name, pool, password, serverUrl, transportKind);
     } catch (err) {
       showError(`Setup failed: ${err}`);
       btn.disabled = false;
@@ -208,16 +210,26 @@ function bindSetupEvents(): void {
     }
 
     const existingUrl = (document.getElementById("setup-settings-server") as HTMLInputElement | null)?.value || "https://ntfy.sh";
+    const existingTransport = (document.getElementById("setup-settings-transport") as HTMLSelectElement | null)?.value || "ntfy";
     const panel = document.createElement("div");
     panel.id = "setup-settings-panel";
     panel.className = "settings-panel";
     panel.innerHTML = `
       <div class="settings-section">
+        <div class="settings-label">Transport</div>
+        <div class="settings-row">
+          <select id="setup-settings-transport">
+            <option value="ntfy" ${existingTransport === 'ntfy' ? 'selected' : ''}>ntfy</option>
+            <option value="relay" ${existingTransport === 'relay' ? 'selected' : ''}>relay (Supabase/API)</option>
+          </select>
+        </div>
+      </div>
+      <div class="settings-section">
         <div class="settings-label">Server</div>
         <div class="settings-row">
           <input id="setup-settings-server" type="url" value="${existingUrl}" />
         </div>
-        <div class="settings-hint">Change the ntfy server URL used for messaging</div>
+        <div class="settings-hint">Use ntfy directly or an ntfy-compatible relay endpoint</div>
       </div>
     `;
     setupForm.appendChild(panel);
@@ -621,7 +633,7 @@ function renderSettings(): string {
 
     <div class="settings-section">
       <div class="settings-label">Server</div>
-      <div class="settings-hint">${esc(app.ntfyUrl)}</div>
+      <div class="settings-hint">${esc(app.transportUrl)}</div>
     </div>
 
     <div class="settings-section">
@@ -715,7 +727,8 @@ function renderDebug(): string {
       <div class="debug-title">Status</div>
       <pre class="debug-pre">${esc(JSON.stringify({
         connection: app.connection,
-        ntfy_url: app.ntfyUrl,
+        transport_kind: app.transportKind,
+        transport_url: app.transportUrl,
         encryption_enabled: app.encryptionEnabled,
         has_encryption_key: app.encryptionKey !== null,
       }, null, 2))}</pre>
@@ -726,7 +739,7 @@ function renderDebug(): string {
   if (app.config) {
     const regTopic = registryTopicFromConfig(app.config);
     const devTopic = deviceTopicFromConfig(app.config);
-    const base = app.ntfyUrl;
+    const base = app.transportUrl;
     sections.push(`
       <div class="debug-section">
         <div class="debug-title">Topics</div>

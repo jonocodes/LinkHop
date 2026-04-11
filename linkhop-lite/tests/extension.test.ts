@@ -178,6 +178,17 @@ describe("extractConfig", () => {
     expect(extractConfig(undefined)).toBeNull();
   });
 
+
+  it("prefers transport_url when present (relay mode compatibility)", () => {
+    const result = extractConfig({
+      device: testBrowserConfig.device,
+      transport_kind: "relay",
+      transport_url: "https://relay.local",
+      ntfy_url: "https://ntfy.sh",
+    });
+    expect(result?.ntfy_url).toBe("https://relay.local");
+  });
+
   it("strips extra fields (pool, password, encryption)", () => {
     const result = extractConfig(testBrowserConfig);
     expect(result).not.toHaveProperty("pool");
