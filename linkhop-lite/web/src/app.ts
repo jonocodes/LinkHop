@@ -13,6 +13,8 @@ import { subscribeSSE, publishHTTP } from "./sse.js";
 import { requestPermission, showMessageNotification, subscribeWebPush, unsubscribeWebPush } from "./notifications.js";
 
 const HEARTBEAT_INTERVAL_MS = 60 * 60 * 1000; // 1 hour
+const BG_HEARTBEAT_TAG = "linkhop-heartbeat";
+const BG_HEARTBEAT_MIN_INTERVAL_MS = 3 * 60 * 60 * 1000; // 3 hours
 
 export type AppScreen = "setup" | "main";
 export type ConnectionStatus = "disconnected" | "connecting" | "connected";
@@ -129,6 +131,7 @@ export class App {
         }
         this.wasConnected = true;
         this.startHeartbeat();
+        void this.registerBackgroundHeartbeat();
       }
     };
 
@@ -245,8 +248,48 @@ export class App {
     await this.executeEffect(effect);
   }
 
+  private async registerBackgroundHeartbeat(): Promise<void> {
+    if (!("serviceWorker" in navigator)) return;
+    try {
+      const registration = await navigator.serviceWorker.ready;
+      const periodicSync = (
+        registration as ServiceWorkerRegistration & {
+          periodicSync?: {
+            register: (tag: string, options: { minInterval: number }) => Promise<void>;
+            getTags?: () => Promise<string[]>;
+          };
+        }
+      ).periodicSync;
+      if (!periodicSync?.register) return;
+
+      const tags = periodicSync.getTags ? await periodicSync.getTags() : [];
+      if (tags.includes(BG_HEARTBEAT_TAG)) return;
+      await periodicSync.register(BG_HEARTBEAT_TAG, { minInterval: BG_HEARTBEAT_MIN_INTERVAL_MS });
+    } catch {
+      // Best effort only. Browsers may reject due to support, policy, or power constraints.
+    }
+  }
+
+  private async unregisterBackgroundHeartbeat(): Promise<void> {
+    if (!("serviceWorker" in navigator)) return;
+    try {
+      const registration = await navigator.serviceWorker.ready;
+      const periodicSync = (
+        registration as ServiceWorkerRegistration & {
+          periodicSync?: { unregister?: (tag: string) => Promise<void> };
+        }
+      ).periodicSync;
+      if (periodicSync?.unregister) {
+        await periodicSync.unregister(BG_HEARTBEAT_TAG);
+      }
+    } catch {
+      // Best effort only.
+    }
+  }
+
   async leave(): Promise<void> {
     if (!this.config) return;
+    await this.unregisterBackgroundHeartbeat();
     const effect = actionLeave(this.config);
     await this.executeEffect(effect);
     await this.unsubscribeWebPush();
@@ -254,6 +297,7 @@ export class App {
 
   async reset(): Promise<void> {
     this.disconnect();
+    await this.unregisterBackgroundHeartbeat();
     await clearAll();
     this.config = null;
     this.state = createEmptyState();

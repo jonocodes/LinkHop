@@ -1,7 +1,47 @@
 /// <reference lib="webworker" />
 import { precacheAndRoute } from "workbox-precaching";
+import { createDeviceHeartbeat } from "../../src/protocol/events.js";
+import { registryTopicFromConfig } from "../../src/protocol/topics.js";
+import type { DeviceConfig } from "../../src/protocol/types.js";
 
 declare const self: ServiceWorkerGlobalScope;
+const BG_HEARTBEAT_TAG = "linkhop-heartbeat";
+
+interface BrowserConfigLike {
+  device: DeviceConfig;
+  transport_kind?: "ntfy" | "relay";
+  transport_url?: string;
+  ntfy_url?: string;
+}
+
+async function loadBrowserConfigFromIDB(): Promise<BrowserConfigLike | null> {
+  return new Promise((resolve) => {
+    const req = indexedDB.open("linkhop-lite", 1);
+    req.onerror = () => resolve(null);
+    req.onsuccess = () => {
+      const db = req.result;
+      const tx = db.transaction("config", "readonly");
+      const store = tx.objectStore("config");
+      const browserReq = store.get("browser");
+      browserReq.onsuccess = () => {
+        resolve((browserReq.result as BrowserConfigLike | undefined) ?? null);
+      };
+      browserReq.onerror = () => resolve(null);
+    };
+  });
+}
+
+async function publishBackgroundHeartbeat(): Promise<void> {
+  const cfg = await loadBrowserConfigFromIDB();
+  if (!cfg?.device) return;
+  const baseUrl = cfg.transport_url ?? cfg.ntfy_url ?? "https://ntfy.sh";
+  const topic = registryTopicFromConfig(cfg.device);
+  const event = createDeviceHeartbeat(cfg.device);
+  await fetch(`${baseUrl}/${topic}`, {
+    method: "POST",
+    body: JSON.stringify(event),
+  });
+}
 
 // Derive base path from the service worker's own location.
 // If SW is at /LinkHop/sw.js, base will be /LinkHop/
@@ -31,6 +71,19 @@ precacheAndRoute(self.__WB_MANIFEST);
 self.addEventListener("install", () => self.skipWaiting());
 self.addEventListener("activate", (event) => {
   event.waitUntil(self.clients.claim());
+});
+
+self.addEventListener("periodicsync", (event: Event) => {
+  const periodicEvent = event as Event & {
+    tag?: string;
+    waitUntil: (promise: Promise<unknown>) => void;
+  };
+  if (periodicEvent.tag !== BG_HEARTBEAT_TAG) return;
+  periodicEvent.waitUntil(
+    publishBackgroundHeartbeat().catch(() => {
+      // Best effort only.
+    }),
+  );
 });
 
 // Handle push events (from ntfy web push or future integrations)
