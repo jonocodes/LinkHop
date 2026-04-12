@@ -2,6 +2,215 @@
 
 Device-to-device messaging protocol built on ntfy relay. Browser-first, no backend.
 
+## Requirements
+
+```bash
+# Install runtimes via flox
+flox activate
+
+# Then in any new shell, just activate:
+eval $(flox activate)
+```
+
+This installs: `deno`, `bun` (see `.flox/` for details).
+
+## Relay backends
+
+LinkHop can use several relay backends. Choose based on your deployment needs:
+
+| Backend | Deploy | Persistence | Realtime | Notes |
+|--------|--------|-------------|---------|-------|
+| [ntfy.sh](#ntfyntfysh) | None | ✓ (30 days) | ✓ | Free, hosted |
+| [Self-hosted ntfy](#self-hosted-ntfy) | Docker | Configurable | ✓ | Full control |
+| [Local Deno](#local-deno-service) | `deno run` | memory | ✓ | Fast dev |
+| [Supabase](#supabase-edge-function) | `supabase fn deploy` | D1 | ✓ | 72h retention |
+| [Cloudflare](#cloudflare-worker) | `wrangler deploy` | D1 | ✓ | Free tier |
+
+### ntfy.ntfy.sh
+
+Use the hosted service (no setup required):
+
+```bash
+# CLI
+NTFY_URL=https://ntfy.sh bun src/cli/index.ts init --name "Device" --password "secret"
+
+# Browser app
+# Enter https://ntfy.sh in the ntfy URL field on setup
+```
+
+- Free, no account needed
+- 30-day message retention
+- Web push notifications supported
+
+### Self-hosted ntfy
+
+Run your own ntfy instance:
+
+```bash
+# Docker
+docker run -p 8080:8080 -v /data/bin/ntfy:/var/cache/ntfy \
+  -e NTFY_VOLUME_PATH=/var/cache/ntfy \
+  binw/ntfy serve --storage-filebacked --listen-http=:8080
+```
+
+```bash
+# CLI
+NTFY_URL=http://localhost:8080 bun src/cli/index.ts init --name "Device" --password "secret"
+
+# Browser app
+# Enter http://localhost:8080 in the ntfy URL field on setup
+```
+
+### Local Deno service
+
+Run locally with Deno. Requires Deno and bun from flox:
+
+```bash
+eval $(flox activate)
+
+# Default: in-memory (fast, testing only)
+cd supabase/functions/relay
+RELAY_STORE=memory deno run --allow-all --unstable-sloppy-imports index.ts
+```
+
+- Data lost on restart
+- Use `eval $(flox activate)` before running commands
+- Use `--allow-all` for network/file access
+
+#### SQLite (local file)
+
+```bash
+# SQLite requires Deno 2.5+ with --unstable-sqlite
+# For now, use docker or local sqlite3 CLI instead
+RELAY_STORE=sqlite SQLITE_PATH=./linkhop.db deno run --allow-all --unstable-sloppy-imports index.ts
+```
+
+Note: SQLite built-in requires Deno 2.5+. Use docker or `sqlite3` CLI for now.
+
+#### PostgreSQL (via pg protocol)
+
+```bash
+RELAY_STORE=postgres POSTGRES_URL=postgres://user:pass@localhost:5432/linkhop deno run --allow-all --unstable-sloppy-imports index.ts
+```
+
+- Requires PostgreSQL 14+ with schema (see below)
+- Full persistence and durability
+- Note: requires `pg` driver import (see store code)
+
+```sql
+-- PostgreSQL schema (run once)
+CREATE TABLE linkhop_events (
+  id SERIAL PRIMARY KEY,
+  network_id TEXT NOT NULL,
+  event_id TEXT NOT NULL,
+  topic TEXT NOT NULL,
+  from_device_id TEXT NOT NULL,
+  event_type TEXT NOT NULL,
+  event_ts TEXT NOT NULL,
+  envelope TEXT NOT NULL,
+  created_at TIMESTAMPTZ DEFAULT now(),
+  UNIQUE(network_id, event_id)
+);
+CREATE TABLE linkhop_devices (
+  id SERIAL PRIMARY KEY,
+  network_id TEXT NOT NULL,
+  device_id TEXT NOT NULL,
+  device_topic TEXT NOT NULL,
+  device_name TEXT NOT NULL,
+  device_kind TEXT,
+  capabilities TEXT DEFAULT '[]',
+  last_event_type TEXT NOT NULL,
+  last_event_at TEXT NOT NULL,
+  is_removed BOOLEAN DEFAULT false,
+  UNIQUE(network_id, device_id)
+);
+CREATE TABLE linkhop_webpush_subscriptions (
+  id SERIAL PRIMARY KEY,
+  topic TEXT NOT NULL,
+  endpoint TEXT NOT NULL,
+  subscription TEXT NOT NULL,
+  updated_at TIMESTAMPTZ DEFAULT now(),
+  UNIQUE(topic, endpoint)
+);
+CREATE TABLE linkhop_webpush_delivery_queue (
+  id SERIAL PRIMARY KEY,
+  topic TEXT NOT NULL,
+  endpoint TEXT NOT NULL,
+  payload TEXT NOT NULL,
+  status TEXT DEFAULT 'queued',
+  created_at TIMESTAMPTZ DEFAULT now(),
+  delivered_at TIMESTAMPTZ,
+  error TEXT
+);
+```
+
+```bash
+# CLI with local relay
+RELAY_STORE=memory bun src/cli/index.ts init --name "Device" --password "secret"
+
+# Browser app
+# Enter http://localhost:8080 in the ntfy URL field on setup
+```
+
+### Supabase Edge Function
+
+Deploy to Supabase with D1 database:
+
+```bash
+cd supabase/functions/relay
+supabase functions deploy relay --no-verify-jwt
+
+# Create D1 database
+supabase db linkhop linkhop-relay
+
+# Run migration
+supabase db push
+```
+
+```bash
+# Get your project ref
+supabase projects list
+
+# Set environment
+export SUPABASE_URL="https://your-project.supabase.co"
+export SUPABASE_SERVICE_ROLE_KEY="your-anon-key"
+
+# CLI
+SUPABASE_URL=$SUPABASE_URL SUPABASE_SERVICE_ROLE_KEY=$SUPABASE_SERVICE_ROLE_KEY RELAY_STORE=supabase \
+  bun src/cli/index.ts init --name "Device" --password "secret"
+
+# Browser app
+# Enter your Supabase URL in the relay endpoint field
+# Set RELAY_STORE=supabase in your edge function
+```
+
+Schema created automatically via `supabase db push`.
+
+### Cloudflare Worker
+
+Deploy to Cloudflare Workers with D1:
+
+```bash
+cd workers/relay
+
+# Create D1 database
+wrangler d1 create linkhop-relay-prod
+
+# Apply schema
+wrangler d1 execute linkhop-relay-prod --file=migrations/001_initial_schema.sql
+
+# Deploy worker
+wrangler deploy
+```
+
+```bash
+# CLI (requires relay-aware transport)
+# Set NTFY_URL to your worker URL
+# Configure transport_kind=relay in browser app
+```
+
+See [`workers/relay/wrangler.toml`](workers/relay/wrangler.toml) for bindings.
+
 ## Quick start
 
 ```bash
@@ -26,7 +235,10 @@ web/
     app.ts     # App controller wiring engine + SSE + IndexedDB + encryption
     db.ts      # IndexedDB persistence
     sse.ts     # SSE transport for ntfy
-    ui.ts      # Vanilla TS UI (devices, inbox, pending, debug tabs)
+    # React + TanStack Router UI
+    start.tsx       # Router entry point
+    app-react.tsx   # Main app component
+    setup-react.tsx  # Setup/join component
 tests/         # Vitest test suites
 e2e/           # Playwright browser e2e tests
 fixtures/      # Replay fixture JSON files

@@ -2,6 +2,7 @@ import { App, type AppScreen, type ConnectionStatus } from "./app.js";
 import { getDevices, getInbox, getPending, getSent, getUnreadCount } from "../../src/engine/state.js";
 import { registryTopicFromConfig, deviceTopicFromConfig } from "../../src/protocol/topics.js";
 import type { MessageBody } from "../../src/protocol/types.js";
+import type { TransportKind } from "./db.js";
 
 declare const __BUILD_TIME__: string;
 
@@ -180,7 +181,7 @@ function bindSetupEvents(): void {
     const serverInput = document.getElementById("setup-settings-server") as HTMLInputElement | null;
     const serverUrl = serverInput?.value.trim() || "https://ntfy.sh";
     const transportSelect = document.getElementById("setup-settings-transport") as HTMLSelectElement | null;
-    const transportKind = (transportSelect?.value === "relay" ? "relay" : "ntfy") as "ntfy" | "relay";
+    const transportKind = (transportSelect?.value as TransportKind) || "ntfy";
 
     if (!name || !pool || !password) {
       showError("Name, pool, and password are required");
@@ -211,25 +212,33 @@ function bindSetupEvents(): void {
 
     const existingUrl = (document.getElementById("setup-settings-server") as HTMLInputElement | null)?.value || "https://ntfy.sh";
     const existingTransport = (document.getElementById("setup-settings-transport") as HTMLSelectElement | null)?.value || "ntfy";
+    const transports = [
+      { kind: "ntfy", label: "ntfy.sh (free)", url: "https://ntfy.sh" },
+      { kind: "ntfy", label: "ntfy (self-hosted)", url: "https://ntfy.example.com" },
+      { kind: "relay", label: "Local Deno relay", url: "http://localhost:8000" },
+      { kind: "supabase", label: "Supabase Edge Function", url: "https://your-project.supabase.co" },
+      { kind: "cloudflare", label: "Cloudflare Worker", url: "https://your-worker.workers.dev" },
+    ];
     const panel = document.createElement("div");
     panel.id = "setup-settings-panel";
     panel.className = "settings-panel";
     panel.innerHTML = `
       <div class="settings-section">
-        <div class="settings-label">Transport</div>
+        <div class="settings-label">Backend</div>
         <div class="settings-row">
           <select id="setup-settings-transport">
-            <option value="ntfy" ${existingTransport === 'ntfy' ? 'selected' : ''}>ntfy</option>
-            <option value="relay" ${existingTransport === 'relay' ? 'selected' : ''}>relay (Supabase/API)</option>
+            ${transports.map(t => 
+              `<option value="${t.kind}" ${existingTransport === t.kind ? 'selected' : ''}>${t.label}</option>`
+            ).join("")}
           </select>
         </div>
       </div>
       <div class="settings-section">
-        <div class="settings-label">Server</div>
+        <div class="settings-label">Server URL</div>
         <div class="settings-row">
-          <input id="setup-settings-server" type="url" value="${existingUrl}" />
+          <input id="setup-settings-server" type="url" value="${existingUrl}" placeholder="https://ntfy.sh" />
         </div>
-        <div class="settings-hint">Use ntfy directly or an ntfy-compatible relay endpoint</div>
+        <div class="settings-hint">Enter the base URL for your backend</div>
       </div>
     `;
     setupForm.appendChild(panel);

@@ -1,0 +1,35 @@
+name = "linkhop-relay"
+main = "index.ts"
+compatibility_date = "2025-01-01"
+
+[vars]
+RELAY_VAPID_PUBLIC_KEY = ""
+
+[[d1_databases]]
+binding = "DB"
+database_name = "linkhop-relay-prod"
+database_id = "prod-database-id"
+
+[[durable_objects.bindings]]
+name = "TOPIC_SSE"
+class_name = "TopicSSE"
+
+[[migrations]]
+tag = "v1"
+new_classes = ["TopicSSE"]
+
+[env.staging]
+name = "linkhop-relay-staging"
+vars = { ENVIRONMENT = "staging" }
+
+[[env.staging.d1_databases]]
+binding = "DB"
+database_name = "linkhop-relay-staging"
+database_id = "staging-database-id"
+
+[[env.staging.durable_objects.bindings]]
+name = "TOPIC_SSE"
+class_name = "TopicSSE"
+
+[triggers]
+crons = ["0 * * *", "*/5 * * *", "0 */6 * * *"]

@@ -13,42 +13,43 @@ This checklist adapts the current relay architecture to Cloudflare Free while ke
 
 ## Phase 1 — Worker runtime adapter
 
-- [ ] Create `workers/relay/index.ts` with `export default { fetch(...) }`
-- [ ] Reuse `src/relay/core.ts` handler from Worker runtime
-- [ ] Add env bindings contract (`Env`) and configuration loader
-- [ ] Add `wrangler.toml` for dev/staging/prod
+- [x] Create `workers/relay/index.ts` with `export default { fetch(...) }`
+- [x] Reuse `src/relay/core.ts` handler from Worker runtime
+- [x] Add env bindings contract (`Env`) and configuration loader
+- [x] Add `wrangler.toml` for dev/staging/prod
 
 ## Phase 2 — Storage mapping (Cloudflare)
 
-- [ ] Implement `CloudflareStore` for relay contract
-- [ ] D1 schema for:
-  - [ ] events
-  - [ ] devices
-  - [ ] webpush_subscriptions
-  - [ ] webpush_delivery_queue
-- [ ] Ensure idempotent writes (`network_id + event_id` uniqueness)
-- [ ] Ensure device upsert/tombstone parity with current SQL behavior
+- [x] Implement `CloudflareStore` for relay contract
+- [x] D1 schema for:
+  - [x] events
+  - [x] devices
+  - [x] webpush_subscriptions
+  - [x] webpush_delivery_queue
+- [x] Ensure idempotent writes (`network_id + event_id` uniqueness)
+- [x] Ensure device upsert/tombstone parity with current SQL behavior
 
 ## Phase 3 — Realtime fanout
 
-- [ ] Durable Object per topic (or shard) for SSE fanout
-- [ ] Replay from D1 + live stream via DO
-- [ ] Keepalive and disconnect cleanup behavior
+- [x] SSE replay from D1 (via store.replay)
+- [x] Durable Object per topic (or shard) for SSE fanout
+- [x] Replay from D1 + live stream via DO
+- [x] Keepalive and disconnect cleanup behavior
 - [ ] Cross-instance delivery verification test
 
 ## Phase 4 — Push pipeline
 
-- [ ] Keep subscription endpoints compatible (`/v1/webpush`, `/:topic/webpush`)
-- [ ] Queue `msg.send` push jobs into queue table or Cloudflare Queues
-- [ ] Worker consumer for outbound push delivery
-- [ ] Dead subscription cleanup (410/404)
+- [x] Keep subscription endpoints compatible (`/v1/webpush`, `/:topic/webpush`)
+- [x] Queue `msg.send` push jobs into queue table
+- [x] Worker consumer for outbound push delivery
+- [x] Dead subscription cleanup (410/404)
 
 ## Phase 5 — Retention & operations
 
-- [ ] Cron Trigger for 72h message eviction
-- [ ] Confirm device table is excluded from eviction
-- [ ] Add structured logs (`topic`, `network_id`, `event_id`, `status`)
-- [ ] Add rate-limit / abuse controls
+- [x] Cron Trigger for 72h message eviction
+- [x] Confirm device table is excluded from eviction
+- [x] Add structured logs (`topic`, `network_id`, `event_id`, `status`)
+- [x] Add rate-limit / abuse controls (logged, Cloudflare edge recommended for enforcement)
 
 ## Phase 6 — Testing matrix
 
