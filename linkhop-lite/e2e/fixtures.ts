@@ -1,7 +1,8 @@
 import { test as base, type Page } from "@playwright/test";
 import { spawn, type ChildProcess } from "node:child_process";
-import { existsSync } from "node:fs";
+import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
+import { tmpdir } from "node:os";
 
 const NTFY_BINARY = resolve(import.meta.dirname!, "..", "ntfy");
 const NTFY_PORT = 18090;
@@ -9,17 +10,32 @@ export const NTFY_URL = `http://localhost:${NTFY_PORT}`;
 
 let ntfyProc: ChildProcess | null = null;
 
+function getTestConfig(port: number) {
+  const configDir = resolve(tmpdir(), `ntfy-test-${port}`);
+  mkdirSync(`${configDir}/cache`, { recursive: true });
+  mkdirSync(`${configDir}/attachments`, { recursive: true });
+  const configPath = resolve(configDir, "server.yml");
+  writeFileSync(configPath, `
+base-url: "http://localhost:${port}"
+listen-http: ":${port}"
+cache-file: "${configDir}/cache/ntfy.db"
+attachment-cache-dir: "${configDir}/attachments"
+no-log-dates: true
+log-level: "WARN"
+`.trim());
+  return configPath;
+}
+
 async function ensureNtfy(): Promise<void> {
   if (ntfyProc) return;
   if (!existsSync(NTFY_BINARY)) {
     throw new Error(`ntfy binary not found at ${NTFY_BINARY}. Run: bash scripts/download-ntfy.sh`);
   }
 
+  const configPath = getTestConfig(NTFY_PORT);
   ntfyProc = spawn(NTFY_BINARY, [
     "serve",
-    `--listen-http=:${NTFY_PORT}`,
-    "--no-log-dates",
-    "--log-level=WARN",
+    "-c", configPath,
   ], { stdio: "ignore" });
 
   const deadline = Date.now() + 5000;

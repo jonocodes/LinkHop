@@ -63,9 +63,9 @@ export async function decryptBody(
 ): Promise<string | null> {
   try {
     const decrypted = await crypto.subtle.decrypt(
-      { name: "AES-GCM", iv: base64ToUint8(iv) },
+      { name: "AES-GCM", iv: base64ToUint8(iv) as globalThis.BufferSource },
       key,
-      base64ToUint8(ciphertext),
+      base64ToUint8(ciphertext) as globalThis.BufferSource,
     );
     return new TextDecoder().decode(decrypted);
   } catch {
