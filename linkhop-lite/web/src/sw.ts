@@ -43,6 +43,27 @@ async function publishBackgroundHeartbeat(): Promise<void> {
   });
 }
 
+async function saveBackgroundHeartbeatLastTriggerAt(timestamp: string): Promise<void> {
+  await new Promise<void>((resolve) => {
+    const req = indexedDB.open("linkhop-lite", 1);
+    req.onerror = () => resolve();
+    req.onsuccess = () => {
+      const db = req.result;
+      const tx = db.transaction("config", "readwrite");
+      tx.objectStore("config").put(timestamp, "bg_heartbeat_last_trigger_at");
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => resolve();
+    };
+  });
+}
+
+async function broadcastBackgroundHeartbeatTrigger(timestamp: string): Promise<void> {
+  const clients = await self.clients.matchAll({ type: "window", includeUncontrolled: true });
+  for (const client of clients) {
+    client.postMessage({ type: "bg-heartbeat-triggered", timestamp });
+  }
+}
+
 // Derive base path from the service worker's own location.
 // If SW is at /LinkHop/sw.js, base will be /LinkHop/
 const swBase = new URL("./", self.location.href).pathname;
@@ -80,7 +101,12 @@ self.addEventListener("periodicsync", (event: Event) => {
   };
   if (periodicEvent.tag !== BG_HEARTBEAT_TAG) return;
   periodicEvent.waitUntil(
-    publishBackgroundHeartbeat().catch(() => {
+    (async () => {
+      await publishBackgroundHeartbeat();
+      const now = new Date().toISOString();
+      await saveBackgroundHeartbeatLastTriggerAt(now);
+      await broadcastBackgroundHeartbeatTrigger(now);
+    })().catch(() => {
       // Best effort only.
     }),
   );

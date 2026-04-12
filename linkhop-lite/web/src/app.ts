@@ -8,7 +8,7 @@ import { createEmptyState } from "../../src/engine/state.js";
 import { processEvent } from "../../src/engine/reducer.js";
 import { actionAnnounce, actionHeartbeat, actionLeave, actionSend, actionMarkViewed, actionSyncRequest } from "../../src/engine/actions.js";
 import type { Effect } from "../../src/engine/reducer.js";
-import { loadConfig, saveConfig, loadState, saveState, clearAll, loadSeenEventIds, appendEvents, type BrowserConfig, type TransportKind } from "./db.js";
+import { loadConfig, saveConfig, loadState, saveState, clearAll, loadSeenEventIds, appendEvents, loadBackgroundHeartbeatLastTriggeredAt, type BrowserConfig, type TransportKind } from "./db.js";
 import { subscribeSSE, publishHTTP } from "./sse.js";
 import { requestPermission, showMessageNotification, subscribeWebPush, unsubscribeWebPush } from "./notifications.js";
 
@@ -37,6 +37,13 @@ export class App {
   encryptionEnabled = false;
   encryptionKey: CryptoKey | null = null;
   selfSendEnabled = false;
+  backgroundHeartbeat = {
+    api_supported: false,
+    registered: false,
+    min_interval_ms: BG_HEARTBEAT_MIN_INTERVAL_MS,
+    last_triggered_at: null as string | null,
+    last_register_error: null as string | null,
+  };
 
   private callbacks: AppCallbacks;
   private cleanupSSE: (() => void)[] = [];
@@ -48,9 +55,11 @@ export class App {
 
   constructor(callbacks: AppCallbacks) {
     this.callbacks = callbacks;
+    this.bindServiceWorkerDebugMessages();
   }
 
   async init(): Promise<void> {
+    await this.refreshBackgroundHeartbeatDebug();
     const saved = await loadConfig();
     if (saved) {
       this.config = saved.device;
@@ -249,7 +258,11 @@ export class App {
   }
 
   private async registerBackgroundHeartbeat(): Promise<void> {
-    if (!("serviceWorker" in navigator)) return;
+    if (!("serviceWorker" in navigator)) {
+      this.backgroundHeartbeat.api_supported = false;
+      this.backgroundHeartbeat.registered = false;
+      return;
+    }
     try {
       const registration = await navigator.serviceWorker.ready;
       const periodicSync = (
@@ -260,14 +273,28 @@ export class App {
           };
         }
       ).periodicSync;
-      if (!periodicSync?.register) return;
+      if (!periodicSync?.register) {
+        this.backgroundHeartbeat.api_supported = false;
+        this.backgroundHeartbeat.registered = false;
+        return;
+      }
+      this.backgroundHeartbeat.api_supported = true;
 
       const tags = periodicSync.getTags ? await periodicSync.getTags() : [];
-      if (tags.includes(BG_HEARTBEAT_TAG)) return;
+      if (tags.includes(BG_HEARTBEAT_TAG)) {
+        this.backgroundHeartbeat.registered = true;
+        this.backgroundHeartbeat.last_register_error = null;
+        return;
+      }
       await periodicSync.register(BG_HEARTBEAT_TAG, { minInterval: BG_HEARTBEAT_MIN_INTERVAL_MS });
+      this.backgroundHeartbeat.registered = true;
+      this.backgroundHeartbeat.last_register_error = null;
     } catch {
+      this.backgroundHeartbeat.registered = false;
+      this.backgroundHeartbeat.last_register_error = "register_failed";
       // Best effort only. Browsers may reject due to support, policy, or power constraints.
     }
+    this.callbacks.onStateChange();
   }
 
   private async unregisterBackgroundHeartbeat(): Promise<void> {
@@ -282,8 +309,49 @@ export class App {
       if (periodicSync?.unregister) {
         await periodicSync.unregister(BG_HEARTBEAT_TAG);
       }
+      this.backgroundHeartbeat.registered = false;
+      this.backgroundHeartbeat.last_register_error = null;
     } catch {
       // Best effort only.
+    }
+  }
+
+  private bindServiceWorkerDebugMessages(): void {
+    if (!("serviceWorker" in navigator)) return;
+    navigator.serviceWorker.addEventListener("message", (event: MessageEvent) => {
+      const msg = event.data as { type?: string; timestamp?: string };
+      if (msg?.type === "bg-heartbeat-triggered" && typeof msg.timestamp === "string") {
+        this.backgroundHeartbeat.last_triggered_at = msg.timestamp;
+        this.callbacks.onStateChange();
+      }
+    });
+  }
+
+  private async refreshBackgroundHeartbeatDebug(): Promise<void> {
+    this.backgroundHeartbeat.last_triggered_at = await loadBackgroundHeartbeatLastTriggeredAt();
+    if (!("serviceWorker" in navigator)) {
+      this.backgroundHeartbeat.api_supported = false;
+      this.backgroundHeartbeat.registered = false;
+      return;
+    }
+    try {
+      const registration = await navigator.serviceWorker.ready;
+      const periodicSync = (
+        registration as ServiceWorkerRegistration & {
+          periodicSync?: { getTags?: () => Promise<string[]> };
+        }
+      ).periodicSync;
+      if (!periodicSync) {
+        this.backgroundHeartbeat.api_supported = false;
+        this.backgroundHeartbeat.registered = false;
+        return;
+      }
+      this.backgroundHeartbeat.api_supported = true;
+      const tags = periodicSync.getTags ? await periodicSync.getTags() : [];
+      this.backgroundHeartbeat.registered = tags.includes(BG_HEARTBEAT_TAG);
+    } catch {
+      this.backgroundHeartbeat.api_supported = false;
+      this.backgroundHeartbeat.registered = false;
     }
   }
 
