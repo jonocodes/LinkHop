@@ -249,8 +249,9 @@ Integration and e2e tests run against a real ntfy binary. They auto-skip if the 
 - [x] Encryption toggle in status bar (Encrypted / Plaintext)
 - [x] E2E capability badge on devices list
 - [x] Encrypted message fallback display ("cannot decrypt")
-- [x] Debug tab (device config, connection status, event log)
+- [x] Debug tab (device config, connection status, event log, background heartbeat status)
 - [x] ntfy web push subscription (auto-subscribe on connect, unsubscribe on leave)
+- [x] Best-effort periodic background heartbeat via Service Worker `periodicSync` (3h minimum interval where supported)
 
 ### Deferred (per spec)
 

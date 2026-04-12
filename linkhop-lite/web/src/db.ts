@@ -193,3 +193,13 @@ export async function clearAll(): Promise<void> {
     t.onerror = () => reject(t.error);
   });
 }
+
+export async function loadBackgroundHeartbeatLastTriggeredAt(): Promise<string | null> {
+  const db = await openDB();
+  return new Promise((resolve, reject) => {
+    const t = tx(db, "config", "readonly");
+    const req = t.objectStore("config").get("bg_heartbeat_last_trigger_at");
+    req.onsuccess = () => resolve((req.result as string | undefined) ?? null);
+    req.onerror = () => reject(req.error);
+  });
+}

@@ -731,6 +731,7 @@ function renderDebug(): string {
         transport_url: app.transportUrl,
         encryption_enabled: app.encryptionEnabled,
         has_encryption_key: app.encryptionKey !== null,
+        background_heartbeat: app.backgroundHeartbeat,
       }, null, 2))}</pre>
     </div>
   `);
