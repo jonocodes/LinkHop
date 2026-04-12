@@ -82,7 +82,16 @@ export async function publishHTTP(
     body: JSON.stringify(event),
   });
   if (!res.ok) {
-    throw new Error(`publish failed: ${res.status} ${res.statusText}`);
+    let detail = "";
+    try {
+      const text = await res.text();
+      if (text) {
+        detail = ` ${text}`;
+      }
+    } catch {
+      // Ignore body read failures and fall back to status text.
+    }
+    throw new Error(`publish failed: ${res.status} ${res.statusText}${detail}`.trim());
   }
   // For relay backends, accept 202 as success (async)
   // For ntfy, accepts 200

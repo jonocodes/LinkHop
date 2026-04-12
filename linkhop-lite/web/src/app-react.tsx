@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useReducer } from "react";
 import { useNavigate } from "@tanstack/react-router";
 import { App as AppClass, type AppScreen, type ConnectionStatus } from "./app";
 import { getDevices, getInbox, getPending, getSent, getUnreadCount } from "../../src/engine/state";
@@ -9,6 +9,7 @@ declare const __BUILD_TIME__: string;
 
 export function App() {
   const navigate = useNavigate();
+  const [, forceUpdate] = useReducer((count: number) => count + 1, 0);
   const [app] = useState(() => new AppClass({
     onStateChange: () => forceUpdate(),
     onScreenChange: (screen: AppScreen) => {
@@ -16,10 +17,9 @@ export function App() {
         navigate({ to: "/setup" });
       }
     },
-    onConnectionChange: (status: ConnectionStatus) => forceUpdate(),
+    onConnectionChange: (_status: ConnectionStatus) => forceUpdate(),
     onError: (msg: string) => showError(msg),
   }));
-  const [, forceUpdate] = useState({});
   const [currentTab, setCurrentTab] = useState<"devices" | "inbox" | "outbox" | "settings">("devices");
   const [currentMessageId, setCurrentMessageId] = useState<string | null>(null);
   const [sendMode, setSendMode] = useState<"text" | "url">("text");
@@ -27,6 +27,26 @@ export function App() {
 
   useEffect(() => {
     app.init();
+  }, [app]);
+
+  useEffect(() => {
+    if (!("serviceWorker" in navigator)) return;
+
+    const handleMessage = (event: MessageEvent) => {
+      const { type, msg_id } = event.data ?? {};
+      if (typeof msg_id !== "string") return;
+
+      if (type === "open-message") {
+        setCurrentTab("inbox");
+        setCurrentMessageId(msg_id);
+        void app.markMessageViewed(msg_id);
+      } else if (type === "mark-viewed") {
+        void app.markMessageViewed(msg_id);
+      }
+    };
+
+    navigator.serviceWorker.addEventListener("message", handleMessage);
+    return () => navigator.serviceWorker.removeEventListener("message", handleMessage);
   }, [app]);
 
   const handleTabChange = (tab: typeof currentTab) => {
@@ -48,6 +68,7 @@ export function App() {
     input.value = "";
     setSendMode("text");
     input.placeholder = "Message...";
+    setCurrentTab("outbox");
   };
 
   const handleSendTargetChange = (deviceId: string) => {
@@ -147,7 +168,7 @@ export function App() {
                   onClick={async (e: React.MouseEvent) => {
                     e.stopPropagation();
                     await app.dismissMessage(m.msg_id);
-                    forceUpdate({});
+                    forceUpdate();
                   }}
                 >
                   ×
@@ -285,7 +306,7 @@ export function App() {
               disabled={!hasKey}
               onClick={async () => {
                 await app.toggleEncryption();
-                forceUpdate({});
+                forceUpdate();
               }}
             >
               {on ? "On" : "Off"}
@@ -302,7 +323,7 @@ export function App() {
               className={`settings-toggle ${app.selfSendEnabled ? "on" : ""}`}
               onClick={async () => {
                 await app.toggleSelfSend();
-                forceUpdate({});
+                forceUpdate();
               }}
             >
               {app.selfSendEnabled ? "On" : "Off"}
@@ -383,6 +404,8 @@ export function App() {
                 transport_url: app.transportUrl,
                 encryption_enabled: app.encryptionEnabled,
                 has_encryption_key: app.encryptionKey !== null,
+                periodic_update: app.periodicUpdate,
+                background_heartbeat: app.backgroundHeartbeat,
               },
               null,
               2

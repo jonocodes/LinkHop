@@ -8,7 +8,20 @@ import { createEmptyState } from "../../src/engine/state.js";
 import { processEvent } from "../../src/engine/reducer.js";
 import { actionAnnounce, actionHeartbeat, actionLeave, actionSend, actionMarkViewed, actionSyncRequest } from "../../src/engine/actions.js";
 import type { Effect } from "../../src/engine/reducer.js";
-import { loadConfig, saveConfig, loadState, saveState, clearAll, loadSeenEventIds, appendEvents, loadBackgroundHeartbeatLastTriggeredAt, type BrowserConfig, type TransportKind } from "./db.js";
+import {
+  loadConfig,
+  saveConfig,
+  loadState,
+  saveState,
+  clearAll,
+  loadSeenEventIds,
+  appendEvents,
+  loadBackgroundHeartbeatLastTriggeredAt,
+  loadLastPeriodicUpdateSentAt,
+  saveLastPeriodicUpdateSentAt,
+  type BrowserConfig,
+  type TransportKind,
+} from "./db.js";
 import { subscribeSSE, publishHTTP } from "./sse.js";
 import { requestPermission, showMessageNotification, subscribeWebPush, unsubscribeWebPush } from "./notifications.js";
 
@@ -44,6 +57,9 @@ export class App {
     last_triggered_at: null as string | null,
     last_register_error: null as string | null,
   };
+  periodicUpdate = {
+    last_sent_at: null as string | null,
+  };
 
   private callbacks: AppCallbacks;
   private cleanupSSE: (() => void)[] = [];
@@ -60,6 +76,7 @@ export class App {
 
   async init(): Promise<void> {
     await this.refreshBackgroundHeartbeatDebug();
+    this.periodicUpdate.last_sent_at = await loadLastPeriodicUpdateSentAt();
     const saved = await loadConfig();
     if (saved) {
       this.config = saved.device;
@@ -256,7 +273,12 @@ export class App {
   private async sendHeartbeat(): Promise<void> {
     if (!this.config) return;
     const effect = actionHeartbeat(this.config);
-    await this.executeEffect(effect);
+    const published = await this.executeEffect(effect);
+    if (!published) return;
+    const now = new Date().toISOString();
+    this.periodicUpdate.last_sent_at = now;
+    await saveLastPeriodicUpdateSentAt(now);
+    this.callbacks.onStateChange();
   }
 
   private async registerBackgroundHeartbeat(): Promise<void> {
@@ -323,6 +345,7 @@ export class App {
     navigator.serviceWorker.addEventListener("message", (event: MessageEvent) => {
       const msg = event.data as { type?: string; timestamp?: string };
       if (msg?.type === "bg-heartbeat-triggered" && typeof msg.timestamp === "string") {
+        this.periodicUpdate.last_sent_at = msg.timestamp;
         this.backgroundHeartbeat.last_triggered_at = msg.timestamp;
         this.callbacks.onStateChange();
       }
@@ -507,14 +530,17 @@ export class App {
     ]);
   }
 
-  private async executeEffect(effect: Effect): Promise<void> {
+  private async executeEffect(effect: Effect): Promise<boolean> {
     if (effect.type === "publish") {
       try {
         await publishHTTP(this.transportUrl, effect.topic, effect.event, this.transportKind);
+        return true;
       } catch (err) {
         this.callbacks.onError(`Publish failed: ${err}`);
+        return false;
       }
     }
+    return false;
   }
 
   private setConnection(status: ConnectionStatus): void {

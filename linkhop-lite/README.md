@@ -2,6 +2,8 @@
 
 Device-to-device messaging protocol built on ntfy relay. Browser-first, no backend.
 
+The browser app is a realtime SPA: device presence, inbox changes, and outbox state transitions such as `pending -> sent` update in-place without reloading the page.
+
 ## Requirements
 
 ```bash
@@ -462,6 +464,7 @@ Integration and e2e tests run against a real ntfy binary. They auto-skip if the 
 - [x] E2E capability badge on devices list
 - [x] Encrypted message fallback display ("cannot decrypt")
 - [x] Debug tab (device config, connection status, event log, background heartbeat status)
+- [x] Debug tab shows the last periodic update sent by this device
 - [x] ntfy web push subscription (auto-subscribe on connect, unsubscribe on leave)
 - [x] Best-effort periodic background heartbeat via Service Worker `periodicSync` (3h minimum interval where supported)
 

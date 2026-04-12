@@ -57,6 +57,20 @@ async function saveBackgroundHeartbeatLastTriggerAt(timestamp: string): Promise<
   });
 }
 
+async function saveLastPeriodicUpdateSentAt(timestamp: string): Promise<void> {
+  await new Promise<void>((resolve) => {
+    const req = indexedDB.open("linkhop-lite", 1);
+    req.onerror = () => resolve();
+    req.onsuccess = () => {
+      const db = req.result;
+      const tx = db.transaction("config", "readwrite");
+      tx.objectStore("config").put(timestamp, "last_periodic_update_sent_at");
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => resolve();
+    };
+  });
+}
+
 async function broadcastBackgroundHeartbeatTrigger(timestamp: string): Promise<void> {
   const clients = await self.clients.matchAll({ type: "window", includeUncontrolled: true });
   for (const client of clients) {
@@ -104,6 +118,7 @@ self.addEventListener("periodicsync", (event: Event) => {
     (async () => {
       await publishBackgroundHeartbeat();
       const now = new Date().toISOString();
+      await saveLastPeriodicUpdateSentAt(now);
       await saveBackgroundHeartbeatLastTriggerAt(now);
       await broadcastBackgroundHeartbeatTrigger(now);
     })().catch(() => {

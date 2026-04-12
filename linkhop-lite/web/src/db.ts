@@ -217,3 +217,23 @@ export async function loadBackgroundHeartbeatLastTriggeredAt(): Promise<string |
     req.onerror = () => reject(req.error);
   });
 }
+
+export async function saveLastPeriodicUpdateSentAt(timestamp: string): Promise<void> {
+  const db = await openDB();
+  return new Promise((resolve, reject) => {
+    const t = tx(db, "config", "readwrite");
+    t.objectStore("config").put(timestamp, "last_periodic_update_sent_at");
+    t.oncomplete = () => resolve();
+    t.onerror = () => reject(t.error);
+  });
+}
+
+export async function loadLastPeriodicUpdateSentAt(): Promise<string | null> {
+  const db = await openDB();
+  return new Promise((resolve, reject) => {
+    const t = tx(db, "config", "readonly");
+    const req = t.objectStore("config").get("last_periodic_update_sent_at");
+    req.onsuccess = () => resolve((req.result as string | undefined) ?? null);
+    req.onerror = () => reject(req.error);
+  });
+}

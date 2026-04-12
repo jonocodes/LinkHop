@@ -740,6 +740,7 @@ function renderDebug(): string {
         transport_url: app.transportUrl,
         encryption_enabled: app.encryptionEnabled,
         has_encryption_key: app.encryptionKey !== null,
+        periodic_update: app.periodicUpdate,
         background_heartbeat: app.backgroundHeartbeat,
       }, null, 2))}</pre>
     </div>
