@@ -1,0 +1,37 @@
+{
+  "version": "5",
+  "redirects": {
+    "https://esm.sh/@supabase/phoenix@^0.4.0?target=denonext": "https://esm.sh/@supabase/phoenix@0.4.0?target=denonext",
+    "https://esm.sh/@supabase/supabase-js@2": "https://esm.sh/@supabase/supabase-js@2.103.0",
+    "https://esm.sh/iceberg-js@^0.8.1?target=denonext": "https://esm.sh/iceberg-js@0.8.1?target=denonext"
+  },
+  "remote": {
+    "https://esm.sh/@supabase/auth-js@2.103.0/denonext/auth-js.mjs": "356a6f02075db01c80117a7e4198d7fd55cde58f8487744628d4751b987aa8ee",
+    "https://esm.sh/@supabase/functions-js@2.103.0/denonext/functions-js.mjs": "93a483aa7fbe7fd883fcd5a65642122d7c38447dee3a8001a1e595db212997a0",
+    "https://esm.sh/@supabase/phoenix@0.4.0/denonext/phoenix.mjs": "d9187057b2e3276d1110b9d814f737d4f8eff7f8b2765c4aa6bf7c7c30d070c9",
+    "https://esm.sh/@supabase/phoenix@0.4.0?target=denonext": "c1df3cfcdcf13e9cfddf86181efbdd8d4099b9a2682188b74106596277a69d16",
+    "https://esm.sh/@supabase/postgrest-js@2.103.0/denonext/postgrest-js.mjs": "cfe6dff25bba2193197fcb056d4c5a2aa1ae2a887a660b8a029139fc4128e800",
+    "https://esm.sh/@supabase/realtime-js@2.103.0/denonext/realtime-js.mjs": "327afc9d0c67336885cb49e0bab74fcd99c2fd268e7a0e6419d3ca16e164fab4",
+    "https://esm.sh/@supabase/storage-js@2.103.0/denonext/storage-js.mjs": "da2230e0505d2a551a1e04863c16cb6c794d22eb3a0aef4d3351aa7279fe8b00",
+    "https://esm.sh/@supabase/supabase-js@2.103.0": "513f5e7364668df19963929fd207a721e659e5c69875d8f1c1fe44b0a95d534d",
+    "https://esm.sh/@supabase/supabase-js@2.103.0/denonext/supabase-js.mjs": "17511c734a1a4f502b64ca06b982c8094344cd6d42eee7f6154ac5fedda042a8",
+    "https://esm.sh/iceberg-js@0.8.1/denonext/iceberg-js.mjs": "d839d81a2e3966500ca2cdd0c1cb458e9608bacfc91f7bb67a69b2e878dcdb4f",
+    "https://esm.sh/iceberg-js@0.8.1?target=denonext": "58c849d7fe2bf4eca4a84eb501e83c161a7d8c34ca1bec15a962b3bec3062633",
+    "https://esm.sh/tslib@2.8.1/denonext/tslib.mjs": "c38da5dd6da6281964435002ce204cd586634fe3bdfb24a0ee116f48cf3292e9"
+  },
+  "workspace": {
+    "packageJson": {
+      "dependencies": [
+        "npm:@playwright/test@^1.59.1",
+        "npm:@types/node@^25.5.2",
+        "npm:commander@^14.0.3",
+        "npm:typescript@^6.0.2",
+        "npm:undici@^8.0.2",
+        "npm:vite-plugin-pwa@^1.2.0",
+        "npm:vite@^8.0.3",
+        "npm:vitest@^4.1.2",
+        "npm:workbox-precaching@^7.4.0"
+      ]
+    }
+  }
+}

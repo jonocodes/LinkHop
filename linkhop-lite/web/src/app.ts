@@ -20,10 +20,10 @@ export type AppScreen = "setup" | "main";
 export type ConnectionStatus = "disconnected" | "connecting" | "connected";
 
 export interface AppCallbacks {
-  onStateChange: () => void;
-  onScreenChange: (screen: AppScreen) => void;
-  onConnectionChange: (status: ConnectionStatus) => void;
-  onError: (msg: string) => void;
+  onStateChange?: () => void;
+  onScreenChange?: (screen: AppScreen) => void;
+  onConnectionChange?: (status: ConnectionStatus) => void;
+  onError?: (msg: string) => void;
 }
 
 export class App {
@@ -74,10 +74,10 @@ export class App {
       this.state = await loadState();
       this.seenEventIds = await loadSeenEventIds();
       this.screen = "main";
-      this.callbacks.onScreenChange("main");
+      this.callbacks.onScreenChange?.("main");
       this.connect();
     } else {
-      this.callbacks.onScreenChange("setup");
+      this.callbacks.onScreenChange?.("setup");
     }
   }
 
@@ -108,7 +108,7 @@ export class App {
     await requestPermission();
     this.state = createEmptyState();
     this.screen = "main";
-    this.callbacks.onScreenChange("main");
+    this.callbacks.onScreenChange?.("main");
     this.connect();
     await this.announce();
   }
@@ -154,9 +154,11 @@ export class App {
 
     const onEvent = (event: AnyProtocolEvent) => this.handleEvent(event);
 
+    // Pass sinceId from last event for replay on relay backends
+    const sinceId = this.state.lastEventId ?? 0;
     this.cleanupSSE.push(
-      subscribeSSE(this.transportUrl, regTopic, { onEvent, onOpen, onError }),
-      subscribeSSE(this.transportUrl, devTopic, { onEvent, onOpen, onError }),
+      subscribeSSE(this.transportUrl, regTopic, { onEvent, onOpen, onError }, this.transportKind, sinceId),
+      subscribeSSE(this.transportUrl, devTopic, { onEvent, onOpen, onError }, this.transportKind, sinceId),
     );
   }
 
@@ -508,7 +510,7 @@ export class App {
   private async executeEffect(effect: Effect): Promise<void> {
     if (effect.type === "publish") {
       try {
-        await publishHTTP(this.transportUrl, effect.topic, effect.event);
+        await publishHTTP(this.transportUrl, effect.topic, effect.event, this.transportKind);
       } catch (err) {
         this.callbacks.onError(`Publish failed: ${err}`);
       }

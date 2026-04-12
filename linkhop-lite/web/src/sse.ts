@@ -1,9 +1,23 @@
-import type { AnyProtocolEvent } from "../../src/protocol/types.js";
+import type { AnyProtocolEvent, TransportKind } from "../../src/protocol/types.js";
+import type { TransportKind as AppTransportKind } from "./db.js";
 
 export interface SSECallbacks {
   onEvent: (event: AnyProtocolEvent) => void;
   onOpen?: () => void;
   onError?: (error: Event) => void;
+}
+
+function sseUrl(baseUrl: string, topic: string, kind: TransportKind, sinceId?: number): string {
+  if (kind === "ntfy") {
+    return `${baseUrl}/${topic}/sse?since=12h`;
+  }
+  // relay: cloudflare, supabase, local
+  const params = new URLSearchParams();
+  params.set("since", "12h");
+  if (sinceId && sinceId > 0) {
+    params.set("since_id", String(sinceId));
+  }
+  return `${baseUrl}/${topic}/sse?${params}`;
 }
 
 /**
@@ -14,8 +28,10 @@ export function subscribeSSE(
   baseUrl: string,
   topic: string,
   callbacks: SSECallbacks,
+  kind: TransportKind = "ntfy",
+  sinceId?: number,
 ): () => void {
-  const url = `${baseUrl}/${topic}/sse?since=12h`;
+  const url = sseUrl(baseUrl, topic, kind, sinceId);
   const source = new EventSource(url);
 
   source.onopen = () => {
@@ -49,19 +65,28 @@ export function subscribeSSE(
 }
 
 /**
- * Publish a protocol event to an ntfy topic.
+ * Publish a protocol event.
+ * For ntfy: POST to topic, expects 200
+ * For relay: POST to topic, expects 202 (async)
  */
 export async function publishHTTP(
   baseUrl: string,
   topic: string,
   event: AnyProtocolEvent,
+  kind: TransportKind = "ntfy",
 ): Promise<void> {
   const url = `${baseUrl}/${topic}`;
   const res = await fetch(url, {
     method: "POST",
+    headers: { "content-type": "application/json" },
     body: JSON.stringify(event),
   });
   if (!res.ok) {
-    throw new Error(`ntfy publish failed: ${res.status} ${res.statusText}`);
+    throw new Error(`publish failed: ${res.status} ${res.statusText}`);
+  }
+  // For relay backends, accept 202 as success (async)
+  // For ntfy, accepts 200
+  if (kind !== "ntfy" && res.status !== 202 && res.status !== 200) {
+    throw new Error(`publish failed: ${res.status}`);
   }
 }

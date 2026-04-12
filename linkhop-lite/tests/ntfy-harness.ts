@@ -1,9 +1,26 @@
 import { spawn, type ChildProcess } from "node:child_process";
-import { existsSync } from "node:fs";
-import { resolve } from "node:path";
+import { existsSync, mkdirSync, writeFileSync } from "node:fs";
+import { resolve, dirname } from "node:path";
+import { tmpdir } from "node:os";
 
 const NTFY_BINARY = resolve(import.meta.dirname!, "..", "ntfy");
-const DEFAULT_PORT = 18080;
+const DEFAULT_PORT = 4076;
+
+function getTestConfig(port: number) {
+  const configDir = resolve(tmpdir(), `ntfy-test-${port}`);
+  mkdirSync(`${configDir}/cache`, { recursive: true });
+  mkdirSync(`${configDir}/attachments`, { recursive: true });
+  const configPath = resolve(configDir, "server.yml");
+  writeFileSync(configPath, `
+base-url: "http://localhost:${port}"
+listen-http: ":${port}"
+cache-file: "${configDir}/cache/ntfy.db"
+attachment-cache-dir: "${configDir}/attachments"
+no-log-dates: true
+log-level: "WARN"
+`.trim());
+  return configPath;
+}
 
 export interface NtfyServer {
   url: string;
@@ -16,11 +33,10 @@ export function ntfyAvailable(): boolean {
 }
 
 export async function startNtfy(port = DEFAULT_PORT): Promise<NtfyServer> {
+  const configPath = getTestConfig(port);
   const proc: ChildProcess = spawn(NTFY_BINARY, [
     "serve",
-    `--listen-http=:${port}`,
-    "--no-log-dates",
-    "--log-level=WARN",
+    "-c", configPath,
   ], {
     stdio: "ignore",
   });

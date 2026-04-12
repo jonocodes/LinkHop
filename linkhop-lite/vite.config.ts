@@ -1,5 +1,7 @@
 import { defineConfig } from "vite";
 import { VitePWA } from "vite-plugin-pwa";
+import tsconfigPaths from "vite-tsconfig-paths";
+import react from "@vitejs/plugin-react";
 
 const base = process.env.VITE_BASE ?? "/";
 
@@ -14,6 +16,8 @@ export default defineConfig({
     emptyOutDir: true,
   },
   plugins: [
+    tsconfigPaths(),
+    react(),
     VitePWA({
       strategies: "injectManifest",
       srcDir: "src",

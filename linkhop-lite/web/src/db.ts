@@ -47,7 +47,21 @@ function tx(
 
 // --- Config ---
 
-export type TransportKind = "ntfy" | "relay";
+export type TransportKind = "ntfy" | "relay" | "cloudflare" | "supabase";
+
+export interface TransportConfig {
+  kind: TransportKind;
+  url: string;
+  description: string;
+}
+
+export const TRANSPORTS: TransportConfig[] = [
+  { kind: "ntfy", url: "https://ntfy.sh", description: "Free hosted (30d retention)" },
+  { kind: "ntfy", url: "https://your-ntfy.example.com", description: "Self-hosted ntfy" },
+  { kind: "relay", url: "http://localhost:8000", description: "Local Deno relay" },
+  { kind: "supabase", url: "https://your-project.supabase.co", description: "Supabase Edge Function" },
+  { kind: "cloudflare", url: "https://your-worker.workers.dev", description: "Cloudflare Worker" },
+];
 
 export interface BrowserConfig {
   device: DeviceConfig;
