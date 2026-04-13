@@ -192,14 +192,18 @@ export function isProtocolEvent(value: unknown): value is Record<string, unknown
   );
 }
 
+const CORS_HEADERS = {
+  "access-control-allow-origin": "*",
+  "access-control-allow-methods": "GET,POST,DELETE,OPTIONS",
+  "access-control-allow-headers": "content-type,authorization,last-event-id",
+};
+
 function json(status: number, body: Json): Response {
   return new Response(JSON.stringify(body), {
     status,
     headers: {
       "content-type": "application/json; charset=utf-8",
-      "access-control-allow-origin": "*",
-      "access-control-allow-methods": "GET,POST,DELETE,OPTIONS",
-      "access-control-allow-headers": "content-type,authorization,last-event-id",
+      ...CORS_HEADERS,
     },
   });
 }
@@ -266,14 +270,19 @@ function openSSE(store: RelayStore, topic: string, sinceId: number, once: boolea
       "content-type": "text/event-stream; charset=utf-8",
       "cache-control": "no-cache, no-transform",
       connection: "keep-alive",
-      "access-control-allow-origin": "*",
+      ...CORS_HEADERS,
     },
   });
 }
 
 export function createRelayHandler(store: RelayStore) {
   return async function handle(req: Request): Promise<Response> {
-    if (req.method === "OPTIONS") return new Response(null, { status: 204 });
+    if (req.method === "OPTIONS") {
+      return new Response(null, {
+        status: 204,
+        headers: CORS_HEADERS,
+      });
+    }
 
     const url = new URL(req.url);
     const parts = parsePath(url.pathname);

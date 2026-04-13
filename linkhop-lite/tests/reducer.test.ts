@@ -24,6 +24,10 @@ function peerTopic(): string {
   return deviceTopic(peerConfig.env, peerConfig.network_id, peerConfig.device_id);
 }
 
+function selfTopic(): string {
+  return deviceTopic(localConfig.env, localConfig.network_id, localConfig.device_id);
+}
+
 describe("device.announce handling", () => {
   let state: LocalState;
 
@@ -202,6 +206,27 @@ describe("msg.send handling", () => {
     // No ack — this is a replay, not a retry
     const publishes = result2.effects.filter((e) => e.type === "publish");
     expect(publishes).toHaveLength(0);
+  });
+
+  it("acks first loopback delivery for self-send", () => {
+    actionSend(state, localConfig, localConfig.device_id, selfTopic(), {
+      kind: "text",
+      text: "note to self",
+    });
+
+    const pending = getPending(state, localConfig.device_id);
+    expect(pending).toHaveLength(1);
+
+    const loopback = makeMsgSend(localConfig, localConfig.device_id, {
+      msgId: pending[0].msg_id,
+      attemptId: pending[0].last_attempt_id,
+    });
+    const result = processEvent(state, loopback, localConfig);
+
+    const publishes = result.effects.filter((e) => e.type === "publish");
+    expect(publishes).toHaveLength(1);
+    const ackEvent = (publishes[0] as { type: "publish"; event: { type: string } }).event;
+    expect(ackEvent.type).toBe("msg.received");
   });
 });
 

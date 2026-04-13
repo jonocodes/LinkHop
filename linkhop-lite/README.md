@@ -78,6 +78,8 @@ RELAY_STORE=memory deno run --allow-all --unstable-sloppy-imports index.ts
 - Data lost on restart
 - Use `eval $(flox activate)` before running commands
 - Use `--allow-all` for network/file access
+- Browser app default endpoint: `http://localhost:8000`
+- The local relay now answers browser CORS preflight requests; if publish still fails in a hosted/HTTPS app, use an HTTPS relay URL instead of `http://localhost:8000`
 
 #### SQLite (local file)
 

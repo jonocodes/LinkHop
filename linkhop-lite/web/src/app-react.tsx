@@ -241,7 +241,22 @@ export function App() {
 
       return (
         <div key={m.msg_id} className={`msg-item ${isPending ? "pending" : "received"}`}>
-          <div className="msg-from">To {esc(toLabel)}</div>
+          <div className="msg-item-header">
+            <span className="msg-from">To {esc(toLabel)}</span>
+            <div className="msg-item-actions">
+              <button
+                className="msg-dismiss"
+                data-msg-id={m.msg_id}
+                title="Dismiss"
+                onClick={async () => {
+                  await app.dismissMessage(m.msg_id);
+                  forceUpdate();
+                }}
+              >
+                ×
+              </button>
+            </div>
+          </div>
           <div className="msg-body">{bodyHtml}</div>
           <div className="msg-time">{timeStr}</div>
         </div>

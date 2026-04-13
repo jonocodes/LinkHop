@@ -411,6 +411,13 @@ function renderMainContent(): void {
       break;
     case "outbox":
       container.innerHTML = renderPending();
+      container.querySelectorAll<HTMLElement>(".msg-dismiss").forEach((btn) => {
+        btn.addEventListener("click", async (e) => {
+          e.stopPropagation();
+          const msgId = btn.dataset.msgId;
+          if (msgId) await app.dismissMessage(msgId);
+        });
+      });
       updateSendTargets();
       updateSendFormVisibility();
       break;
@@ -553,7 +560,12 @@ function renderPending(): string {
       : formatTime(m.created_at);
     return `
       <div class="msg-item ${isPending ? "pending" : "received"}">
-        <div class="msg-from">To ${esc(toLabel)}</div>
+        <div class="msg-item-header">
+          <span class="msg-from">To ${esc(toLabel)}</span>
+          <div class="msg-item-actions">
+            <button class="msg-dismiss" data-msg-id="${esc(m.msg_id)}" title="Dismiss">&times;</button>
+          </div>
+        </div>
         <div class="msg-body">${bodyHtml}</div>
         <div class="msg-time">${timeStr}</div>
       </div>

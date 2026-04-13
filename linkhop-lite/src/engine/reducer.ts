@@ -14,6 +14,7 @@ import type {
   SyncResponseEvent,
 } from "../protocol/types.js";
 import { createMsgReceived, createSyncResponse } from "../protocol/events.js";
+import { deviceTopicFromConfig } from "../protocol/topics.js";
 
 // An effect the engine wants the transport layer to perform
 export type Effect =
@@ -122,13 +123,19 @@ function handleMsgSend(
 
   const existing = state.messages.get(msg_id);
   const isDuplicate = existing !== undefined;
+  const isLoopbackSelfSend =
+    existing?.state === "pending" &&
+    existing.from_device_id === config.device_id &&
+    event.from_device_id === config.device_id &&
+    to_device_id === config.device_id;
 
   // Determine if we need to send an ACK:
   // - New message: always ACK
+  // - First loopback delivery for a self-send: ACK so pending can resolve
   // - Genuine retry (higher attempt_id): re-ACK in case previous ACK was lost
   // - Replayed duplicate (same attempt_id from SSE reconnect): skip ACK to avoid
   //   burning through ntfy message limits
-  const shouldAck = !isDuplicate || (isDuplicate && attempt_id > existing.last_attempt_id);
+  const shouldAck = !isDuplicate || isLoopbackSelfSend || (isDuplicate && attempt_id > existing.last_attempt_id);
 
   if (!isDuplicate) {
     // Store new message as received
@@ -158,8 +165,12 @@ function handleMsgSend(
   }
 
   // Look up sender device to find their topic for the ack
-  const senderDevice = state.devices.get(event.from_device_id);
-  if (!senderDevice) {
+  const senderTopic =
+    event.from_device_id === config.device_id
+      ? deviceTopicFromConfig(config)
+      : state.devices.get(event.from_device_id)?.device_topic;
+
+  if (!senderTopic) {
     return {
       effects: [{
         type: "log",
@@ -168,7 +179,7 @@ function handleMsgSend(
     };
   }
 
-  const ack = createMsgReceived(config, msg_id, event.from_device_id, senderDevice.device_topic);
+  const ack = createMsgReceived(config, msg_id, event.from_device_id, senderTopic);
 
   return {
     effects: [{ type: "publish", topic: ack.topic, event: ack.event }],

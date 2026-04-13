@@ -49,6 +49,23 @@ function deviceAnnounce(overrides: Record<string, unknown> = {}) {
 }
 
 describe("relay core in memory mode (no postgres)", () => {
+  it("answers CORS preflight for browser publish requests", async () => {
+    const handler = createRelayHandler(new InMemoryStore());
+    const res = await handler(new Request("http://relay.local/topic-a", {
+      method: "OPTIONS",
+      headers: {
+        origin: "http://localhost:5173",
+        "access-control-request-method": "POST",
+        "access-control-request-headers": "content-type",
+      },
+    }));
+
+    expect(res.status).toBe(204);
+    expect(res.headers.get("access-control-allow-origin")).toBe("*");
+    expect(res.headers.get("access-control-allow-methods")).toContain("POST");
+    expect(res.headers.get("access-control-allow-headers")).toContain("content-type");
+  });
+
   it("serves health and reports memory store", async () => {
     const handler = createRelayHandler(new InMemoryStore());
     const res = await handler(new Request("http://relay.local/health"));
