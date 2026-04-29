@@ -1,4 +1,4 @@
-# RemoteStorage + ntfy Architecture Plan
+# RemoteStorage + ntfy Architecture
 
 ## Overview
 
@@ -7,7 +7,7 @@ Two-layer architecture:
 - **RemoteStorage (RS)** — source of truth for all persistent state: devices, messages, settings. Required.
 - **ntfy** — real-time event delivery and VAPID push wakeup for mobile PWA background notifications. Required.
 
-Both are required. Neither is optional.
+Both layers are required. RS is the durable store; ntfy is the fast path. If ntfy is unavailable, messages are never lost — they're in RS and will be picked up on the next poll.
 
 ---
 
@@ -27,7 +27,7 @@ network_secret: random 32-byte value, generated on first device setup, stored in
 2. App checks RS settings for an existing `network_secret`
 3. If none found: generate a random `network_secret`, write to RS settings
 4. Derive `network_id` from `hmac(rs_user, network_secret)`
-5. ntfy topics are derived from `network_id` as before
+5. ntfy topics are derived from `network_id`
 
 ### Subsequent devices
 
@@ -48,7 +48,7 @@ If the user connects a different RS account, the `network_id` will change — th
 Encryption is opt-in per network. When enabled, message bodies are encrypted before being written to RS or sent via ntfy.
 
 ```
-encryption_key: derived from network_secret via PBKDF2
+encryption_key: derived from network_secret via HKDF-SHA256
 ```
 
 Stored as a flag in RS settings (`encryption_enabled: true/false`). All devices on the network share the same encryption state. Either all messages are encrypted or none are.
@@ -125,7 +125,7 @@ Generated once by the first device. Read by all subsequent devices after OAuth. 
 2. A POSTs full `msg.send` event to B's ntfy device topic (body encrypted if enabled)
 3. ntfy delivers VAPID push to B's browser/SW (even on locked phone)
 4. B's SW receives push with full message payload — shows notification immediately, no RS fetch needed
-5. B's SW writes `state: "received"` to RS (see SW auth note below)
+5. B's SW writes `state: "received"` to RS via raw HTTP PUT (see SW auth note below)
 6. A sees receipt on next RS poll (adaptive: one-shot at +20s, then back to standard interval)
 
 ### Message deduplication
@@ -142,11 +142,74 @@ If B receives the same message via both ntfy SSE (tab open) and RS poll:
 
 ---
 
+## Background Delivery
+
+Background delivery is the most important correctness requirement for a mobile messaging app. Three independent mechanisms stack on each other so the failure of any one still delivers the message.
+
+### Path 1 — ntfy VAPID push (real-time)
+
+The primary path. When the sender publishes `msg.send` to ntfy, ntfy delivers a Web Push (VAPID) notification to the recipient's browser/SW even if the screen is locked and the tab is closed.
+
+- SW `push` event fires with full `msg.send` payload embedded in the push data
+- SW builds `MessageRecord`, writes it to RS via raw HTTP PUT using bearer token from IDB
+- SW calls `showNotification()` immediately — no RS fetch needed
+- SW records the `msg_id` in a local notified-ID set (IDB) to prevent duplicate notifications from the other paths
+
+**Requires:** ntfy server running + VAPID keys configured, notification permission granted.
+
+### Path 2 — Background Sync on reconnect
+
+When the device was offline and its network connection restores, the browser fires the `sync` event to the SW. The SW calls `swFetchNewMessages()`:
+
+1. Read RS bearer token + `{networkId, deviceId}` from IDB
+2. `GET /linkhop/{networkId}/messages/` → directory listing of all message IDs
+3. Filter out IDs already in the local notified set
+4. Fetch each remaining message record individually
+5. Show a notification for any message addressed to this device with `state !== "viewed"`
+6. Add all fetched IDs to the notified set
+
+**Requires:** RS reachable when sync fires. Fires automatically on reconnect — no user action needed.
+
+### Path 3 — Periodic Background Sync (scheduled)
+
+For installed PWAs on Chrome Android, the browser fires `periodicsync` on a schedule. The SW performs the same `swFetchNewMessages()` poll as Path 2.
+
+Registered with `minInterval = poll_interval_seconds` (default 600s / 10 min). The browser may fire it less frequently for low-engagement apps, but it provides a guaranteed floor independent of ntfy.
+
+**Requires:** PWA installed to home screen, Chrome Android, notification permission granted.
+
+### What happens when ntfy goes down
+
+| ntfy state | Delivery path |
+|---|---|
+| ntfy up | Path 1 (real-time push), dedup prevents 2/3 from duplicating |
+| ntfy down | Paths 2 and 3 still deliver via RS poll |
+| ntfy down, device offline | Message sits in RS; Path 2 fires when connectivity returns |
+| ntfy message > 12h old | ntfy purges retained message; RS still has it; Paths 2/3 deliver |
+
+The key invariant: the sender always writes to RS first. Even if ntfy publish fails immediately after, the message is durably stored and will be found by the next poll.
+
+### Platform support
+
+| Platform | Push support | Periodic sync | Notes |
+|---|---|---|---|
+| Android Chrome (installed PWA) | Yes | Yes | Full coverage via all 3 paths |
+| Android Chrome (browser tab) | Yes | No | Paths 1 + 2 |
+| iOS 16.4+ (added to home screen) | Yes | No | Paths 1 + 2 |
+| iOS Safari (browser tab) | No | No | Foreground only; messages on next app open |
+| Desktop Chrome/Firefox | Yes | No | Paths 1 + 2 |
+
+iOS without home screen installation has no background delivery. This is a platform limitation and cannot be worked around without a native app.
+
+---
+
 ## Service Worker RS Access
 
-The service worker (SW) runs in a separate context and cannot use the remotestorage.js library. When a VAPID push wakes the SW on a locked phone, the SW needs to write `state: "received"` to RS via a plain HTTP PUT request.
+The SW runs in a separate context and cannot use the remotestorage.js library (it depends on DOM APIs). When a VAPID push wakes the SW, it needs to write to RS via plain HTTP.
 
-The app stores the RS bearer token and server URL in a small IndexedDB store whenever it receives or refreshes an RS token. The SW reads from this store when handling push events. This is an internal implementation detail.
+The app stores the RS bearer token and server URL in IDB (`rs_token` key in `config` store) whenever remotestorage.js issues or refreshes a token. It also stores `{networkId, deviceId}` in IDB (`rs_config` key) after each successful RS connection.
+
+The SW reads both IDB keys when handling push events, background sync, and periodic sync.
 
 ---
 
@@ -196,121 +259,81 @@ RS credentials (bearer token, server URL) are managed by the remotestorage.js li
 
 ---
 
-## Mobile PWA Background Coverage
-
-| Scenario | Mechanism |
-|---|---|
-| Tab open, in foreground | ntfy SSE (real-time) + RS change listener |
-| Tab open, browser backgrounded | ntfy SSE still alive |
-| PWA installed, app closed | ntfy VAPID push → SW shows notification, writes receipt to RS via HTTP |
-| Phone locked | ntfy VAPID push → SW wakes, shows notification |
-| Offline < 12h, then reconnects | ntfy delivers retained wake, RS has full content |
-| Offline > 12h, then reconnects | ntfy wake expired — app startup reads RS, catches all missed messages |
-| Sender goes offline mid-send | Background Sync API queues RS write + ntfy POST for when connectivity returns |
-| ntfy temporarily unreachable | Message still in RS; receiver sees it on next 10 min poll |
-
-iOS 16.4+ requires the PWA to be added to the home screen for VAPID push to work. Android works with any installed PWA with notification permission granted.
-
----
-
 ## Implementation Checklist
 
 ### Dependencies
-
-- [ ] Add `remotestoragejs` to `package.json`
+- [x] Add `remotestoragejs` to `package.json`
 
 ### Network identity (`src/protocol/network.ts`)
+- [x] Replace passphrase-based `network_id` derivation with `hmac(rs_user, network_secret)`
+- [x] Add `generateNetworkSecret()` — random 32-byte base64 value
 
-- [ ] Replace passphrase-based `network_id` derivation with `hmac(rs_user, network_secret)`
-- [ ] Add `generateNetworkSecret()` — random 32-byte base64 value
+### RS module (`web/src/rs.ts`)
+- [x] RS connect/OAuth flow using remotestorage.js
+- [x] On connect: check for existing `network_secret`; generate and write if absent
+- [x] `getSettings()` / `saveSettings()` with defaults fallback
+- [x] `upsertDevice()` / `markDeviceRemoved()` / `listDevices()`
+- [x] `upsertMessage()` / `listMessages()` / `updateMessageState()`
+- [x] `cullMessages(cull_days)`
+- [x] `onChange()` — RS change listener for real-time updates when tab open
+- [x] On RS token issue/refresh: write bearer token + server URL to IDB for SW use
 
-### RS module (`web/src/rs.ts`) — new file
-
-- [ ] RS connect/OAuth flow using remotestorage.js widget
-- [ ] On connect: check for existing `network_secret` in settings; generate and write if absent
-- [ ] `getSettings()` / `saveSettings()` with defaults fallback
-- [ ] `getDevice(deviceId)` / `upsertDevice(record)` / `markDeviceRemoved(deviceId)`
-- [ ] `listDevices()` — returns all non-removed device records
-- [ ] `getMessage(msgId)` / `upsertMessage(record)`
-- [ ] `listMessages()` — returns all messages within cull window
-- [ ] `cullMessages(cull_days)` — deletes messages older than `cull_days`, called on each write
-- [ ] `onChange(callback)` — RS change listener for real-time updates when tab open
-- [ ] On RS token issue/refresh: write RS bearer token + server URL to dedicated IDB key for SW use
-
-### SW RS client (`web/src/rs-sw.ts`) — new file
-
-- [ ] `swReadRSToken()` — reads RS bearer token and base URL from IDB
-- [ ] `swPutMessage(record)` — raw HTTP PUT to RS API with bearer token (for SW context only)
+### SW RS client (`web/src/rs-sw.ts`)
+- [x] `loadRSToken()` — reads RS bearer token and base URL from IDB
+- [x] `swPutMessage()` — raw HTTP PUT to RS (for SW push handler)
+- [x] `loadRSConfig()` — reads `{networkId, deviceId}` from IDB
+- [x] `swFetchNewMessages()` — polls RS directory, fetches unread messages for this device
+- [x] Notified-ID set in IDB — prevents duplicate notifications across all three delivery paths
 
 ### Encryption (`src/protocol/crypto.ts`)
-
-- [ ] Add `deriveEncryptionKey(network_secret)` via PBKDF2
-- [ ] Make encrypt/decrypt functions accept the derived key
-- [ ] Only encrypt/decrypt message body — not metadata
+- [x] `deriveEncryptionKey(network_secret)` via HKDF-SHA256
+- [x] Encrypt/decrypt message body only — not metadata
 
 ### Protocol types (`src/protocol/types.ts`)
-
-- [ ] Remove `DeviceHeartbeatPayload` and `DeviceHeartbeatEvent`
-- [ ] Remove `SyncRequestPayload`, `SyncResponsePayload`, `SyncRequestEvent`, `SyncResponseEvent`
-- [ ] Remove `"device.heartbeat"`, `"sync.request"`, `"sync.response"` from `EventType`
-- [ ] Replace `network_id` + passphrase in `DeviceConfig` with `rs_user` + derived `network_id`
+- [x] Remove heartbeat, sync, and msg.received event types
+- [x] Add `rs_user` to `DeviceConfig`; remove passphrase fields
 
 ### Actions (`src/engine/actions.ts`)
-
-- [ ] `actionAnnounce` — write to RS + publish ntfy `device.announce`
-- [ ] `actionLeave` — write to RS + publish ntfy `device.leave`
-- [ ] Remove `actionHeartbeat`
-- [ ] Remove `actionSyncRequest`
-- [ ] `actionSend` — encrypt body if enabled, write to RS, publish ntfy `msg.send`
-- [ ] `actionMarkViewed` — update RS `MessageRecord.state` to `"viewed"`
+- [x] `actionAnnounce` — write to RS + publish ntfy `device.announce`
+- [x] `actionLeave` — write to RS + publish ntfy `device.leave`
+- [x] `actionSend` — write to RS first, then publish ntfy `msg.send`
+- [x] `actionMarkViewed` — update RS `MessageRecord.state` to `"viewed"`
+- [x] Remove `actionHeartbeat`, `actionSyncRequest`
 
 ### Reducer (`src/engine/reducer.ts`)
+- [x] Remove heartbeat, sync, msg.received cases
+- [x] Dedup guard: skip `msg.send` if `msg_id` already in state
+- [x] Return `newMessage: boolean` flag for caller to handle RS write + notification
 
-- [ ] Remove `device.heartbeat` case
-- [ ] Remove `sync.request` / `sync.response` cases
-- [ ] Add dedup guard: skip `msg.send` if `msg_id` already in state
-- [ ] Decrypt message body on receive if encryption enabled
-
-### App startup (`web/src/app.ts`)
-
-- [ ] On startup: connect RS (trigger OAuth if no token), read settings, derive `network_id`
-- [ ] Detect RS user change: if `rs_user` differs from stored value, warn user before continuing
-- [ ] Read all devices and messages from RS before subscribing to ntfy SSE
-- [ ] Subscribe to ntfy registry topic for `device.announce` and `device.leave`
-- [ ] Subscribe to own ntfy device topic for incoming `msg.send`
-- [ ] Wire RS `onChange` listener to update state while tab open
-- [ ] Implement standard poll loop (interval from RS settings, default 600s)
-- [ ] Implement adaptive poll: one-shot +20s poll after sending a message
+### App (`web/src/app.ts`)
+- [x] On startup: connect RS, read settings, derive `network_id`
+- [x] Detect RS user change: warn before continuing
+- [x] Read devices and messages from RS before subscribing to ntfy SSE
+- [x] Wire RS `onChange` listener for live updates when tab open
+- [x] Standard poll loop (interval from RS settings, default 600s)
+- [x] Adaptive poll: one-shot +20s after sending
+- [x] Save `RSConfig` to IDB after connect so SW has networkId/deviceId for background poll
+- [x] Register Periodic Background Sync with `minInterval = poll_interval_seconds`
 
 ### Service worker (`web/src/sw.ts`)
-
-- [ ] On `push` event: extract full `msg.send` payload from ntfy push
-- [ ] Decrypt message body if encryption enabled (read key from IDB)
-- [ ] Write received message to RS via `swPutMessage()` (`state: "received"`)
-- [ ] Show notification with message content immediately
-- [ ] On `sync` event (Background Sync): retry pending RS write + ntfy POST for queued outbound messages
+- [x] `push` event: extract full `msg.send` payload, write receipt to RS, show notification
+- [x] Mark `msg_id` as notified in IDB after push notification to prevent duplicates
+- [x] `sync` event: call `swFetchNewMessages()` + show notifications for new messages
+- [x] `periodicsync` event: same as sync — scheduled background RS poll
 
 ### Local persistence (`web/src/db.ts`)
-
-- [ ] Remove `devices` and `messages` IDB stores — RS is now the store
-- [ ] Keep `config` store for `DeviceConfig` (including `rs_user`, `network_id`)
-- [ ] Add `rs_token` IDB store: `{ url: string, token: string }` — written by app, read by SW
-- [ ] Keep or remove `eventLog` store (debug use only)
+- [x] Remove `devices`, `messages`, `eventLog` IDB stores (IDB v2 migration)
+- [x] Keep `config` store; add `rs_token` and `rs_config` keys for SW use
 
 ### Settings UI
-
 - [ ] RS connect screen: remotestorage.js OAuth widget
 - [ ] Show RS connection status and connected RS user
 - [ ] Warn prominently if RS user changes from previously stored value
 - [ ] Expose `poll_interval_seconds` and `message_cull_days` as editable fields
-- [ ] Expose `encryption_enabled` toggle (warn that changing affects all devices on the network)
+- [ ] Expose `encryption_enabled` toggle
 
 ### Cleanup
-
-- [ ] Remove `src/cli/` — out of scope
-- [ ] Remove `src/engine/relay.ts`
-- [ ] Remove `src/relay/core.ts` `RelayStore` interface
-- [ ] Remove Cloudflare Workers relay (`workers/`)
-- [ ] Remove Supabase relay (`supabase/`)
-- [ ] Remove passphrase-based `network_id` derivation from `src/protocol/network.ts`
-- [ ] Remove `actionHeartbeat` and all call sites
+- [x] Remove `src/cli/`
+- [x] Remove relay backends (Cloudflare Workers, Supabase, Deno)
+- [x] Remove passphrase-based `network_id` derivation
+- [x] Remove `actionHeartbeat` and all call sites
