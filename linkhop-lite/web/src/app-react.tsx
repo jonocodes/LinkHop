@@ -83,14 +83,8 @@ export function App() {
 
   const renderStatus = () => {
     const status = app.connection;
-    const dot = document.getElementById("status-dot");
-    const text = document.getElementById("status-text");
-    const banner = document.getElementById("offline-banner");
-
     const label = status === "connected" ? "Connected" : status === "connecting" ? "Reconnecting..." : "Disconnected";
-    const poolSuffix = app.pool ? ` @ ${app.pool}` : "";
-    const deviceInfo = app.config ? ` · ${app.config.device_name}${poolSuffix}` : "";
-
+    const deviceInfo = app.config ? ` · ${app.config.device_name}` : "";
     return { label, deviceInfo, status };
   };
 
@@ -306,28 +300,103 @@ export function App() {
   };
 
   const renderSettings = () => {
-    const on = app.encryptionEnabled && app.encryptionKey !== null;
-    const hasKey = app.encryptionKey !== null;
+    const encOn = app.encryptionEnabled && app.encryptionKey !== null;
+    const rsUser = app.config?.rs_user ?? "—";
+    const pollSec = app.rsSettings.poll_interval_seconds;
+    const cullDays = app.rsSettings.message_cull_days;
 
     return (
       <>
         <div className="settings-section">
+          <div className="settings-label">RemoteStorage</div>
+          <div className="settings-row">
+            <span className="settings-value">{esc(rsUser)}</span>
+            <span className={`rs-status-badge ${app.rsConnected ? "connected" : "disconnected"}`}>
+              {app.rsConnected ? "connected" : "offline"}
+            </span>
+          </div>
+          <div className="settings-hint">Your data is stored in your RS account.</div>
+        </div>
+
+        <div className="settings-section">
           <div className="settings-label">Encryption</div>
           <div className="settings-row">
-            <span>{on ? "Encrypted" : "Plaintext"}</span>
+            <span>{encOn ? "On — messages encrypted" : "Off — plaintext"}</span>
             <button
-              className={`settings-toggle ${on ? "on" : ""}`}
-              id="settings-encrypt-toggle"
-              disabled={!hasKey}
+              className={`settings-toggle ${encOn ? "on" : ""}`}
               onClick={async () => {
                 await app.toggleEncryption();
                 forceUpdate();
               }}
             >
-              {on ? "On" : "Off"}
+              {encOn ? "On" : "Off"}
             </button>
           </div>
-          {!hasKey && <div className="settings-hint">No encryption key (joined without password)</div>}
+          <div className="settings-hint">Encrypts message bodies in RS and on ntfy. Affects all devices.</div>
+        </div>
+
+        <div className="settings-section">
+          <div className="settings-label">Poll interval</div>
+          <div className="settings-row">
+            <input
+              type="number"
+              min={60}
+              max={86400}
+              step={60}
+              className="settings-number-input"
+              defaultValue={pollSec}
+              onBlur={async (e) => {
+                const v = parseInt(e.target.value, 10);
+                if (!isNaN(v) && v >= 60) {
+                  await app.updateRSSettings({ poll_interval_seconds: v });
+                  forceUpdate();
+                }
+              }}
+            />
+            <span className="settings-unit">seconds</span>
+          </div>
+          <div className="settings-hint">How often to poll RemoteStorage for missed messages. Default: 600 (10 min).</div>
+        </div>
+
+        <div className="settings-section">
+          <div className="settings-label">Message retention</div>
+          <div className="settings-row">
+            <input
+              type="number"
+              min={1}
+              max={365}
+              className="settings-number-input"
+              defaultValue={cullDays}
+              onBlur={async (e) => {
+                const v = parseInt(e.target.value, 10);
+                if (!isNaN(v) && v >= 1) {
+                  await app.updateRSSettings({ message_cull_days: v });
+                  forceUpdate();
+                }
+              }}
+            />
+            <span className="settings-unit">days</span>
+          </div>
+          <div className="settings-hint">Messages older than this are deleted from RemoteStorage. Default: 30.</div>
+        </div>
+
+        <div className="settings-section">
+          <div className="settings-label">ntfy server</div>
+          <div className="settings-row settings-row-input">
+            <input
+              type="url"
+              className="settings-url-input"
+              defaultValue={app.ntfyUrl}
+              onBlur={async (e) => {
+                const v = e.target.value.trim();
+                if (v && v !== app.ntfyUrl) {
+                  await app.updateNtfyUrl(v);
+                  forceUpdate();
+                }
+              }}
+            />
+          </div>
+          <div className="settings-hint">Real-time delivery and push notifications.</div>
         </div>
 
         <div className="settings-section">
@@ -344,17 +413,12 @@ export function App() {
               {app.selfSendEnabled ? "On" : "Off"}
             </button>
           </div>
-          <div className="settings-hint">Send messages to yourself through the relay (useful for testing)</div>
-        </div>
-
-        <div className="settings-section">
-          <div className="settings-label">Server</div>
-          <div className="settings-hint">{esc(app.transportUrl)}</div>
+          <div className="settings-hint">Allow sending messages to this device (useful for testing).</div>
         </div>
 
         <div className="settings-section">
           <button className="secondary" onClick={() => setShowDebug(true)}>
-            View Debug Info
+            Debug info
           </button>
         </div>
 
@@ -394,13 +458,14 @@ export function App() {
         </div>
         {app.config && (
           <div className="debug-section">
-            <div className="debug-title">Device Config</div>
+            <div className="debug-title">Device</div>
             <pre className="debug-pre">
               {JSON.stringify(
                 {
                   device_id: app.config.device_id,
                   device_name: app.config.device_name,
                   network_id: app.config.network_id,
+                  rs_user: app.config.rs_user,
                   env: app.config.env,
                 },
                 null,
@@ -415,12 +480,12 @@ export function App() {
             {JSON.stringify(
               {
                 connection: app.connection,
-                transport_kind: app.transportKind,
-                transport_url: app.transportUrl,
+                rs_connected: app.rsConnected,
+                ntfy_url: app.ntfyUrl,
                 encryption_enabled: app.encryptionEnabled,
                 has_encryption_key: app.encryptionKey !== null,
-                periodic_update: app.periodicUpdate,
-                background_heartbeat: app.backgroundHeartbeat,
+                poll_interval_seconds: app.rsSettings.poll_interval_seconds,
+                message_cull_days: app.rsSettings.message_cull_days,
               },
               null,
               2
@@ -429,14 +494,14 @@ export function App() {
         </div>
         {app.config && (
           <div className="debug-section">
-            <div className="debug-title">Topics</div>
+            <div className="debug-title">ntfy Topics</div>
             <div className="debug-topic-row">
               <span className="debug-topic-label">registry</span>
               <a
                 className="debug-topic-link"
-                href={`${app.transportUrl}/${esc(registryTopicFromConfig(app.config))}`}
+                href={`${app.ntfyUrl}/${esc(registryTopicFromConfig(app.config))}`}
                 target="_blank"
-                rel="noopener"
+                rel="noopener noreferrer"
               >
                 {esc(registryTopicFromConfig(app.config))}
               </a>
@@ -445,33 +510,15 @@ export function App() {
               <span className="debug-topic-label">device</span>
               <a
                 className="debug-topic-link"
-                href={`${app.transportUrl}/${esc(deviceTopicFromConfig(app.config))}`}
+                href={`${app.ntfyUrl}/${esc(deviceTopicFromConfig(app.config))}`}
                 target="_blank"
-                rel="noopener"
+                rel="noopener noreferrer"
               >
                 {esc(deviceTopicFromConfig(app.config))}
               </a>
             </div>
           </div>
         )}
-        <div className="debug-section">
-          <div className="debug-title">Event Log (last {Math.min(app.state.eventLog.length, 50)})</div>
-          {app.state.eventLog.length === 0 ? (
-            <div className="empty-state">No events recorded yet.</div>
-          ) : (
-            app.state.eventLog
-              .slice(-50)
-              .reverse()
-              .map((e) => (
-                <div key={e.event_id} className="debug-event">
-                  <span className="debug-event-type">{esc(e.type)}</span>
-                  <span className="debug-event-dir">{e.direction}</span>
-                  <span className="debug-event-from">{esc(e.from_device_id)}</span>
-                  <span className="debug-event-time">{formatTime(e.timestamp)}</span>
-                </div>
-              ))
-          )}
-        </div>
       </>
     );
   };
