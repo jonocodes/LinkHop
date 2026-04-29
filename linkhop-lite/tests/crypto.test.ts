@@ -1,73 +1,57 @@
 import { describe, it, expect } from "vitest";
 import { deriveEncryptionKey, encryptBody, decryptBody } from "../src/protocol/crypto.js";
+import { generateNetworkSecret } from "../src/protocol/network.js";
 
 describe("deriveEncryptionKey", () => {
-  it("derives a CryptoKey from pool+password", async () => {
-    const key = await deriveEncryptionKey("pool", "test-password");
+  it("derives a CryptoKey from a network secret", async () => {
+    const key = await deriveEncryptionKey(generateNetworkSecret());
     expect(key).toBeDefined();
     expect(key.type).toBe("secret");
     expect(key.algorithm).toMatchObject({ name: "AES-GCM", length: 256 });
   });
 
-  it("same pool+password produces equivalent keys", async () => {
-    const key1 = await deriveEncryptionKey("pool", "same-password");
-    const key2 = await deriveEncryptionKey("pool", "same-password");
-    // Encrypt with key1, decrypt with key2 — should work
+  it("same networkSecret produces equivalent keys (round-trip)", async () => {
+    const secret = generateNetworkSecret();
+    const key1 = await deriveEncryptionKey(secret);
+    const key2 = await deriveEncryptionKey(secret);
     const { ciphertext, iv } = await encryptBody(key1, "hello");
-    const result = await decryptBody(key2, ciphertext, iv);
-    expect(result).toBe("hello");
+    expect(await decryptBody(key2, ciphertext, iv)).toBe("hello");
   });
 
-  it("different passwords produce different keys", async () => {
-    const key1 = await deriveEncryptionKey("pool", "password-a");
-    const key2 = await deriveEncryptionKey("pool", "password-b");
+  it("different secrets produce different keys", async () => {
+    const key1 = await deriveEncryptionKey(generateNetworkSecret());
+    const key2 = await deriveEncryptionKey(generateNetworkSecret());
     const { ciphertext, iv } = await encryptBody(key1, "secret");
-    const result = await decryptBody(key2, ciphertext, iv);
-    expect(result).toBeNull();
-  });
-
-  it("different pools with same password produce different keys", async () => {
-    const key1 = await deriveEncryptionKey("alice", "same-password");
-    const key2 = await deriveEncryptionKey("bob", "same-password");
-    const { ciphertext, iv } = await encryptBody(key1, "secret");
-    const result = await decryptBody(key2, ciphertext, iv);
-    expect(result).toBeNull();
+    expect(await decryptBody(key2, ciphertext, iv)).toBeNull();
   });
 });
 
 describe("encryptBody / decryptBody", () => {
-  it("round-trips plaintext through encrypt then decrypt", async () => {
-    const key = await deriveEncryptionKey("pool", "round-trip");
+  it("round-trips plaintext", async () => {
+    const key = await deriveEncryptionKey(generateNetworkSecret());
     const plain = JSON.stringify({ kind: "text", text: "hello world" });
     const { ciphertext, iv } = await encryptBody(key, plain);
-    expect(ciphertext).toBeTruthy();
-    expect(iv).toBeTruthy();
     expect(ciphertext).not.toBe(plain);
-
-    const result = await decryptBody(key, ciphertext, iv);
-    expect(result).toBe(plain);
+    expect(await decryptBody(key, ciphertext, iv)).toBe(plain);
   });
 
   it("produces different ciphertext each time (random IV)", async () => {
-    const key = await deriveEncryptionKey("pool", "iv-test");
-    const plain = "same message";
-    const a = await encryptBody(key, plain);
-    const b = await encryptBody(key, plain);
+    const key = await deriveEncryptionKey(generateNetworkSecret());
+    const a = await encryptBody(key, "same message");
+    const b = await encryptBody(key, "same message");
     expect(a.ciphertext).not.toBe(b.ciphertext);
     expect(a.iv).not.toBe(b.iv);
   });
 
   it("returns null for corrupted ciphertext", async () => {
-    const key = await deriveEncryptionKey("pool", "corrupt-test");
-    const result = await decryptBody(key, "not-valid-base64!!", "AAAAAAAAAAAAAAAA");
-    expect(result).toBeNull();
+    const key = await deriveEncryptionKey(generateNetworkSecret());
+    expect(await decryptBody(key, "not-valid-base64!!", "AAAAAAAAAAAAAAAA")).toBeNull();
   });
 
   it("returns null for wrong key", async () => {
-    const keyA = await deriveEncryptionKey("pool", "key-a");
-    const keyB = await deriveEncryptionKey("pool", "key-b");
+    const keyA = await deriveEncryptionKey(generateNetworkSecret());
+    const keyB = await deriveEncryptionKey(generateNetworkSecret());
     const { ciphertext, iv } = await encryptBody(keyA, "secret data");
-    const result = await decryptBody(keyB, ciphertext, iv);
-    expect(result).toBeNull();
+    expect(await decryptBody(keyB, ciphertext, iv)).toBeNull();
   });
 });

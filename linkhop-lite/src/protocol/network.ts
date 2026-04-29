@@ -1,38 +1,35 @@
-const SALT_PREFIX = "linkhop-lite-network-v1:";
-const ITERATIONS = 100_000;
-const KEY_BYTES = 6;
+const HMAC_LABEL = "linkhop:network-id-v2";
+const ID_BYTES = 6;
 
 /**
- * Derive a stable network_id from a pool name and shared password.
- * Uses PBKDF2 via Web Crypto — works in browser and Bun/Node.
- *
- * Same pool+password always produces the same network_id.
- * Different pool or password produces different network_ids.
+ * Derive a stable network_id from the RS user address and the network secret.
+ * Uses HMAC-SHA-256 — same inputs always produce the same network_id.
  */
-export async function deriveNetworkId(pool: string, password: string): Promise<string> {
+export async function deriveNetworkId(rsUser: string, networkSecret: string): Promise<string> {
   const encoder = new TextEncoder();
-  const keyMaterial = await crypto.subtle.importKey(
+  const key = await crypto.subtle.importKey(
     "raw",
-    encoder.encode(password),
-    "PBKDF2",
+    encoder.encode(networkSecret),
+    { name: "HMAC", hash: "SHA-256" },
     false,
-    ["deriveBits"],
+    ["sign"],
   );
-
-  const bits = await crypto.subtle.deriveBits(
-    {
-      name: "PBKDF2",
-      salt: encoder.encode(SALT_PREFIX + pool),
-      iterations: ITERATIONS,
-      hash: "SHA-256",
-    },
-    keyMaterial,
-    KEY_BYTES * 8,
+  const sig = await crypto.subtle.sign(
+    "HMAC",
+    key,
+    encoder.encode(HMAC_LABEL + ":" + rsUser),
   );
-
-  const hex = [...new Uint8Array(bits)]
+  const hex = [...new Uint8Array(sig)]
+    .slice(0, ID_BYTES)
     .map((b) => b.toString(16).padStart(2, "0"))
     .join("");
-
   return `net_${hex}`;
+}
+
+/** Generate a random 32-byte base64 network secret for first-time setup. */
+export function generateNetworkSecret(): string {
+  const bytes = crypto.getRandomValues(new Uint8Array(32));
+  let binary = "";
+  for (const b of bytes) binary += String.fromCharCode(b);
+  return btoa(binary);
 }

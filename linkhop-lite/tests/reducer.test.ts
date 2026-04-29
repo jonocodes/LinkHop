@@ -7,59 +7,38 @@ import {
   makeConfig,
   makePeerConfig,
   makeAnnounce,
-  makeHeartbeat,
   makeLeave,
   makeMsgSend,
-  makeMsgReceived,
-  makeSyncRequest,
-  makeSyncResponse,
   resetIds,
 } from "./helpers.js";
-import { deviceTopic } from "../src/protocol/topics.js";
 
 const localConfig = makeConfig();
 const peerConfig = makePeerConfig();
 
-function peerTopic(): string {
-  return deviceTopic(peerConfig.env, peerConfig.network_id, peerConfig.device_id);
-}
-
-function selfTopic(): string {
-  return deviceTopic(localConfig.env, localConfig.network_id, localConfig.device_id);
-}
-
 describe("device.announce handling", () => {
   let state: LocalState;
 
-  beforeEach(() => {
-    resetIds();
-    state = createEmptyState();
-  });
+  beforeEach(() => { resetIds(); state = createEmptyState(); });
 
   it("creates a device record from announce", () => {
-    const event = makeAnnounce(peerConfig);
-    processEvent(state, event, localConfig);
-
+    processEvent(state, makeAnnounce(peerConfig), localConfig);
     const dev = getDevice(state, peerConfig.device_id);
     expect(dev).toBeDefined();
     expect(dev!.device_name).toBe("Peer Device");
-    expect(dev!.device_topic).toBe(peerTopic());
     expect(dev!.is_removed).toBe(false);
     expect(dev!.last_event_type).toBe("device.announce");
   });
 
-  it("updates device record on re-announce", () => {
+  it("updates device record on re-announce with newer timestamp", () => {
     processEvent(state, makeAnnounce(peerConfig, "2026-04-04T18:00:00Z"), localConfig);
+    processEvent(state, makeAnnounce({ ...peerConfig, device_name: "New Name" }, "2026-04-04T18:05:00Z"), localConfig);
+    expect(getDevice(state, peerConfig.device_id)!.device_name).toBe("New Name");
+  });
 
-    const renamed = makeAnnounce(
-      { ...peerConfig, device_name: "New Name" },
-      "2026-04-04T18:05:00Z",
-    );
-    processEvent(state, renamed, localConfig);
-
-    const dev = getDevice(state, peerConfig.device_id);
-    expect(dev!.device_name).toBe("New Name");
-    expect(dev!.last_event_at).toBe("2026-04-04T18:05:00Z");
+  it("ignores older re-announce", () => {
+    processEvent(state, makeAnnounce(peerConfig, "2026-04-04T18:05:00Z"), localConfig);
+    processEvent(state, makeAnnounce({ ...peerConfig, device_name: "Old Name" }, "2026-04-04T18:00:00Z"), localConfig);
+    expect(getDevice(state, peerConfig.device_id)!.device_name).toBe("Peer Device");
   });
 
   it("clears is_removed on re-announce after leave", () => {
@@ -75,73 +54,23 @@ describe("device.announce handling", () => {
 describe("device.leave handling", () => {
   let state: LocalState;
 
-  beforeEach(() => {
-    resetIds();
-    state = createEmptyState();
-  });
+  beforeEach(() => { resetIds(); state = createEmptyState(); });
 
   it("marks device as removed", () => {
     processEvent(state, makeAnnounce(peerConfig), localConfig);
     processEvent(state, makeLeave(peerConfig), localConfig);
-
     const dev = getDevice(state, peerConfig.device_id);
     expect(dev!.is_removed).toBe(true);
     expect(dev!.last_event_type).toBe("device.leave");
   });
 });
 
-describe("device.heartbeat handling", () => {
-  let state: LocalState;
-
-  beforeEach(() => {
-    resetIds();
-    state = createEmptyState();
-    processEvent(state, makeAnnounce(peerConfig), localConfig);
-  });
-
-  it("updates last_event_at on known device", () => {
-    const hb = makeHeartbeat(peerConfig, "2026-04-04T19:00:00Z");
-    processEvent(state, hb, localConfig);
-
-    const dev = getDevice(state, peerConfig.device_id);
-    expect(dev!.last_event_at).toBe("2026-04-04T19:00:00Z");
-    expect(dev!.last_event_type).toBe("device.heartbeat");
-  });
-
-  it("does not create a record for unknown device", () => {
-    const unknownConfig = makePeerConfig({ device_id: "dev_unknown" });
-    const hb = makeHeartbeat(unknownConfig);
-    processEvent(state, hb, localConfig);
-
-    expect(getDevice(state, "dev_unknown")).toBeUndefined();
-  });
-
-  it("does not revive a removed device", () => {
-    processEvent(state, makeLeave(peerConfig), localConfig);
-    const hb = makeHeartbeat(peerConfig, "2026-04-04T19:00:00Z");
-    processEvent(state, hb, localConfig);
-
-    expect(getDevice(state, peerConfig.device_id)!.is_removed).toBe(true);
-  });
-
-  it("does not add to event log", () => {
-    const logBefore = state.eventLog.length;
-    processEvent(state, makeHeartbeat(peerConfig), localConfig);
-    expect(state.eventLog.length).toBe(logBefore);
-  });
-});
-
 describe("msg.send handling", () => {
   let state: LocalState;
 
-  beforeEach(() => {
-    resetIds();
-    state = createEmptyState();
-    // Peer must be known for ack to work
-    processEvent(state, makeAnnounce(peerConfig), localConfig);
-  });
+  beforeEach(() => { resetIds(); state = createEmptyState(); processEvent(state, makeAnnounce(peerConfig), localConfig); });
 
-  it("stores received message and emits msg.received", () => {
+  it("stores received message and signals newMessage", () => {
     const send = makeMsgSend(peerConfig, localConfig.device_id, { msgId: "msg_001" });
     const result = processEvent(state, send, localConfig);
 
@@ -149,292 +78,49 @@ describe("msg.send handling", () => {
     expect(inbox).toHaveLength(1);
     expect(inbox[0].msg_id).toBe("msg_001");
     expect(inbox[0].state).toBe("received");
-    expect(inbox[0].body.text).toBe("hello");
-
-    // Should produce a publish effect for msg.received
-    const publishes = result.effects.filter((e) => e.type === "publish");
-    expect(publishes).toHaveLength(1);
-    const ackEvent = (publishes[0] as { type: "publish"; event: { type: string } }).event;
-    expect(ackEvent.type).toBe("msg.received");
+    expect(result.newMessage).toBe(true);
+    expect(result.effects).toHaveLength(0); // no ntfy ACK anymore
   });
 
   it("ignores msg.send not addressed to us", () => {
-    const send = makeMsgSend(peerConfig, "dev_other");
-    const result = processEvent(state, send, localConfig);
-
-    const inbox = getInbox(state, localConfig.device_id);
-    expect(inbox).toHaveLength(0);
-    expect(result.effects.some((e) => e.type === "log")).toBe(true);
+    const result = processEvent(state, makeMsgSend(peerConfig, "dev_other"), localConfig);
+    expect(getInbox(state, localConfig.device_id)).toHaveLength(0);
+    expect(result.newMessage).toBe(false);
   });
 
-  it("re-acks on genuine retry with higher attempt_id", () => {
+  it("deduplicates a replayed msg.send (same msg_id)", () => {
     const send1 = makeMsgSend(peerConfig, localConfig.device_id, { msgId: "msg_dup", attemptId: 1 });
-    const send2 = makeMsgSend(peerConfig, localConfig.device_id, {
-      msgId: "msg_dup",
-      attemptId: 2,
-      ts: "2026-04-04T18:15:00Z",
-    });
+    const send2 = makeMsgSend(peerConfig, localConfig.device_id, { msgId: "msg_dup", attemptId: 1 });
 
     processEvent(state, send1, localConfig);
     const result2 = processEvent(state, send2, localConfig);
 
-    // Still only one inbox entry
-    const inbox = getInbox(state, localConfig.device_id);
-    expect(inbox).toHaveLength(1);
-    expect(inbox[0].last_attempt_id).toBe(2);
-
-    // Re-acks because attempt_id increased (genuine retry)
-    const publishes = result2.effects.filter((e) => e.type === "publish");
-    expect(publishes).toHaveLength(1);
+    expect(getInbox(state, localConfig.device_id)).toHaveLength(1);
+    expect(result2.newMessage).toBe(false);
   });
 
-  it("skips ack on replayed duplicate with same attempt_id", () => {
-    const send1 = makeMsgSend(peerConfig, localConfig.device_id, { msgId: "msg_replay", attemptId: 1 });
-    const send2 = makeMsgSend(peerConfig, localConfig.device_id, {
-      msgId: "msg_replay",
-      attemptId: 1,
-      ts: "2026-04-04T18:15:00Z",
-    });
+  it("tracks higher attempt_id on retry but does not create duplicate", () => {
+    const send1 = makeMsgSend(peerConfig, localConfig.device_id, { msgId: "msg_retry", attemptId: 1 });
+    const send2 = makeMsgSend(peerConfig, localConfig.device_id, { msgId: "msg_retry", attemptId: 2 });
 
     processEvent(state, send1, localConfig);
     const result2 = processEvent(state, send2, localConfig);
 
-    // Still only one inbox entry
-    const inbox = getInbox(state, localConfig.device_id);
-    expect(inbox).toHaveLength(1);
-
-    // No ack — this is a replay, not a retry
-    const publishes = result2.effects.filter((e) => e.type === "publish");
-    expect(publishes).toHaveLength(0);
-  });
-
-  it("acks first loopback delivery for self-send", () => {
-    actionSend(state, localConfig, localConfig.device_id, selfTopic(), {
-      kind: "text",
-      text: "note to self",
-    });
-
-    const pending = getPending(state, localConfig.device_id);
-    expect(pending).toHaveLength(1);
-
-    const loopback = makeMsgSend(localConfig, localConfig.device_id, {
-      msgId: pending[0].msg_id,
-      attemptId: pending[0].last_attempt_id,
-    });
-    const result = processEvent(state, loopback, localConfig);
-
-    const publishes = result.effects.filter((e) => e.type === "publish");
-    expect(publishes).toHaveLength(1);
-    const ackEvent = (publishes[0] as { type: "publish"; event: { type: string } }).event;
-    expect(ackEvent.type).toBe("msg.received");
+    expect(getInbox(state, localConfig.device_id)).toHaveLength(1);
+    expect(state.messages.get("msg_retry")!.last_attempt_id).toBe(2);
+    expect(result2.newMessage).toBe(false);
   });
 });
 
-describe("msg.received handling", () => {
-  let state: LocalState;
-
-  beforeEach(() => {
-    resetIds();
-    state = createEmptyState();
-    processEvent(state, makeAnnounce(peerConfig), localConfig);
-  });
-
-  it("clears pending state on ack", () => {
-    // Send a message (creates pending record)
-    actionSend(state, localConfig, peerConfig.device_id, peerTopic(), {
-      kind: "text",
-      text: "outgoing",
-    });
-
-    const pending = getPending(state, localConfig.device_id);
-    expect(pending).toHaveLength(1);
-    const msgId = pending[0].msg_id;
-
-    // Simulate receiving ack
-    const ack = makeMsgReceived(peerConfig, msgId, localConfig.device_id);
-    processEvent(state, ack, localConfig);
-
-    expect(getPending(state, localConfig.device_id)).toHaveLength(0);
-    const msg = state.messages.get(msgId)!;
-    expect(msg.state).toBe("received");
-    expect(msg.received_at).toBe(ack.timestamp);
-  });
-
-  it("ignores ack not addressed to us", () => {
-    actionSend(state, localConfig, peerConfig.device_id, peerTopic(), {
-      kind: "text",
-      text: "outgoing",
-    });
-
-    const pending = getPending(state, localConfig.device_id);
-    const msgId = pending[0].msg_id;
-
-    const ack = makeMsgReceived(peerConfig, msgId, "dev_someone_else");
-    processEvent(state, ack, localConfig);
-
-    // Still pending
-    expect(getPending(state, localConfig.device_id)).toHaveLength(1);
-  });
-});
-
-describe("lost acknowledgement scenario", () => {
-  let state: LocalState;
-
-  beforeEach(() => {
-    resetIds();
-    state = createEmptyState();
-    processEvent(state, makeAnnounce(peerConfig), localConfig);
-  });
-
-  it("sender stays pending until ack arrives", () => {
-    // Sender sends
-    actionSend(state, localConfig, peerConfig.device_id, peerTopic(), {
-      kind: "text",
-      text: "important message",
-    });
-
-    const msgId = getPending(state, localConfig.device_id)[0].msg_id;
-    expect(getPending(state, localConfig.device_id)).toHaveLength(1);
-
-    // Ack is lost... sender retries (not modeled here, but eventually ack arrives)
-    const ack = makeMsgReceived(peerConfig, msgId, localConfig.device_id, "2026-04-04T19:00:00Z");
-    processEvent(state, ack, localConfig);
-
-    expect(getPending(state, localConfig.device_id)).toHaveLength(0);
-  });
-});
-
-describe("sync.request handling", () => {
-  let state: LocalState;
-
-  beforeEach(() => {
-    resetIds();
-    state = createEmptyState();
-    // Both devices must be known
-    processEvent(state, makeAnnounce(localConfig), localConfig);
-    processEvent(state, makeAnnounce(peerConfig), localConfig);
-  });
-
-  it("responds with device list when addressed to us", () => {
-    const req = makeSyncRequest(peerConfig, localConfig.device_id);
-    const result = processEvent(state, req, localConfig);
-
-    const publishes = result.effects.filter((e) => e.type === "publish");
-    expect(publishes).toHaveLength(1);
-    const resp = (publishes[0] as { type: "publish"; event: { type: string; payload: { devices: unknown[] } } }).event;
-    expect(resp.type).toBe("sync.response");
-    expect(resp.payload.devices).toHaveLength(2); // local + peer
-  });
-
-  it("ignores sync.request not addressed to us", () => {
-    const req = makeSyncRequest(peerConfig, "dev_other");
-    const result = processEvent(state, req, localConfig);
-
-    const publishes = result.effects.filter((e) => e.type === "publish");
-    expect(publishes).toHaveLength(0);
-  });
-
-  it("excludes removed devices from response", () => {
-    const thirdConfig = makePeerConfig({ device_id: "dev_third", device_name: "Third" });
-    processEvent(state, makeAnnounce(thirdConfig), localConfig);
-    processEvent(state, makeLeave(thirdConfig), localConfig);
-
-    const req = makeSyncRequest(peerConfig, localConfig.device_id);
-    const result = processEvent(state, req, localConfig);
-
-    const resp = (result.effects.find((e) => e.type === "publish") as { event: { payload: { devices: unknown[] } } }).event;
-    expect(resp.payload.devices).toHaveLength(2); // local + peer, not third
-  });
-});
-
-describe("sync.response handling", () => {
-  let state: LocalState;
-
-  beforeEach(() => {
-    resetIds();
-    state = createEmptyState();
-    processEvent(state, makeAnnounce(peerConfig), localConfig);
-  });
-
-  it("merges new devices into state", () => {
-    const unknownDevice = {
-      device_id: "dev_unknown",
-      device_name: "Unknown Device",
-      device_topic: "topic_unknown",
-      last_event_at: "2026-04-04T17:00:00Z",
-      last_event_type: "device.announce" as const,
-      is_removed: false,
-    };
-    const resp = makeSyncResponse(peerConfig, localConfig.device_id, [unknownDevice]);
-    processEvent(state, resp, localConfig);
-
-    expect(getDevice(state, "dev_unknown")).toBeDefined();
-    expect(getDevice(state, "dev_unknown")!.device_name).toBe("Unknown Device");
-  });
-
-  it("updates device if peer has newer info", () => {
-    // Peer was last seen at 18:00:00 (from announce above)
-    const newerPeer = {
-      device_id: peerConfig.device_id,
-      device_name: "Renamed Peer",
-      device_topic: peerTopic(),
-      last_event_at: "2026-04-04T19:00:00Z",
-      last_event_type: "device.announce" as const,
-      is_removed: false,
-    };
-    const resp = makeSyncResponse(
-      makePeerConfig({ device_id: "dev_other" }),
-      localConfig.device_id,
-      [newerPeer],
-    );
-    processEvent(state, resp, localConfig);
-
-    expect(getDevice(state, peerConfig.device_id)!.device_name).toBe("Renamed Peer");
-  });
-
-  it("does not overwrite with older info", () => {
-    const olderPeer = {
-      device_id: peerConfig.device_id,
-      device_name: "Old Name",
-      device_topic: peerTopic(),
-      last_event_at: "2026-04-04T17:00:00Z",
-      last_event_type: "device.announce" as const,
-      is_removed: false,
-    };
-    const resp = makeSyncResponse(
-      makePeerConfig({ device_id: "dev_other" }),
-      localConfig.device_id,
-      [olderPeer],
-    );
-    processEvent(state, resp, localConfig);
-
-    expect(getDevice(state, peerConfig.device_id)!.device_name).toBe("Peer Device");
-  });
-
-  it("ignores sync.response not addressed to us", () => {
-    const unknownDevice = {
-      device_id: "dev_unknown",
-      device_name: "Unknown",
-      device_topic: "topic_unknown",
-      last_event_at: "2026-04-04T17:00:00Z",
-      last_event_type: "device.announce" as const,
-      is_removed: false,
-    };
-    const resp = makeSyncResponse(peerConfig, "dev_other", [unknownDevice]);
-    processEvent(state, resp, localConfig);
-
-    expect(getDevice(state, "dev_unknown")).toBeUndefined();
-  });
-});
-
-describe("event log", () => {
-  it("records all incoming events", () => {
+describe("actionSend", () => {
+  it("creates a pending outbound message record", () => {
     const state = createEmptyState();
     processEvent(state, makeAnnounce(peerConfig), localConfig);
-    processEvent(state, makeAnnounce(peerConfig, "2026-04-04T18:01:00Z"), localConfig);
-
-    expect(state.eventLog).toHaveLength(2);
-    expect(state.eventLog[0].direction).toBe("incoming");
-    expect(state.eventLog[0].type).toBe("device.announce");
+    actionSend(state, localConfig, peerConfig.device_id, peerConfig.device_topic ?? "topic_peer", {
+      kind: "text",
+      text: "outgoing",
+    });
+    expect(getPending(state, localConfig.device_id)).toHaveLength(1);
+    expect(getPending(state, localConfig.device_id)[0].state).toBe("pending");
   });
 });

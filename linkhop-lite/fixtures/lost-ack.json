@@ -5,7 +5,8 @@
     "device_id": "dev_sender",
     "device_name": "Sender",
     "network_id": "net_test",
-    "env": "test"
+    "env": "test",
+    "rs_user": "test@test.example"
   },
   "initial_state": {
     "devices": [
@@ -24,7 +25,10 @@
       "kind": "action_send",
       "to_device_id": "dev_recipient",
       "to_device_topic": "linkhop-test-net_test-device-dev_recipient",
-      "body": { "kind": "text", "text": "important message" }
+      "body": {
+        "kind": "text",
+        "text": "important message"
+      }
     }
   ],
   "expected": {

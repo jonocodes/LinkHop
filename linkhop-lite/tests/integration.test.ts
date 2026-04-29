@@ -16,6 +16,7 @@ function makeConfig(id: string, name: string): DeviceConfig {
     device_id: id,
     device_name: name,
     network_id: "net_inttest",
+    rs_user: `${id}@test.example`,
     env: "test",
   };
 }
@@ -153,7 +154,7 @@ describe.skipIf(SKIP)("integration: ntfy transport", () => {
     expect(devices.find((d) => d.device_id === "dev_desktop_int")).toBeDefined();
   });
 
-  it("full message send/receive/ack flow over real ntfy", async () => {
+  it("full message send/receive flow over real ntfy", async () => {
     const sender = makeConfig("dev_sender_int", "Sender");
     const recipient = makeConfig("dev_recipient_int", "Recipient");
 
@@ -161,17 +162,13 @@ describe.skipIf(SKIP)("integration: ntfy transport", () => {
     const recipientState = createEmptyState();
 
     const regTopic = registryTopic("test", "net_inttest");
-    const senderDevTopic = deviceTopic("test", "net_inttest", sender.device_id);
     const recipientDevTopic = deviceTopic("test", "net_inttest", recipient.device_id);
 
     // Step 1: Both announce
-    const senderAnnounce = createDeviceAnnounce(sender);
-    const recipientAnnounce = createDeviceAnnounce(recipient);
-
     const regCollected = collectEvents(server.url, regTopic, 2);
     await new Promise((r) => setTimeout(r, 200));
-    await publish(regTopic, senderAnnounce, server.url);
-    await publish(regTopic, recipientAnnounce, server.url);
+    await publish(regTopic, createDeviceAnnounce(sender), server.url);
+    await publish(regTopic, createDeviceAnnounce(recipient), server.url);
     const regEvents = await regCollected;
 
     for (const raw of regEvents) {
@@ -181,7 +178,6 @@ describe.skipIf(SKIP)("integration: ntfy transport", () => {
         processEvent(recipientState, result.event, recipient);
       }
     }
-
     expect(getDevices(senderState).length).toBe(2);
 
     // Step 2: Sender sends a message
@@ -191,7 +187,6 @@ describe.skipIf(SKIP)("integration: ntfy transport", () => {
     });
     expect(sendEffect.type).toBe("publish");
     expect(getPending(senderState, sender.device_id)).toHaveLength(1);
-    const msgId = getPending(senderState, sender.device_id)[0].msg_id;
 
     // Step 3: Publish message, collect on recipient topic
     const msgCollected = collectEvents(server.url, recipientDevTopic, 1);
@@ -203,36 +198,15 @@ describe.skipIf(SKIP)("integration: ntfy transport", () => {
     const msgEvents = await msgCollected;
     expect(msgEvents.length).toBe(1);
 
-    // Step 4: Recipient processes
+    // Step 4: Recipient processes — no ACK effect (receipt via RS, not ntfy)
     const msgResult = validateEvent(msgEvents[0], "net_inttest");
     expect(msgResult.valid).toBe(true);
     if (!msgResult.valid) return;
 
-    const { effects } = processEvent(recipientState, msgResult.event, recipient);
+    const { effects, newMessage } = processEvent(recipientState, msgResult.event, recipient);
     expect(getInbox(recipientState, recipient.device_id)).toHaveLength(1);
-    expect(getInbox(recipientState, recipient.device_id)[0].body.text).toBe("hello over ntfy");
-
-    const ackEffect = effects.find((e) => e.type === "publish");
-    expect(ackEffect).toBeDefined();
-
-    // Step 5: Publish ack, collect on sender topic
-    const ackCollected = collectEvents(server.url, senderDevTopic, 1);
-    await new Promise((r) => setTimeout(r, 200));
-    if (ackEffect?.type === "publish") {
-      await publish(ackEffect.topic, ackEffect.event, server.url);
-    }
-
-    const ackEvents = await ackCollected;
-    expect(ackEvents.length).toBe(1);
-
-    // Step 6: Sender processes ack
-    const ackResult = validateEvent(ackEvents[0], "net_inttest");
-    expect(ackResult.valid).toBe(true);
-    if (!ackResult.valid) return;
-
-    processEvent(senderState, ackResult.event, sender);
-
-    expect(getPending(senderState, sender.device_id)).toHaveLength(0);
-    expect(senderState.messages.get(msgId)!.state).toBe("received");
+    expect(getInbox(recipientState, recipient.device_id)[0].body).toMatchObject({ kind: "text", text: "hello over ntfy" });
+    expect(newMessage).toBe(true);
+    expect(effects.filter((e) => e.type === "publish")).toHaveLength(0);
   });
 });

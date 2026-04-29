@@ -5,7 +5,8 @@
     "device_id": "dev_local",
     "device_name": "Local",
     "network_id": "net_test",
-    "env": "test"
+    "env": "test",
+    "rs_user": "test@test.example"
   },
   "steps": [
     {

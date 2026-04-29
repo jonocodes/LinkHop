@@ -1,25 +1,25 @@
-const ENCRYPTION_SALT_PREFIX = "linkhop-lite-encryption-v1:";
+const ENCRYPTION_SALT = "linkhop-encryption-v2";
 const ITERATIONS = 100_000;
 const KEY_BITS = 256;
 
 /**
- * Derive an AES-GCM encryption key from a pool name and shared password.
- * Uses PBKDF2 via Web Crypto with a different salt than network_id derivation.
+ * Derive an AES-GCM encryption key from the network_secret.
+ * All devices on the same network share the same network_secret,
+ * so they all derive the same key.
  */
-export async function deriveEncryptionKey(pool: string, password: string): Promise<CryptoKey> {
+export async function deriveEncryptionKey(networkSecret: string): Promise<CryptoKey> {
   const encoder = new TextEncoder();
   const keyMaterial = await crypto.subtle.importKey(
     "raw",
-    encoder.encode(password),
+    encoder.encode(networkSecret),
     "PBKDF2",
     false,
-    ["deriveBits", "deriveKey"],
+    ["deriveKey"],
   );
-
   return crypto.subtle.deriveKey(
     {
       name: "PBKDF2",
-      salt: encoder.encode(ENCRYPTION_SALT_PREFIX + pool),
+      salt: encoder.encode(ENCRYPTION_SALT),
       iterations: ITERATIONS,
       hash: "SHA-256",
     },
@@ -30,22 +30,18 @@ export async function deriveEncryptionKey(pool: string, password: string): Promi
   );
 }
 
-/**
- * Encrypt a plaintext message body into ciphertext + IV (base64-encoded).
- */
+/** Encrypt a plaintext message body into ciphertext + IV (base64-encoded). */
 export async function encryptBody(
   key: CryptoKey,
   plaintext: string,
 ): Promise<{ ciphertext: string; iv: string }> {
   const encoder = new TextEncoder();
   const iv = crypto.getRandomValues(new Uint8Array(12));
-
   const encrypted = await crypto.subtle.encrypt(
     { name: "AES-GCM", iv },
     key,
     encoder.encode(plaintext),
   );
-
   return {
     ciphertext: uint8ToBase64(new Uint8Array(encrypted)),
     iv: uint8ToBase64(iv),

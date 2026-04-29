@@ -1,10 +1,9 @@
-import type { DeviceRecord, EventLogEntry, LocalState, MessageRecord } from "../protocol/types.js";
+import type { DeviceRecord, LocalState, MessageRecord } from "../protocol/types.js";
 
 export function createEmptyState(): LocalState {
   return {
     devices: new Map(),
     messages: new Map(),
-    eventLog: [],
   };
 }
 
@@ -42,8 +41,4 @@ export function getSent(state: LocalState, localDeviceId: string): MessageRecord
 
 export function getDevices(state: LocalState): DeviceRecord[] {
   return [...state.devices.values()];
-}
-
-export function appendEventLog(state: LocalState, entry: EventLogEntry): void {
-  state.eventLog.push(entry);
 }

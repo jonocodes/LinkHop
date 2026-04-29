@@ -5,7 +5,8 @@
     "device_id": "dev_local",
     "device_name": "Local",
     "network_id": "net_test",
-    "env": "test"
+    "env": "test",
+    "rs_user": "test@test.example"
   },
   "initial_state": {
     "devices": [
@@ -32,7 +33,10 @@
           "msg_id": "msg_dup",
           "attempt_id": 1,
           "to_device_id": "dev_local",
-          "body": { "kind": "text", "text": "hello" }
+          "body": {
+            "kind": "text",
+            "text": "hello"
+          }
         }
       }
     },
@@ -48,7 +52,10 @@
           "msg_id": "msg_dup",
           "attempt_id": 2,
           "to_device_id": "dev_local",
-          "body": { "kind": "text", "text": "hello" }
+          "body": {
+            "kind": "text",
+            "text": "hello"
+          }
         }
       }
     }

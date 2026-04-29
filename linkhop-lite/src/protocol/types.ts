@@ -1,13 +1,10 @@
-// Wire event types as defined in the implementation spec
+// Wire event types — ntfy carries only three event types now.
+// Device management (RS) and message receipts (RS state) no longer use ntfy events.
 
 export type EventType =
   | "device.announce"
   | "device.leave"
-  | "device.heartbeat"
-  | "msg.send"
-  | "msg.received"
-  | "sync.request"
-  | "sync.response";
+  | "msg.send";
 
 // --- Protocol Event Envelope ---
 
@@ -31,10 +28,6 @@ export interface DeviceAnnouncePayload {
 }
 
 export interface DeviceLeavePayload {
-  device_id: string;
-}
-
-export interface DeviceHeartbeatPayload {
   device_id: string;
 }
 
@@ -64,38 +57,16 @@ export interface MsgSendPayload {
   body: MessageBody;
 }
 
-export interface MsgReceivedPayload {
-  msg_id: string;
-  to_device_id: string;
-}
-
-export interface SyncRequestPayload {
-  to_device_id: string;
-}
-
-export interface SyncResponsePayload {
-  to_device_id: string;
-  devices: DeviceRecord[];
-}
-
 // --- Concrete event types ---
 
 export type DeviceAnnounceEvent = ProtocolEvent<"device.announce", DeviceAnnouncePayload>;
 export type DeviceLeaveEvent = ProtocolEvent<"device.leave", DeviceLeavePayload>;
-export type DeviceHeartbeatEvent = ProtocolEvent<"device.heartbeat", DeviceHeartbeatPayload>;
 export type MsgSendEvent = ProtocolEvent<"msg.send", MsgSendPayload>;
-export type MsgReceivedEvent = ProtocolEvent<"msg.received", MsgReceivedPayload>;
-export type SyncRequestEvent = ProtocolEvent<"sync.request", SyncRequestPayload>;
-export type SyncResponseEvent = ProtocolEvent<"sync.response", SyncResponsePayload>;
 
 export type AnyProtocolEvent =
   | DeviceAnnounceEvent
   | DeviceLeaveEvent
-  | DeviceHeartbeatEvent
-  | MsgSendEvent
-  | MsgReceivedEvent
-  | SyncRequestEvent
-  | SyncResponseEvent;
+  | MsgSendEvent;
 
 // --- Local record shapes ---
 
@@ -124,28 +95,19 @@ export interface MessageRecord {
   viewed_at: string | null;
 }
 
-export interface EventLogEntry {
-  event_id: string;
-  type: EventType;
-  timestamp: string;
-  from_device_id: string;
-  direction: "incoming" | "outgoing";
-  raw_event: AnyProtocolEvent;
-}
-
-// --- Local state ---
+// --- Local state (in-memory) ---
 
 export interface LocalState {
   devices: Map<string, DeviceRecord>;
   messages: Map<string, MessageRecord>;
-  eventLog: EventLogEntry[];
 }
 
-// --- Device config (local identity) ---
+// --- Device config (local identity, persisted to IDB) ---
 
 export interface DeviceConfig {
   device_id: string;
   device_name: string;
-  network_id: string;
+  network_id: string; // derived: hmac(rs_user, network_secret)
+  rs_user: string;    // e.g. "alice@5apps.com"
   env: string;
 }

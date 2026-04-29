@@ -20,6 +20,7 @@ function makeConfig(id: string, name: string, networkId: string): DeviceConfig {
     device_id: id,
     device_name: name,
     network_id: networkId,
+    rs_user: `${id}@test.example`,
     env: "test",
   };
 }
@@ -166,7 +167,7 @@ describe("integration: ntfy.sh public server", { timeout: 30000 }, () => {
     expect(devices.find((d) => d.device_id === "dev_dk")).toBeDefined();
   });
 
-  it("full message send/receive/ack flow over ntfy.sh", async (ctx) => {
+  it("full message send/receive flow over ntfy.sh", async (ctx) => {
     if (!reachable) return ctx.skip();
 
     const netId = `n${uniqueId()}`;
@@ -177,7 +178,6 @@ describe("integration: ntfy.sh public server", { timeout: 30000 }, () => {
     const recipientState = createEmptyState();
 
     const regTopic = registryTopic("test", netId);
-    const senderDevTopic = deviceTopic("test", netId, sender.device_id);
     const recipientDevTopic = deviceTopic("test", netId, recipient.device_id);
 
     // Step 1: Both announce
@@ -204,7 +204,6 @@ describe("integration: ntfy.sh public server", { timeout: 30000 }, () => {
     });
     expect(sendEffect.type).toBe("publish");
     expect(getPending(senderState, sender.device_id)).toHaveLength(1);
-    const msgId = getPending(senderState, sender.device_id)[0].msg_id;
 
     // Step 3: Publish message, collect on recipient topic
     const msgCollected = collectEvents(recipientDevTopic, 1);
@@ -217,36 +216,15 @@ describe("integration: ntfy.sh public server", { timeout: 30000 }, () => {
     const msgEvents = await msgCollected;
     expect(msgEvents.length).toBe(1);
 
-    // Step 4: Recipient processes
+    // Step 4: Recipient processes — no ACK effect (receipt via RS, not ntfy)
     const msgResult = validateEvent(msgEvents[0], netId);
     expect(msgResult.valid).toBe(true);
     if (!msgResult.valid) return;
 
-    const { effects } = processEvent(recipientState, msgResult.event, recipient);
+    const { effects, newMessage } = processEvent(recipientState, msgResult.event, recipient);
     expect(getInbox(recipientState, recipient.device_id)).toHaveLength(1);
-    expect(getInbox(recipientState, recipient.device_id)[0].body.text).toBe("hello over ntfy.sh");
-
-    const ackEffect = effects.find((e) => e.type === "publish");
-    expect(ackEffect).toBeDefined();
-
-    // Step 5: Publish ack, collect on sender topic
-    const ackCollected = collectEvents(senderDevTopic, 1);
-    await new Promise((r) => setTimeout(r, 500));
-
-    if (ackEffect?.type === "publish") {
-      await publish(ackEffect.topic, ackEffect.event, NTFY_SH);
-    }
-
-    const ackEvents = await ackCollected;
-    expect(ackEvents.length).toBe(1);
-
-    // Step 6: Sender processes ack
-    const ackResult = validateEvent(ackEvents[0], netId);
-    expect(ackResult.valid).toBe(true);
-    if (!ackResult.valid) return;
-
-    processEvent(senderState, ackResult.event, sender);
-    expect(getPending(senderState, sender.device_id)).toHaveLength(0);
-    expect(senderState.messages.get(msgId)!.state).toBe("received");
+    expect(getInbox(recipientState, recipient.device_id)[0].body).toMatchObject({ kind: "text", text: "hello over ntfy.sh" });
+    expect(newMessage).toBe(true);
+    expect(effects.filter((e) => e.type === "publish")).toHaveLength(0); // no ntfy ACK
   });
 });
