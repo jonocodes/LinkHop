@@ -326,11 +326,11 @@ RS credentials (bearer token, server URL) are managed by the remotestorage.js li
 - [x] Keep `config` store; add `rs_token` and `rs_config` keys for SW use
 
 ### Settings UI
-- [ ] RS connect screen: remotestorage.js OAuth widget
-- [ ] Show RS connection status and connected RS user
-- [ ] Warn prominently if RS user changes from previously stored value
-- [ ] Expose `poll_interval_seconds` and `message_cull_days` as editable fields
-- [ ] Expose `encryption_enabled` toggle
+- [x] RS connect screen: device name + RS address form; Advanced section for ntfy URL
+- [x] Show RS connection status and connected RS user (badge in Settings tab)
+- [x] Warn prominently if RS user changes from previously stored value (handled in app.ts)
+- [x] Expose `poll_interval_seconds` and `message_cull_days` as editable fields
+- [x] Expose `encryption_enabled` toggle
 
 ### Cleanup
 - [x] Remove `src/cli/`
