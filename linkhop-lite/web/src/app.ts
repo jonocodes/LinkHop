@@ -16,7 +16,7 @@ import { createEmptyState } from "../../src/engine/state.js";
 import { processEvent } from "../../src/engine/reducer.js";
 import { actionAnnounce, actionLeave, actionSend, actionMarkViewed } from "../../src/engine/actions.js";
 import type { Effect } from "../../src/engine/reducer.js";
-import { loadConfig, saveConfig, clearAll, saveRSToken, type BrowserConfig } from "./db.js";
+import { loadConfig, saveConfig, clearAll, saveRSToken, saveRSConfig, type BrowserConfig } from "./db.js";
 import { subscribeSSE, publishHTTP } from "./sse.js";
 import { requestPermission, showMessageNotification, subscribeWebPush, unsubscribeWebPush } from "./notifications.js";
 import { RSStore, DEFAULT_SETTINGS, type RSSettings } from "./rs.js";
@@ -163,6 +163,9 @@ export class App {
       await requestPermission();
     }
 
+    // Persist RS config to IDB so the service worker can poll RS in the background
+    await saveRSConfig({ networkId, deviceId: this.config.device_id });
+
     // Load state from RS
     await this.loadStateFromRS();
 
@@ -179,8 +182,24 @@ export class App {
     this.connect();
     await this.announce();
 
-    // Start standard poll loop
+    // Start standard poll loop and register periodic background sync
     this.startPollLoop();
+    void this.registerPeriodicSync();
+  }
+
+  private async registerPeriodicSync(): Promise<void> {
+    if (!("serviceWorker" in navigator)) return;
+    try {
+      const reg = await navigator.serviceWorker.ready;
+      const ps = (reg as ServiceWorkerRegistration & {
+        periodicSync?: { register: (tag: string, opts: { minInterval: number }) => Promise<void> };
+      }).periodicSync;
+      if (!ps) return;
+      const intervalMs = (this.rsSettings?.poll_interval_seconds ?? 600) * 1000;
+      await ps.register("linkhop-poll", { minInterval: intervalMs });
+    } catch {
+      // periodicSync not available or permission denied — graceful degradation
+    }
   }
 
   private loadPendingSetup(): { deviceName: string; rsUser: string; ntfyUrl: string } | null {

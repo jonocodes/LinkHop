@@ -79,6 +79,33 @@ export async function loadRSToken(): Promise<RSTokenData | null> {
   });
 }
 
+// --- RS config (written by main app, read by service worker for background fetch) ---
+
+export interface RSConfig {
+  networkId: string;
+  deviceId: string;
+}
+
+export async function saveRSConfig(config: RSConfig): Promise<void> {
+  const db = await openDB();
+  return new Promise((resolve, reject) => {
+    const t = tx(db, "config", "readwrite");
+    t.objectStore("config").put(config, "rs_config");
+    t.oncomplete = () => resolve();
+    t.onerror = () => reject(t.error);
+  });
+}
+
+export async function loadRSConfig(): Promise<RSConfig | null> {
+  const db = await openDB();
+  return new Promise((resolve, reject) => {
+    const t = tx(db, "config", "readonly");
+    const req = t.objectStore("config").get("rs_config");
+    req.onsuccess = () => resolve((req.result as RSConfig | undefined) ?? null);
+    req.onerror = () => reject(req.error);
+  });
+}
+
 // --- Reset ---
 
 export async function clearAll(): Promise<void> {

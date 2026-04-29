@@ -1,6 +1,6 @@
 /// <reference lib="webworker" />
 import { precacheAndRoute } from "workbox-precaching";
-import { swPutMessage, loadRSToken } from "./rs-sw.js";
+import { swPutMessage, swFetchNewMessages, addNotifiedMsgId } from "./rs-sw.js";
 import type { MessageRecord, MsgSendEvent } from "../../src/protocol/types.js";
 
 declare const self: ServiceWorkerGlobalScope;
@@ -112,6 +112,9 @@ async function handlePush(event: PushEvent): Promise<void> {
       { action: "open", title: "Open" },
     ],
   });
+
+  // Mark as notified so the background RS poll doesn't re-notify for this message
+  if (msgId) await addNotifiedMsgId(msgId).catch(() => {});
 }
 
 // Handle notification clicks
@@ -165,17 +168,56 @@ self.addEventListener("notificationclick", (event) => {
   );
 });
 
-// Background Sync: retry failed outbound RS writes + ntfy publishes
+/**
+ * Poll RS for new messages and show notifications.
+ * Used by both Background Sync (on reconnect) and Periodic Background Sync (scheduled).
+ */
+async function backgroundFetchAndNotify(): Promise<void> {
+  const newMessages = await swFetchNewMessages();
+  for (const { record } of newMessages) {
+    const msgBody = record.body;
+    let title = "LinkHop";
+    let body = "New message";
+    let notifUrl: string | undefined;
+
+    if (msgBody.kind === "text") {
+      title = `LinkHop from ${record.from_device_id}`;
+      body = msgBody.text;
+    } else if (msgBody.kind === "url") {
+      title = "LinkHop: link shared";
+      body = msgBody.title ?? msgBody.url;
+      notifUrl = msgBody.url;
+    } else {
+      body = "[Encrypted message]";
+    }
+
+    await self.registration.showNotification(title, {
+      body,
+      icon: `${swBase}icon.svg`,
+      tag: `linkhop-${record.msg_id}`,
+      renotify: true,
+      data: { msg_id: record.msg_id, url: notifUrl },
+      actions: [
+        { action: "mark-viewed", title: "Mark as Read" },
+        { action: "open", title: "Open" },
+      ],
+    });
+  }
+}
+
+// Background Sync: fires when device comes back online after being offline
 self.addEventListener("sync", (event: Event) => {
   const syncEvent = event as Event & { tag: string; waitUntil: (p: Promise<unknown>) => void };
-  if (syncEvent.tag === "linkhop-send-retry") {
-    syncEvent.waitUntil(
-      (async () => {
-        const tokenData = await loadRSToken();
-        if (!tokenData) return;
-        // The main app handles actual retry logic on next open.
-        // Background sync here just signals readiness; app picks up pending messages from RS on load.
-      })().catch(() => {}),
-    );
+  if (syncEvent.tag === "linkhop-send-retry" || syncEvent.tag === "linkhop-bg-fetch") {
+    syncEvent.waitUntil(backgroundFetchAndNotify().catch(() => {}));
+  }
+});
+
+// Periodic Background Sync: fires on a schedule even when the app is closed
+// Requires installed PWA + browser permission (Chrome Android only currently)
+self.addEventListener("periodicsync", (event: Event) => {
+  const syncEvent = event as Event & { tag: string; waitUntil: (p: Promise<unknown>) => void };
+  if (syncEvent.tag === "linkhop-poll") {
+    syncEvent.waitUntil(backgroundFetchAndNotify().catch(() => {}));
   }
 });
