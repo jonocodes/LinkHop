@@ -95,6 +95,12 @@ export interface MessageRecord {
   viewed_at: string | null;
 }
 
+export interface ReceiptRecord {
+  msg_id: string;
+  received_at: string;
+  from_device_id: string; // recipient device that wrote this receipt
+}
+
 // --- Local state (in-memory) ---
 
 export interface LocalState {

@@ -214,29 +214,37 @@ export class App {
 
   private async loadStateFromRS(): Promise<void> {
     if (!this.config || !this.rs) return;
-    const { network_id } = this.config;
+    const { network_id, device_id } = this.config;
 
-    const [devices, messages] = await Promise.all([
+    const [devices, inbox, sent] = await Promise.all([
       this.rs.listDevices(network_id),
-      this.rs.listMessages(network_id),
+      this.rs.listInbox(network_id, device_id),
+      this.rs.listSent(network_id, device_id),
     ]);
 
     this.state = createEmptyState();
     for (const d of devices) {
       if (!d.is_removed) this.state.devices.set(d.device_id, d);
     }
-    for (const m of messages) {
+    for (const m of [...inbox, ...sent]) {
       this.state.messages.set(m.msg_id, m);
     }
   }
 
   private async pollRS(): Promise<void> {
     if (!this.config || !this.rs) return;
-    const { network_id } = this.config;
+    const { network_id, device_id } = this.config;
 
-    const [devices, messages] = await Promise.all([
+    // Only fetch receipts when there are pending messages — zero cost otherwise
+    const hasPending = [...this.state.messages.values()].some(
+      (m) => m.from_device_id === device_id && m.state === "pending",
+    );
+
+    const [devices, inbox, sent, receipts] = await Promise.all([
       this.rs.listDevices(network_id),
-      this.rs.listMessages(network_id),
+      this.rs.listInbox(network_id, device_id),
+      this.rs.listSent(network_id, device_id),
+      hasPending ? this.rs.listReceipts(network_id, device_id) : Promise.resolve([]),
     ]);
 
     for (const d of devices) {
@@ -250,27 +258,36 @@ export class App {
       }
     }
 
-    let gotNewMessages = false;
-    for (const m of messages) {
+    let changed = false;
+
+    for (const m of [...inbox, ...sent]) {
       if (!this.state.messages.has(m.msg_id)) {
         this.state.messages.set(m.msg_id, m);
-        gotNewMessages = true;
-        // Show notification for new incoming messages discovered via poll
-        if (m.to_device_id === this.config.device_id && m.state === "received") {
+        changed = true;
+        if (m.to_device_id === device_id && m.state === "received") {
           await this.notifyMessage(m);
         }
       } else {
-        // Sync state changes (e.g. pending → received discovered via poll)
         const existing = this.state.messages.get(m.msg_id)!;
         if (m.state !== existing.state) {
           this.state.messages.set(m.msg_id, m);
+          changed = true;
         }
       }
     }
 
-    if (gotNewMessages || devices.length > 0) {
-      this.callbacks.onStateChange?.();
+    // Process receipts: move pending sent messages to "received"
+    for (const receipt of receipts) {
+      const msg = this.state.messages.get(receipt.msg_id);
+      if (msg && msg.state === "pending") {
+        const updated = { ...msg, state: "received" as const, received_at: receipt.received_at };
+        this.state.messages.set(receipt.msg_id, updated);
+        await this.rs.updateSentMessageState(network_id, device_id, receipt.msg_id, "received", receipt.received_at);
+        changed = true;
+      }
     }
+
+    if (changed) this.callbacks.onStateChange?.();
   }
 
   private startPollLoop(): void {
@@ -399,12 +416,16 @@ export class App {
 
     const effect = actionSend(this.state, this.config, toDeviceId, device.device_topic, body);
 
-    // Write to RS first (durable store)
-    const msg = this.state.messages.get(
-      (effect as { type: "publish"; event: { payload: { msg_id: string } } }).event.payload.msg_id,
-    );
+    const msgId = (effect as { type: "publish"; event: { payload: { msg_id: string } } }).event.payload.msg_id;
+    const msg = this.state.messages.get(msgId);
     if (msg) {
-      await this.rs.upsertMessage(this.config.network_id, msg);
+      // Write to sender's sent dir for outbox tracking, and pre-populate recipient's inbox
+      // so they get the message even if ntfy push never fires (offline or ntfy down).
+      const inboxRecord: typeof msg = { ...msg, state: "received", received_at: null };
+      await Promise.all([
+        this.rs.upsertSentMessage(this.config.network_id, this.config.device_id, msg),
+        this.rs.upsertInboxMessage(this.config.network_id, toDeviceId, inboxRecord),
+      ]);
     }
 
     // Then publish via ntfy for real-time delivery
@@ -419,7 +440,8 @@ export class App {
     if (!this.rs || !this.config) return;
     actionMarkViewed(this.state, msgId);
     const now = new Date().toISOString();
-    await this.rs.updateMessageState(this.config.network_id, msgId, "viewed", now);
+    const { network_id, device_id } = this.config;
+    await this.rs.updateInboxMessageState(network_id, device_id, msgId, "viewed", now);
     this.callbacks.onStateChange?.();
   }
 
@@ -497,11 +519,20 @@ export class App {
 
     const { effects, newMessage } = processEvent(this.state, result.event, this.config);
 
-    // Persist new incoming message to RS and notify
+    // Persist new incoming message to this device's inbox and notify
     if (newMessage && result.event.type === "msg.send" && this.rs) {
       const msg = this.state.messages.get(result.event.payload.msg_id);
       if (msg) {
-        await this.rs.upsertMessage(this.config.network_id, msg);
+        const { network_id, device_id } = this.config;
+        const now = new Date().toISOString();
+        await Promise.all([
+          this.rs.upsertInboxMessage(network_id, device_id, { ...msg, received_at: now }),
+          this.rs.upsertReceipt(network_id, result.event.from_device_id, {
+            msg_id: msg.msg_id,
+            received_at: now,
+            from_device_id: device_id,
+          }),
+        ]);
         await this.notifyMessage(msg);
       }
     }

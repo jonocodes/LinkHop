@@ -1,6 +1,6 @@
 /// <reference lib="webworker" />
 import { precacheAndRoute } from "workbox-precaching";
-import { swPutMessage, swFetchNewMessages, addNotifiedMsgId } from "./rs-sw.js";
+import { swPutInboxMessage, swPutReceipt, swFetchNewMessages, addNotifiedMsgId } from "./rs-sw.js";
 import type { MessageRecord, MsgSendEvent } from "../../src/protocol/types.js";
 
 declare const self: ServiceWorkerGlobalScope;
@@ -94,11 +94,15 @@ async function handlePush(event: PushEvent): Promise<void> {
     }
   }
 
-  // Write receipt to RS (best effort — SW has ~30s budget)
+  // Write to this device's inbox + send receipt to the sender (best effort — SW has ~30s budget)
   if (networkId && msgRecord) {
-    try {
-      await swPutMessage(networkId, msgRecord);
-    } catch { /* best effort */ }
+    const toDevice = msgRecord.to_device_id;
+    const fromDevice = msgRecord.from_device_id;
+    const now = new Date().toISOString();
+    await Promise.all([
+      swPutInboxMessage(networkId, toDevice, { ...msgRecord, received_at: now }).catch(() => {}),
+      swPutReceipt(networkId, fromDevice, msgRecord.msg_id, now, toDevice).catch(() => {}),
+    ]);
   }
 
   await self.registration.showNotification(title, {

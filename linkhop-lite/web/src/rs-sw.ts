@@ -6,7 +6,7 @@
  * RS server using a bearer token stored in IDB by the main app thread.
  */
 
-import type { MessageRecord } from "../../src/protocol/types.js";
+import type { MessageRecord, ReceiptRecord } from "../../src/protocol/types.js";
 
 const IDB_NAME = "linkhop-lite";
 const IDB_VERSION = 2;
@@ -91,21 +91,57 @@ export async function addNotifiedMsgId(msgId: string): Promise<void> {
   }
 }
 
-/** Write a message record to RS via raw HTTP PUT. Used by the SW on push receipt. */
-export async function swPutMessage(
+function rsHeaders(token: string) {
+  return {
+    "Authorization": `Bearer ${token}`,
+    "Content-Type": "application/json",
+  };
+}
+
+function inboxUrl(href: string, networkId: string, deviceId: string, msgId: string) {
+  return `${href}linkhop/${networkId}/device/${deviceId}/inbox/${msgId}`;
+}
+
+function receiptsUrl(href: string, networkId: string, senderDeviceId: string, msgId: string) {
+  return `${href}linkhop/${networkId}/device/${senderDeviceId}/receipts/${msgId}`;
+}
+
+/**
+ * Write a received message to this device's RS inbox.
+ * Called by the push handler when a msg.send push arrives.
+ */
+export async function swPutInboxMessage(
   networkId: string,
+  deviceId: string,
   record: MessageRecord,
 ): Promise<void> {
   const tokenData = await loadRSToken();
   if (!tokenData) return;
-  const url = `${tokenData.href}linkhop/${networkId}/messages/${record.msg_id}`;
-  await fetch(url, {
+  await fetch(inboxUrl(tokenData.href, networkId, deviceId, record.msg_id), {
     method: "PUT",
-    headers: {
-      "Authorization": `Bearer ${tokenData.token}`,
-      "Content-Type": "application/json",
-    },
+    headers: rsHeaders(tokenData.token),
     body: JSON.stringify(record),
+  });
+}
+
+/**
+ * Write a delivery receipt to the sender's RS receipts directory.
+ * Called after writing the inbox message so the sender can detect delivery.
+ */
+export async function swPutReceipt(
+  networkId: string,
+  senderDeviceId: string,
+  msgId: string,
+  receivedAt: string,
+  fromDeviceId: string,
+): Promise<void> {
+  const tokenData = await loadRSToken();
+  if (!tokenData) return;
+  const receipt: ReceiptRecord = { msg_id: msgId, received_at: receivedAt, from_device_id: fromDeviceId };
+  await fetch(receiptsUrl(tokenData.href, networkId, senderDeviceId, msgId), {
+    method: "PUT",
+    headers: rsHeaders(tokenData.token),
+    body: JSON.stringify(receipt),
   });
 }
 
@@ -114,9 +150,9 @@ interface RSDirectoryListing {
 }
 
 /**
- * Poll RS for messages addressed to this device that haven't been notified yet.
+ * Poll this device's RS inbox for messages not yet notified.
  * Called from background sync and periodic sync handlers.
- * Returns messages that should trigger a notification.
+ * Also writes receipts back to each sender so they see delivery confirmation.
  */
 export async function swFetchNewMessages(): Promise<NewMessageNotification[]> {
   const [tokenData, rsConfig] = await Promise.all([loadRSToken(), loadRSConfig()]);
@@ -126,10 +162,11 @@ export async function swFetchNewMessages(): Promise<NewMessageNotification[]> {
   const { networkId, deviceId } = rsConfig;
   const headers = { Authorization: `Bearer ${token}` };
 
-  // Fetch directory listing
+  // Only read this device's inbox — not the whole network
+  const listUrl = `${href}linkhop/${networkId}/device/${deviceId}/inbox/`;
   let msgIds: string[];
   try {
-    const res = await fetch(`${href}linkhop/${networkId}/messages/`, { headers });
+    const res = await fetch(listUrl, { headers });
     if (!res.ok) return [];
     const listing = await res.json() as RSDirectoryListing;
     msgIds = Object.keys(listing.items ?? {});
@@ -142,29 +179,30 @@ export async function swFetchNewMessages(): Promise<NewMessageNotification[]> {
   const db = await openIDB();
   const notified = await getNotifiedSet(db);
 
-  // Only fetch msg IDs we haven't notified about yet (cap at 20 per poll)
   const toFetch = msgIds.filter((id) => !notified.has(id)).slice(0, 20);
   if (toFetch.length === 0) return [];
 
   const fetched = await Promise.allSettled(
     toFetch.map(async (id) => {
-      const res = await fetch(`${href}linkhop/${networkId}/messages/${id}`, { headers });
+      const res = await fetch(inboxUrl(href, networkId, deviceId, id), { headers });
       if (!res.ok) throw new Error(`${res.status}`);
       return await res.json() as MessageRecord;
     }),
   );
 
+  const now = new Date().toISOString();
   const newMessages: NewMessageNotification[] = [];
+
   for (const result of fetched) {
     if (result.status !== "fulfilled") continue;
     const record = result.value;
-    if (record.to_device_id === deviceId && record.state !== "viewed") {
+    if (record.state !== "viewed") {
       newMessages.push({ record });
+      // Write receipt to sender's receipts directory (best effort)
+      swPutReceipt(networkId, record.from_device_id, record.msg_id, now, deviceId).catch(() => {});
     }
   }
 
-  // Mark all fetched IDs as seen regardless of whether we showed a notification
-  // (avoids re-fetching messages that aren't for us or are already viewed)
   for (const id of toFetch) notified.add(id);
   await saveNotifiedSet(db, notified);
 

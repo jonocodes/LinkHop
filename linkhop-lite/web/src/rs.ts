@@ -1,5 +1,5 @@
 import RemoteStorage from "remotestoragejs";
-import type { DeviceRecord, MessageRecord } from "../../src/protocol/types.js";
+import type { DeviceRecord, MessageRecord, ReceiptRecord } from "../../src/protocol/types.js";
 
 export interface RSSettings {
   network_secret: string;
@@ -19,6 +19,7 @@ export const DEFAULT_SETTINGS: RSSettings = {
 const T_SETTINGS = "linkhop-settings";
 const T_DEVICE = "linkhop-device";
 const T_MESSAGE = "linkhop-message";
+const T_RECEIPT = "linkhop-receipt";
 
 export type RSChangeEvent = {
   path: string;
@@ -29,6 +30,21 @@ export type RSChangeEvent = {
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type RSClient = any;
+
+// Path helpers
+// Per-device layout keeps each device's data isolated:
+//   {networkId}/device/{deviceId}/inbox/{msgId}     — messages TO this device
+//   {networkId}/device/{deviceId}/sent/{msgId}      — messages FROM this device
+//   {networkId}/device/{deviceId}/receipts/{msgId}  — delivery receipts for sent messages
+function inboxPath(networkId: string, deviceId: string) {
+  return `${networkId}/device/${deviceId}/inbox/`;
+}
+function sentPath(networkId: string, deviceId: string) {
+  return `${networkId}/device/${deviceId}/sent/`;
+}
+function receiptsPath(networkId: string, deviceId: string) {
+  return `${networkId}/device/${deviceId}/receipts/`;
+}
 
 export class RSStore {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -123,47 +139,108 @@ export class RSStore {
     });
   }
 
-  // --- Messages ---
+  // --- Inbox (messages TO this device) ---
 
-  async listMessages(networkId: string): Promise<MessageRecord[]> {
-    const result = await this.client.getAll(`${networkId}/messages/`) as Record<string, MessageRecord> | null;
+  async listInbox(networkId: string, deviceId: string): Promise<MessageRecord[]> {
+    const result = await this.client.getAll(inboxPath(networkId, deviceId)) as Record<string, MessageRecord> | null;
     if (!result) return [];
     return Object.values(result);
   }
 
-  async upsertMessage(networkId: string, record: MessageRecord): Promise<void> {
-    await this.client.storeObject(T_MESSAGE, `${networkId}/messages/${record.msg_id}`, record);
-    // Fire-and-forget cull on each write
-    this.getSettings().then((s) => {
-      const days = s?.message_cull_days ?? DEFAULT_SETTINGS.message_cull_days;
-      this.cullMessages(networkId, days).catch(() => {});
-    }).catch(() => {});
+  async upsertInboxMessage(networkId: string, deviceId: string, record: MessageRecord): Promise<void> {
+    await this.client.storeObject(T_MESSAGE, `${inboxPath(networkId, deviceId)}${record.msg_id}`, record);
+    this.scheduleCull(networkId, deviceId);
   }
 
-  async updateMessageState(
+  async updateInboxMessageState(
     networkId: string,
+    deviceId: string,
     msgId: string,
     state: "received" | "viewed",
     timestamp: string,
   ): Promise<void> {
-    const existing = await this.client.getObject(`${networkId}/messages/${msgId}`) as MessageRecord | null;
+    const path = `${inboxPath(networkId, deviceId)}${msgId}`;
+    const existing = await this.client.getObject(path) as MessageRecord | null;
     if (!existing) return;
-    const updated: MessageRecord = {
+    await this.client.storeObject(T_MESSAGE, path, {
       ...existing,
       state,
       received_at: state === "received" ? timestamp : existing.received_at,
       viewed_at: state === "viewed" ? timestamp : existing.viewed_at,
-    };
-    await this.client.storeObject(T_MESSAGE, `${networkId}/messages/${msgId}`, updated);
+    });
   }
 
-  async cullMessages(networkId: string, cullDays: number): Promise<void> {
-    const messages = await this.listMessages(networkId);
+  // --- Sent (messages FROM this device) ---
+
+  async listSent(networkId: string, deviceId: string): Promise<MessageRecord[]> {
+    const result = await this.client.getAll(sentPath(networkId, deviceId)) as Record<string, MessageRecord> | null;
+    if (!result) return [];
+    return Object.values(result);
+  }
+
+  async upsertSentMessage(networkId: string, deviceId: string, record: MessageRecord): Promise<void> {
+    await this.client.storeObject(T_MESSAGE, `${sentPath(networkId, deviceId)}${record.msg_id}`, record);
+    this.scheduleCull(networkId, deviceId);
+  }
+
+  async updateSentMessageState(
+    networkId: string,
+    deviceId: string,
+    msgId: string,
+    state: "received" | "viewed",
+    timestamp: string,
+  ): Promise<void> {
+    const path = `${sentPath(networkId, deviceId)}${msgId}`;
+    const existing = await this.client.getObject(path) as MessageRecord | null;
+    if (!existing) return;
+    await this.client.storeObject(T_MESSAGE, path, {
+      ...existing,
+      state,
+      received_at: state === "received" ? timestamp : existing.received_at,
+    });
+  }
+
+  // --- Receipts (delivery confirmations for sent messages) ---
+
+  async listReceipts(networkId: string, deviceId: string): Promise<ReceiptRecord[]> {
+    const result = await this.client.getAll(receiptsPath(networkId, deviceId)) as Record<string, ReceiptRecord> | null;
+    if (!result) return [];
+    return Object.values(result);
+  }
+
+  async upsertReceipt(networkId: string, deviceId: string, record: ReceiptRecord): Promise<void> {
+    await this.client.storeObject(T_RECEIPT, `${receiptsPath(networkId, deviceId)}${record.msg_id}`, record);
+  }
+
+  // --- Culling ---
+
+  /** Delete messages and receipts older than cullDays for this device's three directories. */
+  async cullDevice(networkId: string, deviceId: string, cullDays: number): Promise<void> {
     const cutoff = new Date(Date.now() - cullDays * 24 * 60 * 60 * 1000).toISOString();
-    for (const msg of messages) {
-      if (msg.created_at < cutoff) {
-        await this.client.remove(`${networkId}/messages/${msg.msg_id}`);
-      }
+
+    const [inbox, sent, receipts] = await Promise.all([
+      this.listInbox(networkId, deviceId),
+      this.listSent(networkId, deviceId),
+      this.listReceipts(networkId, deviceId),
+    ]);
+
+    const removals: Promise<void>[] = [];
+    for (const m of inbox) {
+      if (m.created_at < cutoff) removals.push(this.client.remove(`${inboxPath(networkId, deviceId)}${m.msg_id}`));
     }
+    for (const m of sent) {
+      if (m.created_at < cutoff) removals.push(this.client.remove(`${sentPath(networkId, deviceId)}${m.msg_id}`));
+    }
+    for (const r of receipts) {
+      if (r.received_at < cutoff) removals.push(this.client.remove(`${receiptsPath(networkId, deviceId)}${r.msg_id}`));
+    }
+    await Promise.all(removals);
+  }
+
+  private scheduleCull(networkId: string, deviceId: string): void {
+    this.getSettings().then((s) => {
+      const days = s?.message_cull_days ?? DEFAULT_SETTINGS.message_cull_days;
+      this.cullDevice(networkId, deviceId, days).catch(() => {});
+    }).catch(() => {});
   }
 }
